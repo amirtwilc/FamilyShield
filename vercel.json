@@ -1,6 +1,3 @@
 {
-  "crons": [
-    { "path": "/api/cron/offline-sweep", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/location-retention", "schedule": "0 * * * *" }
-  ]
+  "crons": []
 }
