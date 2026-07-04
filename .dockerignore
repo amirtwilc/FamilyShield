@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+android
+docs
+test
+*.md
+npm-debug.log*
+.DS_Store
+.playwright-mcp
+playwright-report
+test-results

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Family Settings - FamilyShield</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#d8dadd",
+                    "error-container": "#ffdad6",
+                    "primary": "#000666",
+                    "surface-container-highest": "#e0e3e6",
+                    "primary-fixed": "#e0e0ff",
+                    "surface-variant": "#e0e3e6",
+                    "on-tertiary": "#ffffff",
+                    "background": "#f7f9fc",
+                    "on-secondary-container": "#00436a",
+                    "on-error-container": "#93000a",
+                    "on-primary-fixed-variant": "#343d96",
+                    "secondary-container": "#51b2fe",
+                    "on-surface-variant": "#454652",
+                    "surface-container-high": "#e6e8eb",
+                    "on-tertiary-fixed": "#002204",
+                    "on-secondary-fixed-variant": "#004a75",
+                    "surface-tint": "#4c56af",
+                    "outline": "#767683",
+                    "on-tertiary-container": "#48ab4d",
+                    "on-primary-fixed": "#000767",
+                    "surface-container-low": "#f2f4f7",
+                    "on-tertiary-fixed-variant": "#005313",
+                    "on-secondary-fixed": "#001d32",
+                    "tertiary": "#002104",
+                    "tertiary-container": "#00390a",
+                    "on-primary": "#ffffff",
+                    "inverse-surface": "#2d3133",
+                    "tertiary-fixed-dim": "#78dc77",
+                    "on-error": "#ffffff",
+                    "error": "#ba1a1a",
+                    "surface-container": "#eceef1",
+                    "on-background": "#191c1e",
+                    "inverse-on-surface": "#eff1f4",
+                    "surface-bright": "#f7f9fc",
+                    "secondary": "#00639a",
+                    "secondary-fixed": "#cee5ff",
+                    "on-secondary": "#ffffff",
+                    "secondary-fixed-dim": "#96ccff",
+                    "primary-container": "#1a237e",
+                    "outline-variant": "#c6c5d4",
+                    "primary-fixed-dim": "#bdc2ff",
+                    "on-primary-container": "#8690ee",
+                    "inverse-primary": "#bdc2ff",
+                    "on-surface": "#191c1e",
+                    "tertiary-fixed": "#94f990",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f7f9fc"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "4px",
+                    "lg": "24px",
+                    "sm": "12px",
+                    "xl": "32px",
+                    "margin-tablet": "24px",
+                    "margin-mobile": "16px",
+                    "base": "8px",
+                    "md": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "label-lg": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "label-sm": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; -webkit-font-smoothing: antialiased; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
+        .glass-panel {
+            background: rgba(247, 249, 252, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky bg-surface dark:bg-surface-dim shadow-sm flex justify-between items-center px-4 h-16 w-full z-40">
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-primary p-2 hover:bg-surface-variant/50 rounded-full transition-colors active:scale-95 duration-150">arrow_back</button>
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-inverse-primary">Family Settings</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="material-symbols-outlined text-on-surface-variant p-2 hover:bg-surface-variant/50 rounded-full transition-colors active:scale-95 duration-150">settings</button>
+</div>
+</header>
+<main class="max-w-2xl mx-auto px-4 py-lg space-y-lg pb-32">
+<!-- Welcome Card -->
+<section class="bg-surface-container-lowest rounded-xl p-md shadow-sm border border-outline-variant/30">
+<h2 class="font-headline-md text-headline-md text-primary mb-xs">Manage Profiles</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Configure security settings and profile details for your family members.</p>
+</section>
+<!-- Your Children Section -->
+<section>
+<div class="flex items-center justify-between mb-md">
+<h3 class="font-headline-sm text-headline-sm text-primary">Your Children</h3>
+<span class="bg-tertiary-container text-on-tertiary-container font-label-lg text-label-lg px-base py-xs rounded-full">2 Active</span>
+</div>
+<!-- Profiles Grid/List -->
+<div class="space-y-md">
+<!-- Child 1 -->
+<div class="group flex items-center justify-between p-md bg-surface-container-low hover:bg-surface-container-high rounded-xl border border-outline-variant/20 transition-all cursor-pointer active:scale-[0.98]" onclick="openEditModal('Leo', 'image-leo')">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 rounded-full overflow-hidden border-2 border-secondary-container shadow-sm">
+<img class="w-full h-full object-cover" data-alt="A professional, high-quality close-up studio portrait of a young boy with a friendly smile. The lighting is soft and natural, with a clean light-mode aesthetic against a neutral light blue background. The style is modern, cinematic, and polished, reflecting a high-end family security app user interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAewT9fs_gEEp9y_e0258E6caGzMNQd3i4e8rhxqL5QwivpsKfRnQMtzKyqiakzy7yQjGJfjPROQ6mT4cDRTMpgwzXmnA4xvhMlfAnj7rgBgi758w1H8v8sgug8n2XWppSJHWmTSo6pL_4t5H0KJUE1YpC_qEquOWzWOSgUtALiDY-GRaaDUtZm64jxSdz6sxASPS0um9axfyICA7Bbd8pSMQPcErzwYWC03_vzoXE_p6llHhAj8HCxtzBXTGsPc4d3cZseYkabptA"/>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Leo</p>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Last active: 2 mins ago</p>
+</div>
+</div>
+</div>
+<button class="flex items-center justify-center w-10 h-10 rounded-full bg-surface-container-highest text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+<!-- Child 2 -->
+<div class="group flex items-center justify-between p-md bg-surface-container-low hover:bg-surface-container-high rounded-xl border border-outline-variant/20 transition-all cursor-pointer active:scale-[0.98]" onclick="openEditModal('Chloe', 'image-chloe')">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 rounded-full overflow-hidden border-2 border-secondary-container shadow-sm">
+<img class="w-full h-full object-cover" data-alt="A soft and vibrant portrait of a young girl with pigtails, laughing in a sunlit garden. The photography style is warm and bright, emphasizing a safe and joyful family environment. The background is slightly blurred with soft bokeh of green leaves and flowers, fitting a premium family-oriented digital product aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv1BFfDj9VTuCa0oXFNf4_OYK2-gWjcLzC5mAZV6PZw-YGTySCo1Rf4A8Y13p81gz_z5XsI6B-xB_D0CPb6OsnCSV_xS7tZOh2Jlky0wQ90J_Zo_G_FyuyWMywB08V_92i5GbHThN4r6gGGOeO1c8fF0qEK6SL2CrfMHeAdM0sDpBeYRo0i69eqmG5PhFl2O5GC9u-954SqrrxZRcapZ3UL1CrAwluPaIlL-WTWlObNEa3PAwGyC3pGSJoex-ObUfOh4e5Ab-BYSw"/>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Chloe</p>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<p class="font-label-sm text-label-sm text-on-surface-variant">At School (Safe Zone)</p>
+</div>
+</div>
+</div>
+<button class="flex items-center justify-center w-10 h-10 rounded-full bg-surface-container-highest text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+</div>
+<!-- Add Child Button -->
+<button class="mt-lg w-full py-md px-xl bg-secondary-container text-on-secondary-container rounded-xl font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform hover:bg-secondary-container/90">
+<span class="material-symbols-outlined">person_add</span>
+                + Add Child
+            </button>
+</section>
+<!-- Security Features Bento -->
+<section class="grid grid-cols-2 gap-md">
+<div class="col-span-2 p-md bg-primary-container text-on-primary-container rounded-xl flex items-center justify-between overflow-hidden relative">
+<div class="z-10">
+<h4 class="font-headline-sm text-headline-sm text-on-primary-container mb-xs">Privacy Lock</h4>
+<p class="font-body-md text-body-md opacity-80">Enable biometric access for these settings.</p>
+</div>
+<div class="material-symbols-outlined text-[64px] opacity-20 absolute -right-4 -bottom-4">shield</div>
+<div class="w-12 h-6 bg-primary rounded-full flex items-center p-1 cursor-pointer transition-colors">
+<div class="w-4 h-4 bg-on-primary rounded-full shadow-sm translate-x-6"></div>
+</div>
+</div>
+<div class="p-md bg-surface-container rounded-xl border border-outline-variant/30">
+<span class="material-symbols-outlined text-secondary mb-sm">location_on</span>
+<h4 class="font-label-lg text-label-lg text-primary">Zones</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Manage 4 safe zones</p>
+</div>
+<div class="p-md bg-surface-container rounded-xl border border-outline-variant/30">
+<span class="material-symbols-outlined text-tertiary-fixed-dim mb-sm">notifications_active</span>
+<h4 class="font-label-lg text-label-lg text-primary">Alerts</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Push notifications ON</p>
+</div>
+</section>
+</main>
+<!-- Navigation Overlay / Modal (Edit Profile) -->
+<div class="fixed inset-0 z-[60] hidden transition-opacity duration-300 opacity-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center" id="editModal">
+<div class="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-lg shadow-2xl transform translate-y-full transition-transform duration-300 ease-out" id="modalContainer">
+<div class="flex items-center justify-between mb-lg">
+<h3 class="font-headline-md text-headline-md text-primary">Edit Profile</h3>
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-variant/50 p-base rounded-full" onclick="closeEditModal()">close</button>
+</div>
+<div class="flex flex-col items-center gap-lg">
+<!-- Avatar Upload -->
+<div class="relative group cursor-pointer">
+<div class="w-32 h-32 rounded-full overflow-hidden border-4 border-secondary-container shadow-md">
+<img class="w-full h-full object-cover" data-alt="A high-resolution, vibrant photographic close-up profile picture of a cheerful child. The image has a clean, minimalist background and is centered perfectly. The lighting is professional, creating a warm and safe feeling that matches the digital guardianship theme of the FamilyShield app. The child's features are friendly and clear, optimized for a user interface profile icon." id="modalAvatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKuF5BTbYruIA9btBzSj6QFCSlwbUsLhEyT7-qFpOOBSMEbY1wQ0WFmDkxgdN3SJohta9BCGugDBcCFkF8Cj4JqOc1A7bFJI8DnpM9dB1cDYovBkVaq1A2JPiJ6EiBaA6flfkqIEnG06ZmXLjfsakI1tMziJ5y2hWgYx07WE9hPQwmgJQC7GKTg5IFLxhHycmmJ0sm9bjDq2tZ8IUgzLZ57r_IkMLdqKq7AjcBbIgHr-aNgNUJ50ONEbg16FRtjQ-fmcmbA_yOw38"/>
+</div>
+<div class="absolute inset-0 bg-primary/40 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-on-primary text-3xl">photo_camera</span>
+</div>
+<div class="absolute bottom-1 right-1 bg-primary text-on-primary w-10 h-10 rounded-full flex items-center justify-center border-2 border-surface shadow-md">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</div>
+</div>
+<!-- Input Fields -->
+<div class="w-full space-y-md">
+<div class="space-y-1">
+<label class="font-label-lg text-label-lg text-on-surface-variant ml-1">Child's Name</label>
+<input class="w-full bg-surface-container-lowest border-0 border-b-2 border-outline-variant focus:border-primary focus:ring-0 font-body-lg text-body-lg p-md transition-colors" id="modalNameInput" placeholder="Enter name" type="text"/>
+</div>
+<div class="space-y-1">
+<label class="font-label-lg text-label-lg text-on-surface-variant ml-1">Birth Year (Optional)</label>
+<input class="w-full bg-surface-container-lowest border-0 border-b-2 border-outline-variant focus:border-primary focus:ring-0 font-body-lg text-body-lg p-md transition-colors" placeholder="YYYY" type="number"/>
+</div>
+</div>
+<!-- Actions -->
+<div class="w-full grid grid-cols-2 gap-md mt-sm pb-4">
+<button class="py-md px-xl bg-surface-container-highest text-on-surface font-headline-sm text-headline-sm rounded-xl hover:bg-outline-variant transition-colors" onclick="closeEditModal()">Cancel</button>
+<button class="py-md px-xl bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm rounded-xl shadow-md hover:bg-secondary-container/90 transition-colors" onclick="closeEditModal()">Save Changes</button>
+</div>
+</div>
+</div>
+</div>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 right-0 h-20 flex justify-around items-center px-4 pb-safe bg-surface/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-t border-outline-variant/30 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-50">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined">map</span>
+<span class="font-label-sm text-label-sm">Map</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-sm text-label-sm">History</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-5 py-1 active:scale-90 duration-200 ease-out" href="#">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-label-sm text-label-sm">Zones</span>
+</a>
+</nav>
+<script>
+        function openEditModal(name, avatar) {
+            const modal = document.getElementById('editModal');
+            const container = document.getElementById('modalContainer');
+            const nameInput = document.getElementById('modalNameInput');
+            
+            nameInput.value = name;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                container.classList.remove('translate-y-full');
+            }, 10);
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            const container = document.getElementById('modalContainer');
+            
+            modal.classList.add('opacity-0');
+            container.classList.add('translate-y-full');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // Close modal on click outside
+        document.getElementById('editModal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
+        });
+    </script>
+</body></html>

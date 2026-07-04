@@ -1,0 +1,1 @@
+ALTER TABLE "parents" ADD COLUMN "fcm_token" text;

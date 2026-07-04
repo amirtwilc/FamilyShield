@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: familyshield-db
+    environment:
+      POSTGRES_USER: familyshield
+      POSTGRES_PASSWORD: familyshield
+      POSTGRES_DB: familyshield
+    ports:
+      - "5433:5432"
+    volumes:
+      - familyshield_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U familyshield"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    container_name: familyshield-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Reaches the db service over the compose network (internal port 5432).
+      DATABASE_URL: postgres://familyshield:familyshield@db:5432/familyshield
+      JWT_SECRET: docker-dev-access-secret-change-me
+      JWT_REFRESH_SECRET: docker-dev-refresh-secret-change-me
+      LOW_BATTERY_THRESHOLD: "15"
+      LOW_BATTERY_COOLDOWN_MIN: "60"
+      OFFLINE_THRESHOLD_MIN: "30"
+      PAIRING_CODE_TTL_MIN: "10"
+      MAX_LOCATION_BATCH: "200"
+      CRON_SECRET: docker-dev-cron-secret
+      FCM_SERVICE_ACCOUNT_JSON: ""
+      # Google sign-in: your OAuth *Web* client id. Blank disables /api/auth/google.
+      GOOGLE_CLIENT_ID: ""
+    ports:
+      - "3000:3000"
+
+volumes:
+  familyshield_pgdata:

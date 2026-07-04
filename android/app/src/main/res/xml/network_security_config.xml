@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Release/default: HTTPS only. Cleartext HTTP is rejected so a release build
+         can never talk to a plain-HTTP backend. The debug build overrides this
+         (app/src/debug/res/xml/network_security_config.xml) to allow cleartext to
+         the local dev backend over the LAN. -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FamilyShield</string>
+
+    <!-- Generic actions / labels -->
+    <string name="action_add">Add</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_logout">Log out</string>
+    <string name="field_email">Email</string>
+    <string name="field_password">Password</string>
+    <string name="field_name">Name</string>
+    <string name="label_child">Child</string>
+    <string name="label_device">device</string>
+    <string name="label_your_child">your child</string>
+    <string name="cd_back">Back</string>
+    <string name="cd_settings">Settings</string>
+    <string name="cd_alerts">Alerts</string>
+    <string name="cd_refresh">Refresh</string>
+    <string name="cd_locate">Locate</string>
+
+    <!-- Login -->
+    <string name="login_title_register">Create your\naccount</string>
+    <string name="login_title_welcome">Welcome\nback</string>
+    <string name="action_create_account">Create account</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="cd_show_password">Show password</string>
+    <string name="cd_hide_password">Hide password</string>
+    <string name="login_have_account">Already have an account? Sign in</string>
+    <string name="login_new_here">New here? Create an account</string>
+    <string name="login_setup_kid">Set up a kid device →</string>
+    <string name="google_signin">Continue with Google</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_map">Map</string>
+    <string name="nav_history">History</string>
+    <string name="nav_zones">Zones</string>
+
+    <!-- Chat -->
+    <string name="chat_title">Messages</string>
+    <string name="chat_tap_to_start">Tap to start chatting</string>
+    <string name="chat_empty_title">No messages yet</string>
+    <string name="chat_empty_body">Say hi to %1$s.</string>
+    <string name="chat_hint">Message</string>
+    <string name="chat_hint_name">Message %1$s…</string>
+    <string name="cd_send">Send</string>
+    <string name="chat_today">Today</string>
+    <string name="chat_load_earlier">Load earlier messages</string>
+    <string name="chat_online">Online</string>
+    <string name="cd_request_location">Request location</string>
+    <string name="chat_request_location_msg">📍 Can you share your location?</string>
+    <string name="qr_love">Love you!</string>
+    <string name="qr_call_later">Call me later?</string>
+    <string name="qr_stay_safe">Stay safe!</string>
+    <string name="chat_safe_zone_title">Safe Zone: %1$s</string>
+    <string name="chat_safe_zone_body">%1$s is here now</string>
+    <string name="kid_chat_title">Chat with parent</string>
+    <string name="kid_chat_empty">No messages yet. Say hi to your parent!</string>
+    <string name="qr_im_safe">I\'m safe!</string>
+    <string name="qr_on_my_way">On my way!</string>
+    <string name="qr_pick_me_up">Pick me up?</string>
+
+    <!-- Dashboard -->
+    <string name="all_children">All Children</string>
+    <string name="active_monitoring">ACTIVE MONITORING</string>
+    <string name="family_network">Family Network</string>
+    <string name="children_online">%1$d children online</string>
+    <string name="child_online">%1$d child online</string>
+    <string name="full_view">Full View</string>
+    <string name="top_places_today">Top Places Today</string>
+    <string name="empty_places_title">No places yet</string>
+    <string name="empty_places_body">Visited places appear here as your family moves around.</string>
+    <string name="place_visited">%1$s visited · %2$s–%3$s</string>
+    <string name="recent_alerts">Recent Alerts</string>
+    <string name="view_all">View All</string>
+    <string name="empty_alerts_title">All clear</string>
+    <string name="empty_alerts_body">No recent alerts for your family.</string>
+    <string name="empty_locations_title">No live locations yet</string>
+    <string name="empty_locations_body">Pair the kids\' devices to see everyone on the map.</string>
+    <string name="action_ring_device">Ring Device</string>
+    <string name="action_timeline">Timeline</string>
+    <string name="action_emergency">Emergency</string>
+    <string name="snack_ring">Ring request sent to %1$s</string>
+    <string name="snack_emergency">Emergency mode activated</string>
+
+    <!-- Alerts -->
+    <string name="alert_low_battery">Low battery</string>
+    <string name="alert_offline">Offline</string>
+    <string name="alert_generic">Alert</string>
+    <string name="alert_named">%1$s: %2$s</string>
+    <string name="alert_battery_body">Battery is running low</string>
+    <string name="alert_status_body">Device status update</string>
+
+    <!-- Map -->
+    <string name="map_empty_title">No live location</string>
+    <string name="map_empty_body">Pair a device and send a location to track it here.</string>
+    <string name="map_status_safe">%1$s is in a safe zone</string>
+    <string name="map_status_moving">%1$s is on the move</string>
+    <string name="chip_safe_zone">Safe Zone</string>
+
+    <!-- History -->
+    <string name="history_title">Routes &amp; History</string>
+    <string name="frequent_routes">Frequent routes</string>
+    <string name="empty_routes_title">No recurring routes yet</string>
+    <string name="empty_routes_body">Once %1$s travels the same path a few times, it\'ll appear here.</string>
+    <string name="daily_timeline">Daily timeline</string>
+    <string name="empty_history_title">No history</string>
+    <string name="empty_history_body">No location updates recorded on this day.</string>
+    <string name="return_point">Return point</string>
+    <string name="route_summary">~%1$s km · ~%2$d min · last %3$s</string>
+    <string name="open_return_point">Open return point</string>
+    <string name="location_update">Location update</string>
+    <string name="view_on_map">View on Map</string>
+    <string name="route_count">× %1$d</string>
+
+    <!-- Zones -->
+    <string name="zones_title">Safe Zones &amp; Alerts</string>
+    <string name="zones_subtitle">Manage automated notifications when %1$s enters or leaves an area.</string>
+    <string name="empty_zones_title">No safe zones yet</string>
+    <string name="empty_zones_body">Add a zone to get alerts when your child arrives or leaves.</string>
+    <string name="notif_strategy_title">Notification Strategy</string>
+    <string name="notif_strategy_body">You\'re receiving push alerts for all active zones. Critical safety alerts bypass Do Not Disturb.</string>
+    <string name="cd_add_zone">Add zone</string>
+    <string name="chip_active">Active</string>
+    <string name="zone_radius">%1$dm radius</string>
+    <string name="cd_delete_zone">Delete zone</string>
+    <string name="new_zone_title">New safe zone</string>
+    <string name="zone_name_label">Name (e.g. School)</string>
+    <string name="zone_radius_label">Radius: %1$d m</string>
+    <string name="zone_center_yes">Centered on the child\'s current location.</string>
+    <string name="zone_center_no">No current location — pair a device first.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Family Settings</string>
+    <string name="manage_profiles">Manage Profiles</string>
+    <string name="manage_profiles_body">Configure security settings and profile details for your family members.</string>
+    <string name="your_children">Your Children</string>
+    <string name="n_active">%1$d Active</string>
+    <string name="add_child">Add Child</string>
+    <string name="privacy_lock">Privacy Lock</string>
+    <string name="privacy_lock_body">Require device biometrics to open the app.</string>
+    <string name="settings_zones">Zones</string>
+    <string name="settings_zones_body">Manage %1$d safe zones</string>
+    <string name="settings_alerts">Alerts</string>
+    <string name="alerts_on">Push notifications ON</string>
+    <string name="alerts_off">Notifications off</string>
+    <string name="child_active">● Active%1$s</string>
+    <string name="child_offline">Offline</string>
+    <string name="cd_edit_child">Edit %1$s</string>
+    <string name="add_child_title">Add a child</string>
+    <string name="edit_profile_title">Edit profile</string>
+
+    <!-- App usage / screen time -->
+    <string name="appusage_title">App Usage</string>
+    <string name="appusage_card_title">Screen Time</string>
+    <string name="appusage_card_body">See time spent in each app</string>
+    <string name="appusage_total_today">TOTAL USAGE TODAY</string>
+    <string name="appusage_more">%1$d%% more than yesterday</string>
+    <string name="appusage_less">%1$d%% less than yesterday</string>
+    <string name="appusage_same">Same as yesterday</string>
+    <string name="appusage_weekly_trend">Weekly Trend</string>
+    <string name="appusage_avg">Avg: %1$s</string>
+    <string name="appusage_breakdown">Breakdown</string>
+    <string name="appusage_see_all">See All</string>
+    <string name="appusage_limits_title">App Limits</string>
+    <string name="appusage_limits_body">Manage daily time allocations</string>
+    <string name="appusage_empty">No app usage recorded yet.</string>
+    <string name="appusage_limits_soon">App limits are coming soon.</string>
+
+    <!-- Language picker -->
+    <string name="settings_language">Language</string>
+    <string name="lang_system">System default</string>
+    <string name="lang_english">English</string>
+    <string name="lang_hebrew">עברית</string>
+
+    <!-- Kid app -->
+    <string name="kid_connect_title">Connect to Parent</string>
+    <string name="kid_connect_body">Enter the 6-digit pairing code shown on your parent\'s device to start protecting this phone.</string>
+    <string name="kid_connect_action">Connect My Device</string>
+    <string name="kid_find_code">Where do I find the code?</string>
+    <string name="kid_monitoring_disclosure_title">This device will be monitored</string>
+    <string name="kid_monitoring_disclosure_body">Linked parents can see this phone\'s location, battery/status, app usage, and messages.</string>
+    <string name="kid_monitored_by">Monitored by</string>
+    <string name="kid_monitors_loading">Loading monitoring details...</string>
+    <string name="kid_pair_another_parent">Pair another parent</string>
+    <string name="kid_monitoring_notification_title">FamilyShield monitoring active</string>
+    <string name="kid_monitoring_notification_body">Linked parents can see this device\'s safety information.</string>
+    <string name="kid_privacy_label">PRIVACY</string>
+    <string name="kid_privacy_title">Secure Tunnel Enabled</string>
+    <string name="kid_sync_label">SYNC</string>
+    <string name="kid_sync_title">Instant Real-time Pairing</string>
+    <string name="kid_waiting">Waiting for connection…</string>
+    <string name="kid_version">FamilyShield Guardian System v4.2.0</string>
+    <string name="kid_my_device">My device</string>
+    <string name="kid_unpair">Unpair</string>
+    <string name="kid_unpair_confirm_title">Are you sure?</string>
+    <string name="kid_unpair_confirm_body">Remove %1$s from monitoring this device?</string>
+    <string name="kid_chat_title_with">Chat with %1$s</string>
+    <string name="cd_kid_map">Map — tap to set the device location</string>
+    <string name="kid_tap_to_move">Tap to move · %1$s, %2$s</string>
+    <string name="telemetry">Telemetry</string>
+    <string name="charging">Charging</string>
+    <string name="send_location">Send location</string>
+    <string name="status">Status</string>
+</resources>

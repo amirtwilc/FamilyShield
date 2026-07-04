@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FamilyShield - Connect Device</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Hanken Grotesk', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .pairing-input:focus {
+            outline: none;
+            border-color: #51b2fe;
+            box-shadow: 0 0 0 2px rgba(81, 178, 254, 0.2);
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.98); }
+        }
+        .animate-pulse-soft {
+            animation: pulse-soft 3s ease-in-out infinite;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-fixed-variant": "#343d96",
+                      "tertiary": "#002104",
+                      "surface-dim": "#d8dadd",
+                      "on-surface": "#191c1e",
+                      "surface-container-low": "#f2f4f7",
+                      "surface-container": "#eceef1",
+                      "surface-variant": "#e0e3e6",
+                      "secondary-fixed": "#cee5ff",
+                      "outline": "#767683",
+                      "inverse-surface": "#2d3133",
+                      "primary-fixed-dim": "#bdc2ff",
+                      "on-secondary-fixed": "#001d32",
+                      "on-error": "#ffffff",
+                      "on-secondary-fixed-variant": "#004a75",
+                      "secondary": "#00639a",
+                      "tertiary-container": "#00390a",
+                      "surface-container-highest": "#e0e3e6",
+                      "surface-bright": "#f7f9fc",
+                      "tertiary-fixed-dim": "#78dc77",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-fixed": "#94f990",
+                      "on-tertiary-container": "#48ab4d",
+                      "on-error-container": "#93000a",
+                      "primary-container": "#1a237e",
+                      "on-tertiary-fixed": "#002204",
+                      "on-primary-container": "#8690ee",
+                      "on-primary-fixed": "#000767",
+                      "surface": "#f7f9fc",
+                      "secondary-fixed-dim": "#96ccff",
+                      "on-tertiary": "#ffffff",
+                      "on-secondary-container": "#00436a",
+                      "on-surface-variant": "#454652",
+                      "inverse-primary": "#bdc2ff",
+                      "error-container": "#ffdad6",
+                      "primary": "#000666",
+                      "primary-fixed": "#e0e0ff",
+                      "on-background": "#191c1e",
+                      "on-tertiary-fixed-variant": "#005313",
+                      "error": "#ba1a1a",
+                      "surface-container-high": "#e6e8eb",
+                      "on-secondary": "#ffffff",
+                      "secondary-container": "#51b2fe",
+                      "inverse-on-surface": "#eff1f4",
+                      "on-primary": "#ffffff",
+                      "background": "#f7f9fc",
+                      "surface-tint": "#4c56af",
+                      "outline-variant": "#c6c5d4"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xl": "32px",
+                      "margin-mobile": "16px",
+                      "md": "16px",
+                      "lg": "24px",
+                      "margin-tablet": "24px",
+                      "base": "8px",
+                      "sm": "12px",
+                      "gutter": "16px",
+                      "xs": "4px"
+              },
+              "fontFamily": {
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "label-lg": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "label-sm": ["Hanken Grotesk"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                      "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "500"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col overflow-x-hidden">
+<!-- Hero Illustration Section -->
+<header class="relative w-full h-[309px] flex items-center justify-center overflow-hidden">
+
+<div class="relative z-10 flex flex-col items-center">
+<!-- Brand Logo Anchor -->
+<div class="flex items-center gap-2 mb-lg">
+<div class="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<h1 class="font-headline-sm text-headline-sm text-primary font-extrabold tracking-tight">FamilyShield</h1>
+</div>
+<!-- Connection Visual -->
+<div class="relative flex items-center justify-center gap-xl">
+<div class="w-16 h-16 bg-surface-container-highest rounded-2xl flex items-center justify-center shadow-sm border border-outline-variant/30">
+<span class="material-symbols-outlined text-secondary text-3xl">phone_iphone</span>
+</div>
+<div class="flex gap-1 animate-pulse-soft">
+<div class="w-2 h-2 rounded-full bg-secondary-container"></div>
+<div class="w-2 h-2 rounded-full bg-secondary-container"></div>
+<div class="w-2 h-2 rounded-full bg-secondary-container"></div>
+</div>
+<div class="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center shadow-lg transform rotate-3">
+<span class="material-symbols-outlined text-on-primary text-4xl" style="font-variation-settings: 'FILL' 1;">family_restroom</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-grow px-margin-mobile md:px-margin-tablet pb-xl -mt-6">
+<div class="max-w-md mx-auto glass-card rounded-3xl p-lg shadow-xl relative z-20">
+<!-- Welcome Header -->
+<div class="text-center mb-lg">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-xs">Connect to Parent</h2>
+<p class="font-body-md text-body-md text-on-surface-variant px-sm">
+                    Enter the 6-digit pairing code shown on your parent's device to start protecting this phone.
+                </p>
+</div>
+<!-- Pairing Code Input -->
+<div class="flex justify-between items-center gap-xs mb-lg" id="pairing-container">
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+<div class="w-2 h-0.5 bg-outline-variant"></div>
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+<input autocomplete="off" class="pairing-input w-12 h-14 md:w-14 md:h-16 text-center text-headline-md font-bold rounded-xl border border-outline-variant bg-surface-container-lowest text-primary transition-all focus:ring-0" inputmode="numeric" maxlength="1" type="text"/>
+</div>
+<!-- Action Button -->
+<button class="w-full h-14 bg-secondary text-on-secondary font-label-lg text-label-lg rounded-full shadow-md active:scale-95 transition-transform flex items-center justify-center gap-2 mb-md">
+<span>Connect My Device</span>
+<span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+<!-- Secondary Help -->
+<button class="w-full py-base font-label-lg text-label-lg text-secondary text-center hover:bg-secondary-container/10 rounded-lg transition-colors">
+                Where do I find the code?
+            </button>
+</div>
+<!-- Decorative Info Card (Bento Style) -->
+<div class="max-w-md mx-auto mt-lg grid grid-cols-2 gap-md">
+<div class="bg-tertiary-fixed-dim/20 p-md rounded-2xl border border-tertiary-fixed/30">
+<span class="material-symbols-outlined text-on-tertiary-fixed-variant mb-xs" style="font-variation-settings: 'FILL' 1;">gpp_good</span>
+<p class="font-label-sm text-label-sm text-on-tertiary-fixed-variant uppercase tracking-wider">Privacy</p>
+<p class="font-body-md text-body-md font-semibold text-tertiary mt-1 leading-tight">Secure Tunnel Enabled</p>
+</div>
+<div class="bg-secondary-fixed/30 p-md rounded-2xl border border-secondary-fixed/50">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant mb-xs" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant uppercase tracking-wider">Sync</p>
+<p class="font-body-md text-body-md font-semibold text-on-secondary-fixed mt-1 leading-tight">Instant Real-time Pairing</p>
+</div>
+</div>
+</main>
+<!-- Status Indicator & Footer -->
+<footer class="w-full py-md flex flex-col items-center justify-center bg-surface-container-low/50 backdrop-blur-md">
+<div class="flex items-center gap-3">
+<div class="relative flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-secondary"></span>
+</div>
+<p class="font-label-lg text-label-lg text-on-surface-variant italic">Waiting for connection...</p>
+</div>
+<div class="mt-md px-margin-mobile text-center">
+<p class="font-label-sm text-label-sm text-outline-variant">FamilyShield Guardian System v4.2.0</p>
+</div>
+</footer>
+<!-- Interaction Script -->
+<script>
+        const inputs = document.querySelectorAll('.pairing-input');
+        
+        inputs.forEach((input, index) => {
+            input.addEventListener('input', (e) => {
+                if (e.target.value.length === 1 && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && e.target.value.length === 0 && index > 0) {
+                    inputs[index - 1].focus();
+                }
+            });
+
+            // Prevent non-numeric input
+            input.addEventListener('beforeinput', (e) => {
+                if (e.data && !/^\d+$/.test(e.data)) {
+                    e.preventDefault();
+                }
+            });
+        });
+
+        // Simple vibration simulation on button click
+        const btn = document.querySelector('button');
+        btn.addEventListener('click', () => {
+            if ("vibrate" in navigator) {
+                navigator.vibrate(50);
+            }
+        });
+    </script>
+</body></html>

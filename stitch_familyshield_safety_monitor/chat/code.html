@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>FamilyShield - Chat with Leo</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Hanken Grotesk -->
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e0e3e6",
+                    "surface-container-high": "#e6e8eb",
+                    "on-surface-variant": "#454652",
+                    "surface-bright": "#f7f9fc",
+                    "surface-container-low": "#f2f4f7",
+                    "on-secondary-container": "#00436a",
+                    "surface-container-lowest": "#ffffff",
+                    "primary": "#000666",
+                    "outline": "#767683",
+                    "on-primary-fixed": "#000767",
+                    "secondary-fixed-dim": "#96ccff",
+                    "on-tertiary-container": "#48ab4d",
+                    "background": "#f7f9fc",
+                    "primary-fixed-dim": "#bdc2ff",
+                    "surface-tint": "#4c56af",
+                    "on-secondary-fixed-variant": "#004a75",
+                    "inverse-on-surface": "#eff1f4",
+                    "on-tertiary-fixed": "#002204",
+                    "on-background": "#191c1e",
+                    "outline-variant": "#c6c5d4",
+                    "error-container": "#ffdad6",
+                    "on-primary-container": "#8690ee",
+                    "tertiary-fixed-dim": "#78dc77",
+                    "on-secondary-fixed": "#001d32",
+                    "inverse-surface": "#2d3133",
+                    "error": "#ba1a1a",
+                    "tertiary-container": "#00390a",
+                    "surface-dim": "#d8dadd",
+                    "primary-container": "#1a237e",
+                    "primary-fixed": "#e0e0ff",
+                    "surface-container": "#eceef1",
+                    "secondary-fixed": "#cee5ff",
+                    "on-primary": "#ffffff",
+                    "tertiary": "#002104",
+                    "inverse-primary": "#bdc2ff",
+                    "secondary": "#00639a",
+                    "on-tertiary-fixed-variant": "#005313",
+                    "surface": "#f7f9fc",
+                    "secondary-container": "#51b2fe",
+                    "on-secondary": "#ffffff",
+                    "tertiary-fixed": "#94f990",
+                    "on-tertiary": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#191c1e",
+                    "on-error": "#ffffff",
+                    "surface-variant": "#e0e3e6",
+                    "on-primary-fixed-variant": "#343d96"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "8px",
+                    "lg": "24px",
+                    "xs": "4px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "margin-tablet": "24px",
+                    "margin-mobile": "16px",
+                    "sm": "12px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "label-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .message-in {
+            border-bottom-left-radius: 4px;
+        }
+        .message-out {
+            border-bottom-right-radius: 4px;
+        }
+        /* Custom scrollbar for chat area */
+        .chat-area::-webkit-scrollbar { width: 4px; }
+        .chat-area::-webkit-scrollbar-track { background: transparent; }
+        .chat-area::-webkit-scrollbar-thumb { background: #e0e3e6; border-radius: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background flex flex-col h-screen overflow-hidden">
+<!-- Top App Bar (Task-Focused: Suppressed global Nav) -->
+<header class="bg-surface shadow-sm sticky top-0 w-full h-16 flex items-center px-4 z-40 transition-colors">
+<button aria-label="Go back" class="mr-3 p-2 hover:bg-surface-variant/50 rounded-full active:scale-95 duration-150">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<div class="flex items-center flex-1">
+<div class="relative">
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant/30">
+<img class="w-full h-full object-cover" data-alt="Close-up studio portrait of a cheerful 8-year-old boy named Leo with bright eyes and a friendly smile, set against a soft, blurred playground background. The lighting is warm and natural, following a modern family-oriented app aesthetic with high clarity and vibrant but professional colors." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOIBCOPwYDgOD2z1PA8XC3ALtHBcmy_bRcwEbP9iqhpvKi6AnYn8dXJikJUepBQwoEQs26LeoSbkQ4JCE70fg-4e3i3FI064aVKiFLnjMVeV2JFrk31-hgLoCQxzoi-0pn5mpvpUFfCRsBUfcw5CEdAEU9LL0KNrtKODsqBY7QqwXn6fidK4zqOjaerZ145qfb2G5fSwLnma2B0zLMXfRkp7fwoh29j9vVehIN0xPFtHoyGFsquLgnN6xRnkZeqXfm0XHEZJoN5PE"/>
+</div>
+<div class="absolute bottom-0 right-0 w-3 h-3 bg-tertiary-fixed-dim border-2 border-surface rounded-full"></div>
+</div>
+<div class="ml-3">
+<h1 class="font-headline-sm text-headline-sm text-primary leading-tight">Leo</h1>
+<p class="font-label-sm text-label-sm text-on-tertiary-container flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-fixed-dim mr-1"></span>
+                    Online
+                </p>
+</div>
+</div>
+<button aria-label="Settings" class="p-2 hover:bg-surface-variant/50 rounded-full active:scale-95 duration-150">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="settings">settings</span>
+</button>
+</header>
+<!-- Chat Area -->
+<main class="flex-1 overflow-y-auto chat-area p-4 space-y-6 flex flex-col">
+<!-- Date Indicator -->
+<div class="flex justify-center">
+<span class="px-3 py-1 bg-surface-container-low text-on-surface-variant rounded-full font-label-sm text-label-sm">Today</span>
+</div>
+<!-- Incoming Message -->
+<div class="flex flex-col items-start max-w-[85%] animate-fade-in">
+<div class="bg-surface-container-highest text-on-surface-variant p-4 rounded-2xl message-in shadow-sm">
+<p class="font-body-md text-body-md">I'm at school now!</p>
+</div>
+<span class="mt-1 ml-1 font-label-sm text-label-sm text-outline">08:32 AM</span>
+</div>
+<!-- Outgoing Message -->
+<div class="flex flex-col items-end max-w-[85%] self-end">
+<div class="bg-primary text-on-primary p-4 rounded-2xl message-out shadow-md">
+<p class="font-body-md text-body-md">Great, stay safe!</p>
+</div>
+<div class="flex items-center mt-1 mr-1">
+<span class="font-label-sm text-label-sm text-outline mr-1">08:35 AM</span>
+<span class="material-symbols-outlined text-secondary text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<!-- System Alert: Safe Zone Entry -->
+<div class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-3 flex items-center mx-auto max-w-[90%] shadow-sm">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed-dim/20 flex items-center justify-center mr-3">
+<span class="material-symbols-outlined text-on-tertiary-container text-[18px]" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface">Safe Zone: Westside Elementary</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Leo entered at 8:31 AM</p>
+</div>
+</div>
+<!-- Response Prompt (Asymmetric UI element) -->
+<div class="mt-auto pt-4 flex flex-wrap gap-2">
+<button class="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-primary font-label-lg text-label-lg rounded-full transition-all active:scale-95">Love you!</button>
+<button class="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-primary font-label-lg text-label-lg rounded-full transition-all active:scale-95">Call me later?</button>
+</div>
+</main>
+<!-- Input Area -->
+<footer class="bg-surface p-4 pb-8 md:pb-4 border-t border-outline-variant/20">
+<div class="flex items-end gap-2">
+<!-- Location Request Button -->
+<button class="p-3 bg-secondary-container text-on-secondary-container rounded-full hover:bg-secondary hover:text-on-secondary transition-all active:scale-90" title="Request Location">
+<span class="material-symbols-outlined" data-icon="my_location" style="font-variation-settings: 'FILL' 1;">my_location</span>
+</button>
+<!-- Message Input -->
+<div class="flex-1 relative">
+<textarea class="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary/20 rounded-[24px] py-3 px-5 pr-12 font-body-md text-body-md text-on-surface placeholder-on-surface-variant resize-none max-h-32 transition-all" id="messageInput" placeholder="Message Leo..." rows="1"></textarea>
+<button class="absolute right-2 bottom-1.5 p-2 text-primary hover:text-secondary active:scale-90 transition-all">
+<span class="material-symbols-outlined text-[24px]">face</span>
+</button>
+</div>
+<!-- Send Button -->
+<button class="p-3 bg-primary text-on-primary rounded-full hover:shadow-lg hover:shadow-primary/20 active:scale-90 transition-all duration-150" id="sendBtn">
+<span class="material-symbols-outlined" data-icon="send" style="font-variation-settings: 'FILL' 1;">send</span>
+</button>
+</div>
+</footer>
+<!-- Micro-interaction Script -->
+<script>
+        const input = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        // Auto-expand textarea
+        input.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // Basic send interaction
+        sendBtn.addEventListener('click', () => {
+            if(input.value.trim() !== '') {
+                // Animation logic for send
+                sendBtn.classList.add('translate-x-2', 'opacity-0');
+                setTimeout(() => {
+                    input.value = '';
+                    input.style.height = 'auto';
+                    sendBtn.classList.remove('translate-x-2', 'opacity-0');
+                }, 300);
+            }
+        });
+    </script>
+</body></html>

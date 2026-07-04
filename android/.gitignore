@@ -1,0 +1,13 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.keystore
+# local verification artifacts (screenshots at the android/ root only — NOT res/ assets)
+/*.png
+/ui.xml

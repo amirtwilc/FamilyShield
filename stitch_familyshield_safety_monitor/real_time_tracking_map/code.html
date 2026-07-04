@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>FamilyShield - Real-Time Tracking</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .safe-zone-pulse {
+            animation: pulse 3s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.3; }
+            50% { transform: scale(1.05); opacity: 0.15; }
+            100% { transform: scale(1); opacity: 0.3; }
+        }
+        .map-container {
+            height: calc(100vh - 80px);
+        }
+        body {
+            overscroll-behavior-y: contain;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-container": "#1a237e",
+                        "inverse-primary": "#bdc2ff",
+                        "surface-tint": "#4c56af",
+                        "on-background": "#191c1e",
+                        "primary-fixed": "#e0e0ff",
+                        "on-surface-variant": "#454652",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-container": "#51b2fe",
+                        "on-surface": "#191c1e",
+                        "on-tertiary-container": "#48ab4d",
+                        "on-error": "#ffffff",
+                        "secondary": "#00639a",
+                        "surface-dim": "#d8dadd",
+                        "outline": "#767683",
+                        "secondary-fixed-dim": "#96ccff",
+                        "surface-container-high": "#e6e8eb",
+                        "on-primary-fixed": "#000767",
+                        "tertiary": "#002104",
+                        "surface-container-low": "#f2f4f7",
+                        "surface-container": "#eceef1",
+                        "on-tertiary-fixed": "#002204",
+                        "primary": "#000666",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#c6c5d4",
+                        "background": "#f7f9fc",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#8690ee",
+                        "surface-variant": "#e0e3e6",
+                        "surface-bright": "#f7f9fc",
+                        "primary-fixed-dim": "#bdc2ff",
+                        "tertiary-fixed-dim": "#78dc77",
+                        "on-secondary-container": "#00436a",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#005313",
+                        "inverse-surface": "#2d3133",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed": "#001d32",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#94f990",
+                        "secondary-fixed": "#cee5ff",
+                        "on-secondary-fixed-variant": "#004a75",
+                        "surface-container-highest": "#e0e3e6",
+                        "inverse-on-surface": "#eff1f4",
+                        "surface": "#f7f9fc",
+                        "tertiary-container": "#00390a",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed-variant": "#343d96"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "sm": "12px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "margin-tablet": "24px",
+                        "gutter": "16px",
+                        "base": "8px",
+                        "margin-mobile": "16px",
+                        "xl": "32px"
+                    },
+                    "fontFamily": {
+                        "label-lg": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "500"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md text-body-md overflow-hidden">
+<!-- Top Navigation Anchor -->
+<header class="w-full top-0 sticky bg-surface dark:bg-surface-dim shadow-sm flex justify-between items-center px-4 h-16 w-full z-40">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20">
+<img class="w-full h-full object-cover" data-alt="A clean, professional headshot of a young boy with light hair and a bright smile, wearing a blue school polo shirt. The lighting is warm and natural, set against a soft-focus interior background, matching the corporate yet family-friendly aesthetic of FamilyShield." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCVcH1gNwv1ftAl6g8Q9i7gT6tmOTXv1xKWsX7k8lz9Uz4VjObVb4jC_Xt60Epy_Pi4wk05DQCbuHCZVi1UQHEMaw7-Krv_z8hlHHXpgK28euGFVAResMJIGo05UScYwUke7vd4AlPu0wH4hLsSNmHP89IC5NzDVsZOR1wAur8tSFyDvZ4sK3v4wKy6MJlYq71Z1s4gkJ8iLoJiOH82WbCoJWI3xC92ZHF43Juy60ESNGmuZzghOJbGe6ER-8CHGzNJD-DYP3D3i_M"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-inverse-primary">FamilyShield</h1>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant/50 transition-colors p-2 rounded-full active:scale-95 duration-150">
+            settings
+        </button>
+</header>
+<!-- Map Canvas Area -->
+<main class="relative map-container w-full bg-surface-container overflow-hidden">
+<!-- Background Map (Full Screen) -->
+<div class="absolute inset-0 z-0">
+<div class="w-full h-full bg-cover bg-center grayscale-[0.2] opacity-80" data-alt="A high-quality, detailed satellite navigation map view of a modern urban residential area with clear street labels, green park spaces, and building footprints. The color palette is clean with soft grays, greens, and blues, maintaining a high-end UI look. The lighting suggests a bright, clear day." data-location="Chicago" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCYVE6w_N3c5IVLBJhn39jhFv25s8pDtwor5_UALPDZZxK45yQ7DJI1zJZcYSm1g3mWx-_W6qRg7IvvJyBmDFGr5eAcbPblWbmO1_LuX3bZiw_EMgEM8T6q8ABfDgXQCGQvcRn26ljBo9WlzuV2bUoxNa1jMywrJIZAt0Umt9n-lZLrsvpkb0Fx2APLRlvLQ92bpu0Yc5hdygDSWlHqKd_Z2oJJkL5ILfUJBdp7uyY9mI0QRtWsY-S2pyO1sl6BALLGW7UU4FCPfp4')">
+</div>
+</div>
+<!-- Safe Zone Visualization -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+<div class="w-64 h-64 bg-tertiary-fixed/20 border-2 border-tertiary-fixed-dim/40 rounded-full safe-zone-pulse flex items-center justify-center">
+<div class="bg-tertiary-fixed/40 px-3 py-1 rounded-full text-tertiary-fixed-variant font-label-lg text-label-lg backdrop-blur-sm">
+                    School Zone
+                </div>
+</div>
+</div>
+<!-- Child Marker (Center) -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+<div class="relative group cursor-pointer">
+<div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary rotate-45 rounded-sm"></div>
+<div class="relative w-14 h-14 rounded-full border-4 border-white shadow-lg overflow-hidden bg-primary p-0.5">
+<img class="w-full h-full rounded-full object-cover" data-alt="A small circular avatar portrait of Leo, a 7-year-old boy, with a happy expression. He is centered within the frame. The visual style is crisp and modern, featuring vibrant colors that contrast against the soft map background, signifying his active status." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDok0RonC85y_9VJygRf0r1EG-MIWMJZWyL61QhFzKCFgBwXfr983zySSfFR4kf4650ABDU8E9pF-wdMtX3IiuWeKEVnslgrIXyplNQcvbwjNTZeM5Ze-QaSVTikI4qsg966-hapvYppBtIhSRNnqx8V6sPme7ICr-80CfEaA2dz7qqV1DU3ScE55pqdiTdcXuRzILfjBNyhqDV6OF-dJpyKtCnzIUVqZbCsfhlOe9TL3dk4bbLqN9krzq4keIRaf6Ubrrdyt_Bgv4"/>
+</div>
+<div class="absolute -top-1 -right-1 w-4 h-4 bg-tertiary-fixed border-2 border-white rounded-full"></div>
+</div>
+</div>
+<!-- Top Floating Status Overlay -->
+<div class="absolute top-4 left-4 right-4 z-30 pointer-events-none">
+<div class="mx-auto max-w-md bg-surface/90 backdrop-blur-xl shadow-lg rounded-xl p-4 flex items-center justify-between pointer-events-auto border border-outline-variant/20">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-secondary-container rounded-full flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined">school</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Leo is at School</h2>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-sm text-label-sm text-on-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Safe Zone
+                            </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">battery_5_bar</span>
+                                84%
+                            </span>
+</div>
+</div>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-primary hover:bg-primary-fixed/30 transition-all active:scale-90">
+<span class="material-symbols-outlined">refresh</span>
+</button>
+</div>
+</div>
+<!-- Floating Action Buttons -->
+<div class="absolute bottom-6 right-4 z-30 flex flex-col gap-4">
+<button class="w-14 h-14 bg-secondary text-white rounded-full shadow-xl flex items-center justify-center hover:bg-primary transition-all active:scale-90 group">
+<span class="material-symbols-outlined text-[28px]">directions</span>
+<span class="absolute right-16 bg-surface px-3 py-1 rounded-lg text-primary font-label-lg text-label-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">Navigate to Child</span>
+</button>
+<button class="w-14 h-14 bg-primary text-white rounded-full shadow-xl flex items-center justify-center hover:bg-primary-container transition-all active:scale-90 group">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">call</span>
+<span class="absolute right-16 bg-surface px-3 py-1 rounded-lg text-primary font-label-lg text-label-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">Call</span>
+</button>
+</div>
+<!-- Zoom Controls Overlay -->
+<div class="absolute bottom-6 left-4 z-30 flex flex-col gap-2">
+<div class="bg-surface/90 backdrop-blur-md rounded-lg shadow-md border border-outline-variant/20 overflow-hidden">
+<button class="w-10 h-10 flex items-center justify-center hover:bg-surface-variant/50 transition-colors border-b border-outline-variant/10">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">remove</span>
+</button>
+</div>
+<button class="w-10 h-10 bg-surface/90 backdrop-blur-md rounded-lg shadow-md border border-outline-variant/20 flex items-center justify-center hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">my_location</span>
+</button>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 left-0 right-0 h-20 bg-surface/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-t border-outline-variant/30 flex justify-around items-center px-4 pb-safe z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-5 py-1 active:scale-90 duration-200 ease-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
+<span class="font-label-sm text-label-sm mt-1 font-bold">Map</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-sm text-label-sm mt-1">History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out" href="#">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-label-sm text-label-sm mt-1">Zones</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for the refresh button
+        document.querySelector('.absolute.top-4 button').addEventListener('click', function() {
+            const icon = this.querySelector('.material-symbols-outlined');
+            icon.classList.add('animate-spin');
+            setTimeout(() => {
+                icon.classList.remove('animate-spin');
+            }, 1000);
+        });
+
+        // Simple parallax effect for map on movement
+        document.addEventListener('mousemove', (e) => {
+            const map = document.querySelector('[data-location="Chicago"]');
+            const x = (e.clientX / window.innerWidth - 0.5) * 10;
+            const y = (e.clientY / window.innerHeight - 0.5) * 10;
+            map.style.transform = `scale(1.05) translate(${x}px, ${y}px)`;
+        });
+    </script>
+</body></html>

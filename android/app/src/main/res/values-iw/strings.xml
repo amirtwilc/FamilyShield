@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FamilyShield</string>
+
+    <!-- Generic actions / labels -->
+    <string name="action_add">הוספה</string>
+    <string name="action_cancel">ביטול</string>
+    <string name="action_save">שמירה</string>
+    <string name="action_logout">התנתקות</string>
+    <string name="field_email">אימייל</string>
+    <string name="field_password">סיסמה</string>
+    <string name="field_name">שם</string>
+    <string name="label_child">ילד</string>
+    <string name="label_device">המכשיר</string>
+    <string name="label_your_child">הילד שלך</string>
+    <string name="cd_back">חזרה</string>
+    <string name="cd_settings">הגדרות</string>
+    <string name="cd_alerts">התראות</string>
+    <string name="cd_refresh">רענון</string>
+    <string name="cd_locate">איתור</string>
+
+    <!-- Login -->
+    <string name="login_title_register">יצירת\nחשבון</string>
+    <string name="login_title_welcome">ברוכים\nהשבים</string>
+    <string name="action_create_account">יצירת חשבון</string>
+    <string name="action_sign_in">כניסה</string>
+    <string name="cd_show_password">הצגת סיסמה</string>
+    <string name="cd_hide_password">הסתרת סיסמה</string>
+    <string name="login_have_account">כבר יש לך חשבון? כניסה</string>
+    <string name="login_new_here">חדש כאן? יצירת חשבון</string>
+    <string name="login_setup_kid">הגדרת מכשיר לילד ←</string>
+    <string name="google_signin">המשך עם Google</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_dashboard">בית</string>
+    <string name="nav_chat">צ\'אט</string>
+    <string name="nav_map">מפה</string>
+    <string name="nav_history">היסטוריה</string>
+    <string name="nav_zones">אזורים</string>
+
+    <!-- Chat -->
+    <string name="chat_title">הודעות</string>
+    <string name="chat_tap_to_start">הקישו כדי להתחיל לשוחח</string>
+    <string name="chat_empty_title">אין הודעות עדיין</string>
+    <string name="chat_empty_body">אמרו שלום ל%1$s.</string>
+    <string name="chat_hint">הודעה</string>
+    <string name="chat_hint_name">הודעה ל%1$s…</string>
+    <string name="cd_send">שליחה</string>
+    <string name="chat_today">היום</string>
+    <string name="chat_load_earlier">טען הודעות קודמות</string>
+    <string name="chat_online">מחובר</string>
+    <string name="cd_request_location">בקשת מיקום</string>
+    <string name="chat_request_location_msg">📍 תוכל לשתף את המיקום שלך?</string>
+    <string name="qr_love">אוהבים אותך!</string>
+    <string name="qr_call_later">תתקשר אחר כך?</string>
+    <string name="qr_stay_safe">תשמור על עצמך!</string>
+    <string name="chat_safe_zone_title">אזור בטוח: %1$s</string>
+    <string name="chat_safe_zone_body">%1$s כאן עכשיו</string>
+    <string name="kid_chat_title">צ\'אט עם ההורה</string>
+    <string name="kid_chat_empty">אין הודעות עדיין. אמרו שלום להורה שלכם!</string>
+    <string name="qr_im_safe">אני בסדר!</string>
+    <string name="qr_on_my_way">בדרך!</string>
+    <string name="qr_pick_me_up">תאספו אותי?</string>
+
+    <!-- Dashboard -->
+    <string name="all_children">כל הילדים</string>
+    <string name="active_monitoring">ניטור פעיל</string>
+    <string name="family_network">רשת המשפחה</string>
+    <string name="children_online">%1$d ילדים מחוברים</string>
+    <string name="child_online">%1$d ילד מחובר</string>
+    <string name="full_view">תצוגה מלאה</string>
+    <string name="top_places_today">מקומות מובילים היום</string>
+    <string name="empty_places_title">אין מקומות עדיין</string>
+    <string name="empty_places_body">מקומות שביקרתם בהם יופיעו כאן עם תנועת המשפחה.</string>
+    <string name="place_visited">%1$s ביקר · %2$s–%3$s</string>
+    <string name="recent_alerts">התראות אחרונות</string>
+    <string name="view_all">הצג הכול</string>
+    <string name="empty_alerts_title">הכול תקין</string>
+    <string name="empty_alerts_body">אין התראות אחרונות עבור המשפחה.</string>
+    <string name="empty_locations_title">אין מיקומים פעילים עדיין</string>
+    <string name="empty_locations_body">חברו את מכשירי הילדים כדי לראות את כולם על המפה.</string>
+    <string name="action_ring_device">צלצול למכשיר</string>
+    <string name="action_timeline">ציר זמן</string>
+    <string name="action_emergency">חירום</string>
+    <string name="snack_ring">בקשת צלצול נשלחה אל %1$s</string>
+    <string name="snack_emergency">מצב חירום הופעל</string>
+
+    <!-- Alerts -->
+    <string name="alert_low_battery">סוללה חלשה</string>
+    <string name="alert_offline">לא מקוון</string>
+    <string name="alert_generic">התראה</string>
+    <string name="alert_named">%1$s: %2$s</string>
+    <string name="alert_battery_body">הסוללה עומדת להתרוקן</string>
+    <string name="alert_status_body">עדכון מצב המכשיר</string>
+
+    <!-- Map -->
+    <string name="map_empty_title">אין מיקום פעיל</string>
+    <string name="map_empty_body">חברו מכשיר ושלחו מיקום כדי לעקוב כאן.</string>
+    <string name="map_status_safe">%1$s נמצא באזור בטוח</string>
+    <string name="map_status_moving">%1$s בתנועה</string>
+    <string name="chip_safe_zone">אזור בטוח</string>
+
+    <!-- History -->
+    <string name="history_title">מסלולים והיסטוריה</string>
+    <string name="frequent_routes">מסלולים תכופים</string>
+    <string name="empty_routes_title">אין מסלולים חוזרים עדיין</string>
+    <string name="empty_routes_body">לאחר ש%1$s יחזור על אותו מסלול כמה פעמים, הוא יופיע כאן.</string>
+    <string name="daily_timeline">ציר זמן יומי</string>
+    <string name="empty_history_title">אין היסטוריה</string>
+    <string name="empty_history_body">לא נרשמו עדכוני מיקום ביום זה.</string>
+    <string name="return_point">נקודת חזרה</string>
+    <string name="route_summary">~%1$s ק\"מ · ~%2$d דק\' · אחרון %3$s</string>
+    <string name="open_return_point">פתיחת נקודת החזרה</string>
+    <string name="location_update">עדכון מיקום</string>
+    <string name="view_on_map">הצג במפה</string>
+    <string name="route_count">× %1$d</string>
+
+    <!-- Zones -->
+    <string name="zones_title">אזורים בטוחים והתראות</string>
+    <string name="zones_subtitle">ניהול התראות אוטומטיות כש%1$s נכנס או יוצא מאזור.</string>
+    <string name="empty_zones_title">אין אזורים בטוחים עדיין</string>
+    <string name="empty_zones_body">הוסיפו אזור כדי לקבל התראות כשהילד מגיע או עוזב.</string>
+    <string name="notif_strategy_title">אסטרטגיית התראות</string>
+    <string name="notif_strategy_body">אתם מקבלים התראות פוש לכל האזורים הפעילים. התראות בטיחות קריטיות עוקפות את מצב \"נא לא להפריע\".</string>
+    <string name="cd_add_zone">הוספת אזור</string>
+    <string name="chip_active">פעיל</string>
+    <string name="zone_radius">רדיוס %1$d מ\'</string>
+    <string name="cd_delete_zone">מחיקת אזור</string>
+    <string name="new_zone_title">אזור בטוח חדש</string>
+    <string name="zone_name_label">שם (לדוגמה: בית ספר)</string>
+    <string name="zone_radius_label">רדיוס: %1$d מ\'</string>
+    <string name="zone_center_yes">ממורכז על מיקומו הנוכחי של הילד.</string>
+    <string name="zone_center_no">אין מיקום נוכחי — חברו מכשיר תחילה.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">הגדרות משפחה</string>
+    <string name="manage_profiles">ניהול פרופילים</string>
+    <string name="manage_profiles_body">הגדירו אבטחה ופרטי פרופיל עבור בני המשפחה.</string>
+    <string name="your_children">הילדים שלך</string>
+    <string name="n_active">%1$d פעילים</string>
+    <string name="add_child">הוספת ילד</string>
+    <string name="privacy_lock">נעילת פרטיות</string>
+    <string name="privacy_lock_body">דרשו אימות ביומטרי כדי לפתוח את האפליקציה.</string>
+    <string name="settings_zones">אזורים</string>
+    <string name="settings_zones_body">ניהול %1$d אזורים בטוחים</string>
+    <string name="settings_alerts">התראות</string>
+    <string name="alerts_on">התראות פוש פעילות</string>
+    <string name="alerts_off">התראות כבויות</string>
+    <string name="child_active">● פעיל%1$s</string>
+    <string name="child_offline">לא מקוון</string>
+    <string name="cd_edit_child">עריכת %1$s</string>
+    <string name="add_child_title">הוספת ילד</string>
+    <string name="edit_profile_title">עריכת פרופיל</string>
+
+    <!-- App usage / screen time -->
+    <string name="appusage_title">שימוש באפליקציות</string>
+    <string name="appusage_card_title">זמן מסך</string>
+    <string name="appusage_card_body">ראו כמה זמן בכל אפליקציה</string>
+    <string name="appusage_total_today">שימוש כולל היום</string>
+    <string name="appusage_more">%1$d%% יותר מאתמול</string>
+    <string name="appusage_less">%1$d%% פחות מאתמול</string>
+    <string name="appusage_same">כמו אתמול</string>
+    <string name="appusage_weekly_trend">מגמה שבועית</string>
+    <string name="appusage_avg">ממוצע: %1$s</string>
+    <string name="appusage_breakdown">פירוט</string>
+    <string name="appusage_see_all">הצג הכול</string>
+    <string name="appusage_limits_title">מגבלות אפליקציה</string>
+    <string name="appusage_limits_body">ניהול הקצאות זמן יומיות</string>
+    <string name="appusage_empty">לא נרשם שימוש באפליקציות עדיין.</string>
+    <string name="appusage_limits_soon">מגבלות אפליקציה יגיעו בקרוב.</string>
+
+    <!-- Language picker -->
+    <string name="settings_language">שפה</string>
+    <string name="lang_system">ברירת מחדל של המערכת</string>
+    <string name="lang_english">English</string>
+    <string name="lang_hebrew">עברית</string>
+
+    <!-- Kid app -->
+    <string name="kid_connect_title">התחברות להורה</string>
+    <string name="kid_connect_body">הזינו את קוד הצימוד בן 6 הספרות המוצג במכשיר ההורה כדי להתחיל להגן על הטלפון הזה.</string>
+    <string name="kid_connect_action">חיבור המכשיר שלי</string>
+    <string name="kid_find_code">איפה מוצאים את הקוד?</string>
+    <string name="kid_privacy_label">פרטיות</string>
+    <string name="kid_privacy_title">מנהרה מאובטחת פעילה</string>
+    <string name="kid_sync_label">סנכרון</string>
+    <string name="kid_sync_title">צימוד מיידי בזמן אמת</string>
+    <string name="kid_waiting">ממתין לחיבור…</string>
+    <string name="kid_version">מערכת FamilyShield Guardian v4.2.0</string>
+    <string name="kid_my_device">המכשיר שלי</string>
+    <string name="kid_unpair">ביטול צימוד</string>
+    <string name="cd_kid_map">מפה — הקישו כדי לקבוע את מיקום המכשיר</string>
+    <string name="kid_tap_to_move">הקישו להזזה · %1$s, %2$s</string>
+    <string name="telemetry">טלמטריה</string>
+    <string name="charging">בטעינה</string>
+    <string name="send_location">שליחת מיקום</string>
+    <string name="status">מצב</string>
+</resources>

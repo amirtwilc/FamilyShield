@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Safe Zones Configuration | FamilyShield</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+        body {
+            font-family: 'Hanken Grotesk', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        @keyframes pulse-soft {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        .animate-pulse-soft {
+            animation: pulse-soft 3s infinite ease-in-out;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-container": "#1a237e",
+                      "inverse-primary": "#bdc2ff",
+                      "surface-tint": "#4c56af",
+                      "on-background": "#191c1e",
+                      "primary-fixed": "#e0e0ff",
+                      "on-surface-variant": "#454652",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-container": "#51b2fe",
+                      "on-surface": "#191c1e",
+                      "on-tertiary-container": "#48ab4d",
+                      "on-error": "#ffffff",
+                      "secondary": "#00639a",
+                      "surface-dim": "#d8dadd",
+                      "outline": "#767683",
+                      "secondary-fixed-dim": "#96ccff",
+                      "surface-container-high": "#e6e8eb",
+                      "on-primary-fixed": "#000767",
+                      "tertiary": "#002104",
+                      "surface-container-low": "#f2f4f7",
+                      "surface-container": "#eceef1",
+                      "on-tertiary-fixed": "#002204",
+                      "primary": "#000666",
+                      "on-secondary": "#ffffff",
+                      "outline-variant": "#c6c5d4",
+                      "background": "#f7f9fc",
+                      "on-primary": "#ffffff",
+                      "on-primary-container": "#8690ee",
+                      "surface-variant": "#e0e3e6",
+                      "surface-bright": "#f7f9fc",
+                      "primary-fixed-dim": "#bdc2ff",
+                      "tertiary-fixed-dim": "#78dc77",
+                      "on-secondary-container": "#00436a",
+                      "on-error-container": "#93000a",
+                      "on-tertiary-fixed-variant": "#005313",
+                      "inverse-surface": "#2d3133",
+                      "on-tertiary": "#ffffff",
+                      "on-secondary-fixed": "#001d32",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed": "#94f990",
+                      "secondary-fixed": "#cee5ff",
+                      "on-secondary-fixed-variant": "#004a75",
+                      "surface-container-highest": "#e0e3e6",
+                      "inverse-on-surface": "#eff1f4",
+                      "surface": "#f7f9fc",
+                      "tertiary-container": "#00390a",
+                      "error": "#ba1a1a",
+                      "on-primary-fixed-variant": "#343d96"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "sm": "12px",
+                      "lg": "24px",
+                      "md": "16px",
+                      "margin-tablet": "24px",
+                      "gutter": "16px",
+                      "base": "8px",
+                      "margin-mobile": "16px",
+                      "xl": "32px"
+              },
+              "fontFamily": {
+                      "label-lg": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "label-sm": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "500"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- Top AppBar -->
+<header class="w-full top-0 sticky bg-surface dark:bg-surface-dim shadow-sm z-40 flex justify-between items-center px-4 h-16 w-full">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img class="w-full h-full object-cover" data-alt="A warm and friendly professional headshot of a smiling young boy with curly hair, wearing a bright blue striped polo shirt. The background is a soft, out-of-focus park setting with golden hour sunlight filtering through green leaves, creating a safe and heartwarming family-oriented atmosphere with high-quality commercial photography lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDr3Q2cHx7EY7gqoY7NhHa5Y0gPLq3EtdeyTji_QqEfCBgP-8qzXoMfqw-b80CoGY3vB2VhPWLnZIAn8wmm8lTNMgUfI9JUgpuU4duMpAwe8zluDU77ueDffOEiRA1dEheiwPE-uI2SOSk22KYIOEoe5EHxLC4lnFdsbSvnwFnZa0xW9znEzC4YxmFfL2XrOyC9BSZr7fQRVspFIz-H_-rQ44rRynuCYnB-aoivOhJzmNdCph2Gqvq74gAYPyjBJfl1yGmtNwCLdHM"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-inverse-primary">FamilyShield</h1>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-variant/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<main class="px-margin-mobile md:px-margin-tablet py-lg space-y-lg max-w-4xl mx-auto">
+<!-- Page Header -->
+<div class="space-y-xs">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-primary">Safe Zones &amp; Alerts</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage automated notifications for when family members enter or leave designated areas.</p>
+</div>
+<!-- Bento Grid Layout for Safe Zones -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+<!-- Home Zone -->
+<div class="glass-card rounded-xl p-md border border-outline-variant/30 shadow-sm flex flex-col justify-between h-full group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-container"></div>
+</label>
+</div>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-xs">Home</h3>
+<div class="flex items-center gap-2 mb-md">
+<span class="px-2 py-0.5 rounded-full bg-on-tertiary-container/10 text-on-tertiary-container font-label-sm text-label-sm flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse-soft"></span>
+                            Active
+                        </span>
+<span class="text-on-surface-variant font-label-lg text-label-lg">300m radius</span>
+</div>
+</div>
+<div class="w-full h-24 rounded-lg overflow-hidden relative">
+<div class="absolute inset-0 bg-primary-container/5"></div>
+<img class="w-full h-full object-cover grayscale brightness-110" data-alt="A clean, minimalist satellite view of a suburban neighborhood map with a circular blue translucent geofence overlay. The map design is modern and high-contrast, featuring soft gray streets and muted green parks. A central glowing pin icon represents the home location, evoking a sense of digital security and precision navigation." data-location="Suburban Neighborhood" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBz62Y3ZPmfe8P6ZHmdrimBm-mzNJoAkqDls-frkeZSNbnYTinNxUWcJ7uTaCrTGxRdpoIcHvU3caAi5iO2w1fJbHkrq1BmrTFh-TyHY7Z0hwP1_vYAcxOrS9vFiSHpJkKBZn_vizIOuA-SYQSTlZ4jBqew0F7dGAbGkJeUGD-JSizp9Y49TvhyFous3Hz6-m9u6UOcSmUAahqaAytmLWcdr3mWKOhckPYpVZ0Id7il1uonKDejNilNwPfjXhcZvKjK9W6VSml18oI"/>
+</div>
+</div>
+<!-- School Zone -->
+<div class="glass-card rounded-xl p-md border border-outline-variant/30 shadow-sm flex flex-col justify-between h-full group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 rounded-lg bg-secondary-container/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-container"></div>
+</label>
+</div>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-xs">School</h3>
+<div class="flex items-center gap-2 mb-md">
+<span class="px-2 py-0.5 rounded-full bg-on-tertiary-container/10 text-on-tertiary-container font-label-sm text-label-sm flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse-soft"></span>
+                            Active
+                        </span>
+<span class="text-on-surface-variant font-label-lg text-label-lg">500m radius</span>
+</div>
+</div>
+<div class="w-full h-24 rounded-lg overflow-hidden relative">
+<div class="absolute inset-0 bg-primary-container/5"></div>
+<img class="w-full h-full object-cover grayscale brightness-110" data-alt="A professional digital map showing a large urban school campus with a soft blue circular highlight indicating a safety zone. The visual style is contemporary and clear, using a palette of light grays and subtle primary blue. The image represents modern geofencing technology for child safety in a busy city environment." data-location="City School District" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzJyVQtxmkjgOIVvcEczrVPAn5Qkv-59Pt8z4XI8xiixrEiyeqPW1fURPOZ415Uagdhz3pmqvz_25MyNVpPskLxbCbdbKkm1NmrK851SdIEBcw6ICmH94sXwUplc-WxlFV0l5MzORYF0Ra7yICtjNHhBx9vuNRW_e8zCmMeoPMNFeF2WWkn20jTLunTmrxV5j4uDjSAbPuyMCxRl5kKXLhq_HPI1iZ60eNADG6rlj9FSF4W7VPA56trM5PmmypID0_r9RvH9_HMqc"/>
+</div>
+</div>
+<!-- Grandparents Zone -->
+<div class="glass-card rounded-xl p-md border border-outline-variant/30 shadow-sm flex flex-col justify-between h-full group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 rounded-lg bg-surface-tint/10 flex items-center justify-center text-surface-tint">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">elderly</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-container"></div>
+</label>
+</div>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-xs">Grandparents</h3>
+<div class="flex items-center gap-2 mb-md">
+<span class="px-2 py-0.5 rounded-full bg-outline-variant/20 text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1">
+                            Inactive
+                        </span>
+<span class="text-on-surface-variant font-label-lg text-label-lg">200m radius</span>
+</div>
+</div>
+<div class="w-full h-24 rounded-lg overflow-hidden relative opacity-50 grayscale">
+<img class="w-full h-full object-cover brightness-110" data-alt="A detailed digital map of a peaceful residential street with a small, circular 200m geofence outline. The aesthetic is clean and high-end corporate, with soft lighting and a professional data-visualization style. Muted tones of gray and white emphasize the technical accuracy of the safety monitoring service." data-location="Quiet Residential Area" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAReWbpFbGG4p2QwvD80Ayh1-t0s1bHOxr4_vHyZPhmMyx6nAWq4r8DoKrGQ05YXkdcR7DndtK0Hxmt6FmQK3HBG7T_GlP3mfrnsfCET3nSo-KB71p4zHTUcEGrCYcWZS0Nc7a-HJcnTnYzmtQVT0gR_mcoh9azUOHQYTW0s55EjkEdgi1yOA4_xFsVDD-A54l2y2DmNRVeD4EliMTUtgbLI5NcNJuPdDfeKaO2JcmgTaXlvOqaEZ5gm1jZEde4oAnIpoCsSDlXqM8"/>
+</div>
+</div>
+</div>
+<!-- Notification Strategy Card -->
+<div class="bg-primary-container text-on-primary-container p-lg rounded-xl flex flex-col md:flex-row items-center gap-lg">
+<div class="flex-1 space-y-xs">
+<h4 class="font-headline-sm text-headline-sm">Notification Strategy</h4>
+<p class="font-body-md text-body-md opacity-80">You're currently receiving Push and SMS alerts for all active zones. "School" alerts are prioritized with emergency bypass.</p>
+</div>
+<button class="w-full md:w-auto bg-secondary-container text-on-secondary-container px-lg py-md rounded-full font-label-lg text-label-lg hover:brightness-110 transition-all active:scale-95">
+                Configure Alerts
+            </button>
+</div>
+</main>
+<!-- FAB -->
+<button class="fixed bottom-24 right-6 w-16 h-16 rounded-2xl bg-secondary-container text-on-secondary-container shadow-lg flex items-center justify-center hover:shadow-xl transition-all active:scale-90 duration-200 group z-50 overflow-hidden">
+<span class="material-symbols-outlined scale-125">add</span>
+<div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 right-0 h-20 flex justify-around items-center px-4 pb-safe bg-surface/80 dark:bg-inverse-surface/80 backdrop-blur-xl z-50 rounded-t-xl shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t border-outline-variant/30">
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out cursor-pointer">
+<span class="material-symbols-outlined">map</span>
+<span class="font-label-sm text-label-sm">Map</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all active:scale-90 duration-200 ease-out cursor-pointer">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-sm text-label-sm">History</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-5 py-1 active:scale-90 duration-200 ease-out cursor-pointer">
+<span class="material-symbols-outlined active-icon">location_on</span>
+<span class="font-label-sm text-label-sm">Zones</span>
+</div>
+</nav>
+<script>
+        // Micro-interaction for toggles and buttons
+        document.querySelectorAll('input[type="checkbox"]').forEach(toggle => {
+            toggle.addEventListener('change', (e) => {
+                const card = e.target.closest('.glass-card');
+                const statusLabel = card.querySelector('.font-label-sm');
+                const mapOverlay = card.querySelector('.w-full.h-24');
+                
+                if (e.target.checked) {
+                    statusLabel.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse-soft"></span> Active';
+                    statusLabel.className = "px-2 py-0.5 rounded-full bg-on-tertiary-container/10 text-on-tertiary-container font-label-sm text-label-sm flex items-center gap-1";
+                    mapOverlay.classList.remove('opacity-50', 'grayscale');
+                } else {
+                    statusLabel.innerHTML = 'Inactive';
+                    statusLabel.className = "px-2 py-0.5 rounded-full bg-outline-variant/20 text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1";
+                    mapOverlay.classList.add('opacity-50', 'grayscale');
+                }
+            });
+        });
+
+        // FAB ripple effect simulation
+        const fab = document.querySelector('.fixed.bottom-24');
+        fab.addEventListener('click', () => {
+            fab.classList.add('ring-4', 'ring-secondary-container/30');
+            setTimeout(() => fab.classList.remove('ring-4', 'ring-secondary-container/30'), 400);
+        });
+    </script>
+</body></html>
