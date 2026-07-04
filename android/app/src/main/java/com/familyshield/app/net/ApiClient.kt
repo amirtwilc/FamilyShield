@@ -53,7 +53,7 @@ interface ApiClient {
 /** Thin coroutine wrapper over the FamilyShield REST API (OkHttp + kotlinx.serialization). */
 class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : ApiClient {
 
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)

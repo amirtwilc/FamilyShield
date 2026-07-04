@@ -71,6 +71,13 @@ describe('children api', () => {
     expect(body.error.code).toBe('tier_limit_exceeded');
   });
 
+  it('treats a null avatar like an omitted avatar', async () => {
+    const p = await seedParent('null-avatar@test.io'); const tok = await signAccess(p.id);
+    const created = await createChild(auth(tok, { displayName: 'Mia', avatar: null }));
+    expect(created.status).toBe(201);
+    expect((await created.json()).avatar).toBe('fox');
+  });
+
   it('assigns unused avatars first and allows editing the avatar', async () => {
     const p = await seedParent('avatars@test.io'); const tok = await signAccess(p.id);
     const made = [];

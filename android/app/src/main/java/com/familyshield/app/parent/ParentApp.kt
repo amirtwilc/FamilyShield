@@ -273,7 +273,7 @@ private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
 
 /* --------------------------------- Settings --------------------------------- */
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones: () -> Unit) {
     var addOpen by remember { mutableStateOf(false) }
@@ -384,12 +384,17 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Text(stringResource(R.string.child_avatar), style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        maxItemsInEachRow = 6,
+                    ) {
                         childAvatarOptions.forEach { option ->
                             FilterChip(
                                 selected = avatar == option.key,
                                 onClick = { avatar = option.key },
-                                label = { Text(option.emoji) },
+                                label = { Text(option.emoji, fontSize = MaterialTheme.typography.titleMedium.fontSize) },
                             )
                         }
                     }

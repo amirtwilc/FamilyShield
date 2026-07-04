@@ -21,6 +21,12 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     private val deviceTokenToChild = mutableMapOf<String, String>()
     private var seq = 0
     private val now get() = "2026-06-20T00:00:0${seq % 10}Z"
+    private val avatarKeys = listOf(
+        "fox", "panda", "tiger", "unicorn", "bunny", "koala",
+        "monkey", "frog", "dog", "cat", "bear", "penguin",
+        "lion", "duck", "chick", "hamster", "mouse", "pig",
+        "cow", "horse", "wolf", "owl", "turtle", "dolphin",
+    )
 
     private fun parentEmail(token: String) = token.removePrefix("acc:")
 
@@ -61,8 +67,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         if (listChildren(token).size >= 5) throw ApiException(403, "Your free tier allows up to 5 monitored children")
         val id = "child-${++seq}"
         childName[id] = name
-        childAvatar[id] = avatar ?: listOf("fox", "panda", "tiger", "unicorn", "bunny")
-            .firstOrNull { it !in childAvatar.values } ?: "fox"
+        childAvatar[id] = avatar ?: avatarKeys.firstOrNull { it !in childAvatar.values } ?: avatarKeys.first()
         childParents.getOrPut(id) { linkedMapOf() }[parentEmail(token)] = name
         return Child(id, name, childAvatar[id] ?: "fox", emptyList())
     }
