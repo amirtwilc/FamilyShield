@@ -38,9 +38,9 @@ async function call<T>(path: string, opts: { method?: string; body?: unknown; to
 export type Tokens = { accessToken: string; refreshToken: string };
 export type Device = {
   id: string; platform: string; model: string | null; batteryLevel: number | null;
-  isCharging: boolean | null; lastSeenAt: string | null;
+  isCharging: boolean | null; lastSeenAt: string | null; revokedAt: string | null;
 };
-export type Child = { id: string; displayName: string; devices: Device[] };
+export type Child = { id: string; displayName: string; avatar: string; devices: Device[] };
 export type CurrentLocation = { lat: number; lng: number; recordedAt: string } | null;
 export type Alert = { id: string; type: string; payload: Record<string, unknown>; createdAt: string };
 export type Monitor = { parentId: string; email: string; displayName: string; role: string };
@@ -54,8 +54,12 @@ export const loginParent = (email: string, password: string) =>
   call<Tokens>('/api/auth/login', { method: 'POST', body: { email, password } });
 export const listChildren = (token: string) =>
   call<{ children: Child[] }>('/api/children', { token }).then((r) => r.children);
-export const createChild = (token: string, displayName: string) =>
-  call<Child>('/api/children', { method: 'POST', body: { displayName }, token });
+export const createChild = (token: string, displayName: string, avatar?: string) =>
+  call<Child>('/api/children', { method: 'POST', body: { displayName, ...(avatar ? { avatar } : {}) }, token });
+export const updateChild = (token: string, childId: string, displayName: string, avatar?: string) =>
+  call<Child>(`/api/children/${childId}`, { method: 'PATCH', body: { displayName, ...(avatar ? { avatar } : {}) }, token });
+export const deleteChild = (token: string, childId: string) =>
+  call<{ ok: boolean }>(`/api/children/${childId}`, { method: 'DELETE', token });
 export const pairingCode = (token: string, childId: string) =>
   call<{ code: string; expiresAt: string }>(`/api/children/${childId}/pairing-code`, { method: 'POST', token });
 export const currentLocation = (token: string, childId: string) =>

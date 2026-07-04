@@ -1,4 +1,4 @@
-package com.familyshield.app.ui
+﻿package com.familyshield.app.ui
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -40,7 +40,7 @@ import com.familyshield.app.ui.theme.Indigo
 import com.familyshield.app.ui.theme.Blue
 import com.familyshield.app.ui.theme.Ok
 
-// Soft avatar palette — picked deterministically from the name.
+// Soft avatar palette ג€” picked deterministically from the name.
 private val avatarColors = listOf(
     Color(0xFF2F73FF) to Color(0xFFE6EEFF),
     Color(0xFF12B886) to Color(0xFFDFF7EF),
@@ -50,19 +50,42 @@ private val avatarColors = listOf(
     Color(0xFF18AEE6) to Color(0xFFE0F5FE),
 )
 
-// Friendly animal "profile pictures" — picked deterministically from the name.
-private val avatarEmojis = listOf(
-    "🦊", "🐼", "🐯", "🦄", "🐰", "🐨", "🐵", "🐸", "🐶", "🐱", "🐻", "🐧",
+data class ChildAvatarOption(val key: String, val emoji: String, val label: String)
+
+val childAvatarOptions = listOf(
+    ChildAvatarOption("fox", "\uD83E\uDD8A", "Fox"),
+    ChildAvatarOption("panda", "\uD83D\uDC3C", "Panda"),
+    ChildAvatarOption("tiger", "\uD83D\uDC2F", "Tiger"),
+    ChildAvatarOption("unicorn", "\uD83E\uDD84", "Unicorn"),
+    ChildAvatarOption("bunny", "\uD83D\uDC30", "Bunny"),
+    ChildAvatarOption("koala", "\uD83D\uDC28", "Koala"),
+    ChildAvatarOption("monkey", "\uD83D\uDC35", "Monkey"),
+    ChildAvatarOption("frog", "\uD83D\uDC38", "Frog"),
+    ChildAvatarOption("dog", "\uD83D\uDC36", "Dog"),
+    ChildAvatarOption("cat", "\uD83D\uDC31", "Cat"),
+    ChildAvatarOption("bear", "\uD83D\uDC3B", "Bear"),
+    ChildAvatarOption("penguin", "\uD83D\uDC27", "Penguin"),
+    ChildAvatarOption("lion", "\uD83E\uDD81", "Lion"),
+    ChildAvatarOption("duck", "\uD83E\uDD86", "Duck"),
+    ChildAvatarOption("chick", "\uD83D\uDC24", "Chick"),
+    ChildAvatarOption("hamster", "\uD83D\uDC39", "Hamster"),
+    ChildAvatarOption("mouse", "\uD83D\uDC2D", "Mouse"),
+    ChildAvatarOption("pig", "\uD83D\uDC37", "Pig"),
+    ChildAvatarOption("cow", "\uD83D\uDC2E", "Cow"),
+    ChildAvatarOption("horse", "\uD83D\uDC34", "Horse"),
+    ChildAvatarOption("wolf", "\uD83D\uDC3A", "Wolf"),
+    ChildAvatarOption("owl", "\uD83E\uDD89", "Owl"),
+    ChildAvatarOption("turtle", "\uD83D\uDC22", "Turtle"),
+    ChildAvatarOption("dolphin", "\uD83D\uDC2C", "Dolphin"),
 )
 
 private fun pick(name: String, size: Int): Int = (name.hashCode() % size + size) % size
 
-/** Profile avatar: a soft gradient disc with a cute animal face, picked from the
- *  name, plus an optional live status badge in the corner. */
 @Composable
-fun Avatar(name: String, size: Dp = 44.dp, online: Boolean? = null) {
+fun Avatar(name: String, size: Dp = 44.dp, online: Boolean? = null, avatar: String? = null) {
     val (fg, bg) = avatarColors[pick(name, avatarColors.size)]
-    val emoji = avatarEmojis[pick(name + "x", avatarEmojis.size)]
+    val emoji = childAvatarOptions.firstOrNull { it.key == avatar }?.emoji
+        ?: childAvatarOptions[pick(name + "x", childAvatarOptions.size)].emoji
     Box(contentAlignment = Alignment.Center) {
         Box(
             Modifier.size(size).clip(CircleShape)
@@ -83,7 +106,7 @@ fun Avatar(name: String, size: Dp = 44.dp, online: Boolean? = null) {
     }
 }
 
-/** A gently "breathing" dot — used for live/online indicators. */
+/** A gently "breathing" dot ג€” used for live/online indicators. */
 @Composable
 fun PulsingDot(color: Color, size: Dp = 8.dp) {
     val transition = rememberInfiniteTransition(label = "pulse")
@@ -116,7 +139,7 @@ fun StatusChip(
     }
 }
 
-/** A slowly drifting version of the brand gradient — a subtle living background. */
+/** A slowly drifting version of the brand gradient ג€” a subtle living background. */
 @Composable
 fun rememberAnimatedBrandBrush(): Brush {
     val transition = rememberInfiniteTransition(label = "brand")
@@ -163,7 +186,7 @@ fun GradientButton(
     }
 }
 
-/** Decorative translucent blobs for hero headers — adds depth over a flat gradient. */
+/** Decorative translucent blobs for hero headers ג€” adds depth over a flat gradient. */
 @Composable
 fun BoxScope.HeroBlobs() {
     Box(Modifier.align(Alignment.TopEnd).offset(x = 40.dp, y = (-50).dp).size(180.dp)

@@ -10,7 +10,7 @@ export const point = customType<{ data: { lat: number; lng: number }; driverData
   toDriver(v) { return `SRID=4326;POINT(${v.lng} ${v.lat})`; },
 });
 
-export const alertType = pgEnum('alert_type', ['low_battery', 'offline']);
+export const alertType = pgEnum('alert_type', ['low_battery', 'offline', 'child_unpaired']);
 
 export const subscriptionTiers = pgTable('subscription_tiers', {
   code: text('code').primaryKey(),
@@ -39,6 +39,7 @@ export const children = pgTable('children', {
   id: uuid('id').primaryKey().defaultRandom(),
   parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
+  avatar: text('avatar').notNull().default('fox'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({ byParent: index('children_parent_idx').on(t.parentId) }));
 

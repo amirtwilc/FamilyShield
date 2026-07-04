@@ -12,6 +12,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     private val parents = mutableMapOf<String, String>()        // email -> password
     private val childName = linkedMapOf<String, String>()        // childId -> name
+    private val childAvatar = mutableMapOf<String, String>()     // childId -> avatar key
     private val childParents = mutableMapOf<String, MutableMap<String, String>>() // childId -> parent email -> display name
     private val deviceByChild = mutableMapOf<String, Device>()   // childId -> its device
     private val locations = mutableMapOf<String, CurrentLocation>()
@@ -52,21 +53,38 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         val parent = parentEmail(token)
         return childName.mapNotNull { (id, fallbackName) ->
             val name = childParents[id]?.get(parent) ?: return@mapNotNull null
-            Child(id, name, deviceByChild[id]?.let { listOf(it) } ?: emptyList())
+            Child(id, name, childAvatar[id] ?: "fox", deviceByChild[id]?.let { listOf(it) } ?: emptyList())
         }
     }
 
-    override suspend fun createChild(token: String, name: String): Child {
+    override suspend fun createChild(token: String, name: String, avatar: String?): Child {
+        if (listChildren(token).size >= 5) throw ApiException(403, "Your free tier allows up to 5 monitored children")
         val id = "child-${++seq}"
         childName[id] = name
+        childAvatar[id] = avatar ?: listOf("fox", "panda", "tiger", "unicorn", "bunny")
+            .firstOrNull { it !in childAvatar.values } ?: "fox"
         childParents.getOrPut(id) { linkedMapOf() }[parentEmail(token)] = name
-        return Child(id, name, emptyList())
+        return Child(id, name, childAvatar[id] ?: "fox", emptyList())
     }
 
-    override suspend fun renameChild(token: String, childId: String, name: String): Child {
+    override suspend fun updateChild(token: String, childId: String, name: String, avatar: String?): Child {
         childParents.getOrPut(childId) { linkedMapOf() }[parentEmail(token)] = name
         childName[childId] = name
-        return Child(childId, name, deviceByChild[childId]?.let { listOf(it) } ?: emptyList())
+        avatar?.let { childAvatar[childId] = it }
+        return Child(childId, name, childAvatar[childId] ?: "fox", deviceByChild[childId]?.let { listOf(it) } ?: emptyList())
+    }
+
+    override suspend fun deleteChild(token: String, childId: String) {
+        childParents[childId]?.remove(parentEmail(token))
+        if (childParents[childId].isNullOrEmpty()) {
+            childParents.remove(childId)
+            childName.remove(childId)
+            childAvatar.remove(childId)
+            deviceByChild.remove(childId)
+            locations.remove(childId)
+            alertsByChild.remove(childId)
+            deviceTokenToChild.entries.removeIf { it.value == childId }
+        }
     }
 
     override suspend fun pairingCode(token: String, childId: String): PairingCode {
@@ -195,7 +213,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         deviceTokenToChild[deviceToken] = childId
         deviceByChild[childId] = Device(
             id = "device-$seq", platform = platform, model = model,
-            batteryLevel = null, isCharging = null, lastSeenAt = now,
+            batteryLevel = null, isCharging = null, lastSeenAt = now, revokedAt = null,
         )
         return PairResult(deviceToken, childId)
     }
@@ -212,6 +230,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         childParents.getOrPut(currentChildId) { linkedMapOf() }[parent] = sourceLinks.getValue(parent)
         childParents.remove(sourceChildId)
         childName.remove(sourceChildId)
+        childAvatar.remove(sourceChildId)
         return monitoring(token)
     }
 
@@ -227,13 +246,15 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val parent = parentId.removePrefix("parent:")
         val links = childParents[childId] ?: throw ApiException(404, "Monitor not found")
-        if (links.remove(parent) == null) throw ApiException(404, "Monitor not found")
-        monitorMessagesByChild[childId]?.remove(parent)
-        if (links.isEmpty()) {
+        if (!links.containsKey(parent)) throw ApiException(404, "Monitor not found")
+        if (links.size <= 1) {
             deviceTokenToChild.remove(token)
-            deviceByChild.remove(childId)
+            deviceByChild[childId] = deviceByChild[childId]?.copy(revokedAt = now) ?: error("no device")
+            alertsByChild.getOrPut(childId) { mutableListOf() }.add(Alert("alert-${++seq}", "child_unpaired", now))
             return MonitorUnpairResult(childId, emptyList(), unpaired = true)
         }
+        links.remove(parent)
+        monitorMessagesByChild[childId]?.remove(parent)
         return MonitorUnpairResult(childId, monitoring(token).monitors, unpaired = false)
     }
 

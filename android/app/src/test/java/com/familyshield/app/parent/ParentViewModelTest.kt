@@ -252,6 +252,57 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `free tier child limit surfaces an error before creating sixth child`() = runTest(mainRule.dispatcher) {
+        val vm = viewModel(FakeApiClient())
+        vm.authenticate("limit-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        repeat(5) {
+            vm.addChild("Kid $it")
+            advanceUntilIdle()
+        }
+
+        vm.addChild("Kid 6")
+        advanceUntilIdle()
+
+        assertEquals(5, vm.children.size)
+        assertEquals("Your free tier allows up to 5 monitored children.", vm.error)
+    }
+
+    @Test
+    fun `new children receive unused avatars first and avatar can be edited`() = runTest(mainRule.dispatcher) {
+        val vm = viewModel(FakeApiClient())
+        vm.authenticate("avatars-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+
+        vm.addChild("Mia"); advanceUntilIdle()
+        vm.addChild("Noah"); advanceUntilIdle()
+
+        assertEquals(listOf("fox", "panda"), vm.children.map { it.avatar })
+
+        vm.select(vm.children.first().id)
+        advanceUntilIdle()
+        vm.updateChild("Mia", "owl")
+        advanceUntilIdle()
+
+        assertEquals("owl", vm.children.first { it.displayName == "Mia" }.avatar)
+    }
+
+    @Test
+    fun `removing a child updates the parent list`() = runTest(mainRule.dispatcher) {
+        val vm = viewModel(FakeApiClient())
+        vm.authenticate("delete-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia"); advanceUntilIdle()
+        vm.addChild("Noah"); advanceUntilIdle()
+        val removedId = vm.children.first { it.displayName == "Mia" }.id
+
+        vm.removeChild(removedId)
+        advanceUntilIdle()
+
+        assertEquals(listOf("Noah"), vm.children.map { it.displayName })
+    }
+
+    @Test
     fun `add and remove a safe zone`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
         vm.authenticate("parent@x.com", "pw123456", register = true)
@@ -308,5 +359,33 @@ class ParentViewModelTest {
             assertEquals(1, child.devices.size)
             assertNotNull("device should be online (lastSeenAt set)", child.devices[0].lastSeenAt)
             assertEquals(10, child.devices[0].batteryLevel)
+        }
+
+    @Test
+    fun `kid unpair keeps child visible with revoked device and last location`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val vm = viewModel(api)
+
+            vm.authenticate("parent-unpair@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+            vm.addChild("Mia")
+            advanceUntilIdle()
+            val childId = vm.selectedId!!
+            val code = api.pairingCode(vm.token!!, childId).code
+            val paired = api.pair(code, "android", "Pixel")
+            api.sendLocation(paired.deviceToken, lat = 32.1, lng = 34.8, battery = 71)
+            val parentId = api.monitoring(paired.deviceToken).monitors.single().parentId
+
+            api.removeMonitor(paired.deviceToken, parentId)
+            vm.refreshDetail()
+            advanceUntilIdle()
+
+            val child = vm.children.first { it.id == childId }
+            assertEquals(1, child.devices.size)
+            assertNotNull("revokedAt marks a deliberate kid-side unpair", child.devices[0].revokedAt)
+            assertEquals(32.1, vm.location!!.lat, 1e-4)
+            assertEquals(34.8, vm.location!!.lng, 1e-4)
+            assertNull("refresh should not surface an error after kid unpairs", vm.error)
         }
 }

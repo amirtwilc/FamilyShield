@@ -103,6 +103,23 @@ class KidViewModelTest {
     }
 
     @Test
+    fun `removed child clears stale kid pairing on refresh`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val (parentToken, childId, code) = seedCode(api)
+        val vm = viewModel(api)
+        vm.pair(code, "android")
+        advanceUntilIdle()
+        assertNotNull(vm.deviceToken)
+
+        api.deleteChild(parentToken, childId)
+        vm.refreshMonitoring()
+        advanceUntilIdle()
+
+        assertNull(vm.deviceToken)
+        assertEquals("This device is no longer paired.", vm.message)
+    }
+
+    @Test
     fun `chat can target a specific monitoring parent`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         val (_, childId, code) = seedCode(api)
@@ -128,52 +145,12 @@ class KidViewModelTest {
     }
 
     @Test
-    fun `sending a GPS location reaches the backend`() = runTest(mainRule.dispatcher) {
-        val api = FakeApiClient()
-        val (parentToken, childId, code) = seedCode(api)
-        val vm = viewModel(api)
-        vm.pair(code, "android")
-        advanceUntilIdle()
-
-        vm.setPosition(32.1000, 34.9000)
-        vm.battery = 55
-        vm.sendLocation()
-        advanceUntilIdle()
-
-        assertEquals("Location sent.", vm.message)
-        val stored = api.currentLocation(parentToken, childId)
-        assertNotNull("the backend should now have the location", stored)
-        assertEquals(32.1000, stored!!.lat, 1e-4)
-        assertEquals(34.9000, stored.lng, 1e-4)
-    }
-
-    @Test
-    fun `sending status updates the device battery and charging on the backend`() =
-        runTest(mainRule.dispatcher) {
-            val api = FakeApiClient()
-            val (parentToken, childId, code) = seedCode(api)
-            val vm = viewModel(api)
-            vm.pair(code, "android")
-            advanceUntilIdle()
-
-            vm.battery = 42
-            vm.charging = true
-            vm.sendStatus()
-            advanceUntilIdle()
-
-            assertEquals("Status sent.", vm.message)
-            val device = api.listChildren(parentToken).first { it.id == childId }.devices.first()
-            assertEquals(42, device.batteryLevel)
-            assertEquals(true, device.isCharging)
-        }
-
-    @Test
-    fun `setPosition updates the reported coordinates`() = runTest(mainRule.dispatcher) {
+    fun `kid telemetry starts empty until Android provides real readings`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
 
-        vm.setPosition(40.0, -73.0)
-
-        assertEquals(40.0, vm.lat, 1e-9)
-        assertEquals(-73.0, vm.lng, 1e-9)
+        assertNull(vm.lat)
+        assertNull(vm.lng)
+        assertNull(vm.battery)
+        assertNull(vm.charging)
     }
 }

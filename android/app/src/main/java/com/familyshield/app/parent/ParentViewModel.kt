@@ -200,12 +200,29 @@ class ParentViewModel(
     fun updateBiometricLock(v: Boolean) { store.biometricLock = v; biometricLock = v }
     fun updateAlertsEnabled(v: Boolean) { store.alertsEnabled = v; alertsEnabled = v }
 
-    fun renameChild(name: String) {
+    fun updateChild(name: String, avatar: String? = null) {
         val id = selectedId ?: return
         if (token == null || name.isBlank()) return
         viewModelScope.launch(dispatcher) {
-            try { authed { api.renameChild(it, id, name.trim()) }; refreshChildren() }
+            try { authed { api.updateChild(it, id, name.trim(), avatar) }; refreshChildren() }
             catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun renameChild(name: String) = updateChild(name)
+
+    fun removeChild(childId: String) {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                authed { api.deleteChild(it, childId) }
+                if (selectedId == childId) {
+                    selectedId = children.firstOrNull { it.id != childId }?.id
+                    location = null
+                    alerts = emptyList()
+                }
+                refreshChildren()
+            } catch (e: Exception) { error = e.message }
         }
     }
 
@@ -270,6 +287,11 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 children = authed { api.listChildren(it) }
+                if (selectedId != null && children.none { c -> c.id == selectedId }) {
+                    selectedId = children.firstOrNull()?.id
+                    location = null
+                    alerts = emptyList()
+                }
                 if (selectedId == null) children.firstOrNull()?.let { select(it.id) }
             } catch (e: Exception) { error = e.message }
             finally { loadingChildren = false; firstLoad = false }
@@ -278,6 +300,10 @@ class ParentViewModel(
 
     fun addChild(name: String) {
         if (token == null) return
+        if (children.size >= 5) {
+            error = "Your free tier allows up to 5 monitored children."
+            return
+        }
         viewModelScope.launch(dispatcher) {
             try {
                 val c = authed { api.createChild(it, name) }
@@ -404,7 +430,14 @@ class ParentViewModel(
                 location = authed { api.currentLocation(it, id) }
                 alerts = authed { api.alerts(it, id) }
                 children = authed { api.listChildren(it) }
-            } catch (e: Exception) { error = e.message }
+            } catch (e: Exception) {
+                if (e is ApiException && e.status == 404) {
+                    error = "This child is no longer linked to your account."
+                    refreshChildren()
+                } else {
+                    error = e.message
+                }
+            }
             finally { loadingDetail = false }
         }
     }

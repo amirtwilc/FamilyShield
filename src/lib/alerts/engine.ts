@@ -42,6 +42,18 @@ export async function fireLowBatteryIfNeeded(device: Device): Promise<void> {
   }
 }
 
+export async function fireChildUnpaired(device: Device): Promise<void> {
+  const [a] = await db.insert(alerts).values({
+    childId: device.childId,
+    deviceId: device.id,
+    type: 'child_unpaired',
+    payload: {},
+  }).returning();
+  if (await sendToParents(device.childId, 'Child device unpaired', 'The child deliberately unpaired this device', { type: 'child_unpaired' })) {
+    await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
+  }
+}
+
 export async function fireOfflineSweep(): Promise<{ fired: number }> {
   const thresholdMin = Number(process.env.OFFLINE_THRESHOLD_MIN ?? 30);
   const cutoff = new Date(Date.now() - thresholdMin * 60_000);

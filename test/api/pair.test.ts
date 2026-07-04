@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedDevice, seedParent, seedChild } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks, children, pairingCodes } from '@/db/schema';
+import { alerts, childParentLinks, children, pairingCodes } from '@/db/schema';
 import { POST as pair } from '@/app/api/pair/route';
+import { GET as listChildren } from '@/app/api/children/route';
 import { GET as monitoring } from '@/app/api/device/monitoring/route';
 import { DELETE as removeMonitor } from '@/app/api/device/monitors/[parentId]/route';
 import { GET as currentLocation } from '@/app/api/children/[id]/location/current/route';
@@ -101,5 +102,15 @@ describe('pairing', () => {
     expect(removeP1.status).toBe(200);
     expect((await removeP1.json()).unpaired).toBe(true);
     expect((await monitoring(get(deviceToken))).status).toBe(401);
+
+    const p1Token = await signAccess(p1.id);
+    const childrenAfterUnpair = await listChildren(get(p1Token));
+    expect(childrenAfterUnpair.status).toBe(200);
+    const visible = await childrenAfterUnpair.json();
+    expect(visible.children).toHaveLength(1);
+    expect(visible.children[0].id).toBe(c.id);
+    expect(visible.children[0].devices[0].revokedAt).toBeTruthy();
+    const unpairAlerts = await db.select().from(alerts);
+    expect(unpairAlerts.some((a) => a.childId === c.id && a.type === 'child_unpaired')).toBe(true);
   });
 });

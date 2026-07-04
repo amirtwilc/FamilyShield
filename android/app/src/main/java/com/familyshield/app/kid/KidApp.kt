@@ -62,6 +62,7 @@ import com.familyshield.app.ui.theme.NavyContainer
 import com.familyshield.app.ui.theme.Orange
 import com.familyshield.app.ui.theme.SkyBright
 import com.familyshield.app.ui.theme.SkyTint
+import kotlinx.coroutines.delay
 
 @Composable
 fun KidApp(
@@ -84,7 +85,7 @@ fun KidApp(
     } else {
         var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
         if (chatMonitor != null) KidChatScreen(vm, monitor = chatMonitor!!, onBack = { chatMonitor = null })
-        else DeviceSim(vm, onBack, onChat = { chatMonitor = it })
+        else DeviceDashboard(vm, onBack, onChat = { chatMonitor = it })
     }
 }
 
@@ -258,17 +259,24 @@ private fun PingDot(color: Color) {
     }
 }
 
-/* -------------------------------- Device sim -------------------------------- */
+/* ----------------------------- Monitored device ----------------------------- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeviceSim(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) -> Unit) {
+private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) -> Unit) {
+    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var addParentOpen by remember { mutableStateOf(false) }
     var pendingUnpair by remember { mutableStateOf<Monitor?>(null) }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
-    LaunchedEffect(Unit) { vm.refreshMonitoring() }
+    LaunchedEffect(Unit) {
+        vm.refreshMonitoring()
+        while (true) {
+            vm.refreshTelemetry(context)
+            delay(30_000)
+        }
+    }
 
     if (addParentOpen) AddParentDialog(vm, onDismiss = { addParentOpen = false })
     pendingUnpair?.let { monitor ->
@@ -302,6 +310,8 @@ private fun DeviceSim(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) ->
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).widthIn(max = 600.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            val currentLat = vm.lat
+            val currentLng = vm.lng
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -339,16 +349,38 @@ private fun DeviceSim(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) ->
                 }
             }
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
-                Box {
-                    OsmMap(vm.lat, vm.lng, Modifier.fillMaxWidth().height(280.dp).clip(MaterialTheme.shapes.large),
-                        description = stringResource(R.string.cd_kid_map)) { la, ln -> vm.setPosition(la, ln) }
-                    Surface(color = Color.White.copy(alpha = 0.92f), shape = CircleShape, shadowElevation = 3.dp,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                            Text(stringResource(R.string.kid_tap_to_move, "%.4f".format(vm.lat), "%.4f".format(vm.lng)),
-                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (currentLat != null && currentLng != null) {
+                    Box {
+                        OsmMap(currentLat, currentLng, Modifier.fillMaxWidth().height(280.dp).clip(MaterialTheme.shapes.large),
+                            description = stringResource(R.string.cd_kid_map))
+                        Surface(color = Color.White.copy(alpha = 0.92f), shape = CircleShape, shadowElevation = 3.dp,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+                            Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Text(stringResource(R.string.kid_current_location, "%.4f".format(currentLat), "%.4f".format(currentLng)),
+                                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        Modifier.fillMaxWidth().height(220.dp).clip(MaterialTheme.shapes.large)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(24.dp),
+                        ) {
+                            Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(36.dp))
+                            Text(
+                                stringResource(R.string.kid_location_waiting),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
                 }
@@ -357,22 +389,16 @@ private fun DeviceSim(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) ->
                 Column(Modifier.padding(20.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(stringResource(R.string.telemetry), style = MaterialTheme.typography.titleMedium)
                     BatteryGauge(vm.battery, vm.charging)
-                    Slider(value = vm.battery.toFloat(), onValueChange = { vm.battery = it.toInt() }, valueRange = 0f..100f)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Bolt, null, tint = if (vm.charging) Orange else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.charging), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Switch(checked = vm.charging, onCheckedChange = { vm.charging = it })
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { vm.sendLocation() }, modifier = Modifier.weight(1f).height(52.dp),
-                            shape = MaterialTheme.shapes.medium, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
-                            Text(stringResource(R.string.send_location))
-                        }
-                        FilledTonalButton(onClick = { vm.sendStatus() }, modifier = Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.status))
-                        }
-                    }
+                    TelemetryRow(
+                        Icons.Filled.LocationOn,
+                        stringResource(R.string.location_update),
+                        if (currentLat != null && currentLng != null) {
+                            stringResource(R.string.kid_current_location, "%.4f".format(currentLat), "%.4f".format(currentLng))
+                        } else {
+                            stringResource(R.string.kid_location_pending)
+                        },
+                    )
+                    TelemetryRow(Icons.Filled.Bolt, stringResource(R.string.status), stringResource(R.string.kid_auto_updates))
                 }
             }
         }
@@ -380,7 +406,15 @@ private fun DeviceSim(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) ->
 }
 
 @Composable
-private fun BatteryGauge(level: Int, charging: Boolean) {
+private fun BatteryGauge(level: Int?, charging: Boolean?) {
+    if (level == null) {
+        Text(
+            stringResource(R.string.kid_battery_pending),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
     val color = when {
         level <= 15 -> MaterialTheme.colorScheme.error
         level <= 35 -> Orange
@@ -388,9 +422,20 @@ private fun BatteryGauge(level: Int, charging: Boolean) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("$level%", style = MaterialTheme.typography.headlineSmall, color = color, fontWeight = FontWeight.Bold)
-        if (charging) Icon(Icons.Filled.Bolt, stringResource(R.string.charging), tint = Orange, modifier = Modifier.size(20.dp))
+        if (charging == true) Icon(Icons.Filled.Bolt, stringResource(R.string.charging), tint = Orange, modifier = Modifier.size(20.dp))
         Box(Modifier.weight(1f).height(14.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             Box(Modifier.fillMaxWidth(level / 100f).fillMaxHeight().clip(CircleShape).background(color))
+        }
+    }
+}
+
+@Composable
+private fun TelemetryRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

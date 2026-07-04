@@ -88,6 +88,7 @@
     <!-- Alerts -->
     <string name="alert_low_battery">סוללה חלשה</string>
     <string name="alert_offline">לא מקוון</string>
+    <string name="alert_child_unpaired">הילד ניתק את המכשיר</string>
     <string name="alert_generic">התראה</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">הסוללה עומדת להתרוקן</string>
@@ -98,6 +99,7 @@
     <string name="map_empty_body">חברו מכשיר ושלחו מיקום כדי לעקוב כאן.</string>
     <string name="map_status_safe">%1$s נמצא באזור בטוח</string>
     <string name="map_status_moving">%1$s בתנועה</string>
+    <string name="map_status_unpaired">%1$s ניתק/ה את המכשיר</string>
     <string name="chip_safe_zone">אזור בטוח</string>
 
     <!-- History -->
@@ -148,9 +150,22 @@
     <string name="alerts_off">התראות כבויות</string>
     <string name="child_active">● פעיל%1$s</string>
     <string name="child_offline">לא מקוון</string>
+    <string name="child_unpaired">נותק על ידי הילד</string>
+    <string name="child_unpaired_notice">%1$s ניתק/ה את המכשיר בכוונה.</string>
+    <string name="child_unpaired_last_location">מציגים את המיקום הידוע האחרון לפני הניתוק.</string>
+    <string name="last_kid_activity">פעילות אחרונה ממכשיר הילד: %1$s</string>
+    <string name="generate_pairing_code">יצירת קוד צימוד</string>
+    <string name="pairing_code_label">קוד צימוד</string>
+    <string name="pairing_code_help">הזינו את הקוד הזה במכשיר הילד.</string>
+    <string name="copy_pairing_code">העתקת קוד הצימוד</string>
     <string name="cd_edit_child">עריכת %1$s</string>
     <string name="add_child_title">הוספת ילד</string>
     <string name="edit_profile_title">עריכת פרופיל</string>
+    <string name="child_limit_reached">המסלול החינמי מאפשר עד 5 ילדים במעקב.</string>
+    <string name="child_avatar">סמל פרופיל</string>
+    <string name="delete_child">הסרת ילד</string>
+    <string name="delete_child_confirm_title">להסיר את הילד?</string>
+    <string name="delete_child_confirm_body">להסיר את %1$s מרשימת המשפחה? אם זה ההורה המקושר האחרון, מכשיר הילד ינותק.</string>
 
     <!-- App usage / screen time -->
     <string name="appusage_title">שימוש באפליקציות</string>
@@ -188,10 +203,13 @@
     <string name="kid_version">מערכת FamilyShield Guardian v4.2.0</string>
     <string name="kid_my_device">המכשיר שלי</string>
     <string name="kid_unpair">ביטול צימוד</string>
-    <string name="cd_kid_map">מפה — הקישו כדי לקבוע את מיקום המכשיר</string>
-    <string name="kid_tap_to_move">הקישו להזזה · %1$s, %2$s</string>
+    <string name="cd_kid_map">מפה המציגה את המיקום הנוכחי של המכשיר</string>
+    <string name="kid_current_location">%1$s, %2$s</string>
+    <string name="kid_location_waiting">ממתינים לאיכון GPS של הטלפון. ודאו שהרשאת המיקום פעילה.</string>
+    <string name="kid_location_pending">ממתינים ל-GPS</string>
+    <string name="kid_battery_pending">קוראים את סוללת הטלפון...</string>
+    <string name="kid_auto_updates">העלאה אוטומטית כל 5 דקות</string>
     <string name="telemetry">טלמטריה</string>
     <string name="charging">בטעינה</string>
-    <string name="send_location">שליחת מיקום</string>
     <string name="status">מצב</string>
 </resources>

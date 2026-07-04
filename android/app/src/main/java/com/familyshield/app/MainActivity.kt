@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
 private fun Root() {
     val nav = rememberNavController()
     // The app's home is the parent experience (login → dashboard). The kid-device
-    // simulator is reachable from the login screen for testing/pairing.
+    // setup is reachable from the login screen for pairing this phone.
     NavHost(navController = nav, startDestination = "parent") {
         composable("parent") { ParentApp(onKidDevice = { nav.navigate("kid") }) }
         composable("kid") { KidApp(onBack = { nav.popBackStack() }) }

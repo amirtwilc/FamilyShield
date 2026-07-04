@@ -5,7 +5,7 @@ The native Android client for FamilyShield. One app with a role chooser:
 - **Parent dashboard** — register/login, add children, generate pairing codes, and
   watch a child's live location on an OpenStreetMap map with online/battery status
   and alerts.
-- **Kid device simulator** — pair with a 6-digit code, then report location and
+- **Kid device client** — pair with a 6-digit code, then report real location and
   battery/charging status to the backend.
 
 It talks to the [FamilyShield backend](../README.md) REST API.
@@ -70,13 +70,13 @@ app/src/main/java/com/familyshield/app/
   MainActivity.kt          # NavHost + role chooser (home)
   net/                     # ApiClient, Models, TokenStore
   parent/                  # ParentViewModel + ParentApp (login → dashboard → child detail)
-  kid/                     # KidViewModel + KidApp (pair → device simulator)
+  kid/                     # KidViewModel + KidApp (pair → monitored device)
   ui/                      # OsmMap (osmdroid in Compose), TapOverlay, theme/
 ```
 
 ## Verified flow
 
-Parent registers → adds a child → generates a pairing code; the kid simulator pairs
-with that code and sends a low battery + location; the parent refreshes and sees the
+Parent registers → adds a child → generates a pairing code; the kid device pairs
+with that code and sends battery + location; the parent refreshes and sees the
 device online, the location on the map, and a low-battery alert. Verified on a
 Pixel Fold (API 35) emulator against the running backend.

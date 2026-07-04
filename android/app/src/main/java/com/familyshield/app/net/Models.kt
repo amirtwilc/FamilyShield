@@ -14,12 +14,14 @@ data class Device(
     val batteryLevel: Int? = null,
     val isCharging: Boolean? = null,
     val lastSeenAt: String? = null,
+    val revokedAt: String? = null,
 )
 
 @Serializable
 data class Child(
     val id: String,
     val displayName: String,
+    val avatar: String = "fox",
     val devices: List<Device> = emptyList(),
 )
 
@@ -195,7 +197,7 @@ data class RefreshBody(val refreshToken: String)
 data class GoogleLoginBody(val idToken: String)
 
 @Serializable
-data class CreateChildBody(val displayName: String)
+data class CreateChildBody(val displayName: String, val avatar: String? = null)
 
 @Serializable
 data class PairBody(val code: String, val platform: String, val model: String? = null)

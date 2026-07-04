@@ -6,6 +6,7 @@ import { parseBody } from '@/lib/validate';
 import { ok, err } from '@/lib/http';
 import { createChildSchema } from '@/lib/schemas/children';
 import { enforceCanAddChild } from '@/lib/retention';
+import { nextAvailableAvatar } from '@/lib/avatars';
 
 export const runtime = 'nodejs';
 
@@ -16,8 +17,12 @@ export async function POST(req: Request) {
   if (!allowed.ok) {
     return err('tier_limit_exceeded', `Your ${allowed.tierCode} tier allows up to ${allowed.maxChildren} monitored children`, 403);
   }
+  const existing = await db.select({ avatar: children.avatar }).from(childParentLinks)
+    .innerJoin(children, eq(childParentLinks.childId, children.id))
+    .where(eq(childParentLinks.parentId, a.parentId));
+  const avatar = p.data.avatar ?? nextAvailableAvatar(existing.map((c) => c.avatar), p.data.displayName);
   const [row] = await db.insert(children)
-    .values({ parentId: a.parentId, displayName: p.data.displayName }).returning();
+    .values({ parentId: a.parentId, displayName: p.data.displayName, avatar }).returning();
   await db.insert(childParentLinks).values({
     childId: row.id, parentId: a.parentId, displayName: p.data.displayName, role: 'owner',
   });
@@ -30,6 +35,7 @@ export async function GET(req: Request) {
     id: children.id,
     parentId: children.parentId,
     displayName: childParentLinks.displayName,
+    avatar: children.avatar,
     createdAt: children.createdAt,
   }).from(childParentLinks)
     .innerJoin(children, eq(childParentLinks.childId, children.id))
@@ -42,6 +48,7 @@ export async function GET(req: Request) {
   const devs = await db.select({
     id: devices.id, childId: devices.childId, platform: devices.platform, model: devices.model,
     batteryLevel: devices.batteryLevel, isCharging: devices.isCharging, lastSeenAt: devices.lastSeenAt,
+    revokedAt: devices.revokedAt,
   }).from(devices).where(inArray(devices.childId, ids));
 
   const byChild = new Map<string, typeof devs>();

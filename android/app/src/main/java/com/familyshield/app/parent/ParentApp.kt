@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TripOrigin
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -56,9 +58,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +76,8 @@ import com.familyshield.app.R
 import com.familyshield.app.Locales
 import com.familyshield.app.net.Alert
 import com.familyshield.app.net.Child
+import com.familyshield.app.net.CurrentLocation
+import com.familyshield.app.net.Device
 import com.familyshield.app.net.HistoryPoint
 import com.familyshield.app.net.Zone
 import com.familyshield.app.ui.Avatar
@@ -81,6 +87,7 @@ import com.familyshield.app.ui.OsmFamilyMap
 import com.familyshield.app.ui.OsmMap
 import com.familyshield.app.ui.OsmMapZones
 import com.familyshield.app.ui.PulsingDot
+import com.familyshield.app.ui.childAvatarOptions
 import com.familyshield.app.ui.FullScreenFamilyMap
 import com.familyshield.app.ui.FullScreenMap
 import com.familyshield.app.ui.theme.BrandGradient
@@ -256,7 +263,7 @@ private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (child != null) Avatar(child.displayName, 40.dp, online = child.devices.firstOrNull()?.let { it.lastSeenAt != null })
+            if (child != null) Avatar(child.displayName, 40.dp, online = child.primaryDevice()?.isConnected() == true, avatar = child.avatar)
             else Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary)
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
@@ -271,7 +278,9 @@ private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
 private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones: () -> Unit) {
     var addOpen by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Child?>(null) }
-    val activeCount = vm.children.count { it.devices.firstOrNull()?.lastSeenAt != null }
+    var pendingDelete by remember { mutableStateOf<Child?>(null) }
+    val activeCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
+    val childLimitMsg = stringResource(R.string.child_limit_reached)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -302,9 +311,23 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.Bold)
                     }
                 }
-                vm.children.forEach { c -> ChildSettingRow(c, c.id == vm.selectedId, onSelect = { vm.select(c.id) }, onEdit = { rename = c }) }
+                vm.children.forEach { c ->
+                    ChildSettingRow(
+                        child = c,
+                        active = c.id == vm.selectedId,
+                        pairingCode = vm.pairingCode.takeIf { c.id == vm.selectedId },
+                        onSelect = { vm.select(c.id) },
+                        onEdit = { rename = c },
+                        onGenerateCode = {
+                            vm.select(c.id)
+                            vm.generateCode()
+                        },
+                    )
+                }
 
-                Button(onClick = { addOpen = true }, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().height(54.dp),
+                Button(onClick = {
+                    if (vm.children.size >= 5) vm.showError(childLimitMsg) else addOpen = true
+                }, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().height(54.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) {
                     Icon(Icons.Filled.PersonAdd, null, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.add_child), fontWeight = FontWeight.SemiBold)
                 }
@@ -343,33 +366,133 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
         var name by remember { mutableStateOf("") }
         AlertDialog(onDismissRequest = { addOpen = false }, title = { Text(stringResource(R.string.add_child_title)) },
             text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.addChild(name.trim()); addOpen = false }) { Text(stringResource(R.string.action_add)) } },
+            confirmButton = {
+                TextButton(enabled = name.isNotBlank(), onClick = {
+                    if (vm.children.size >= 5) vm.showError(childLimitMsg) else {
+                        vm.addChild(name.trim())
+                        addOpen = false
+                    }
+                }) { Text(stringResource(R.string.action_add)) }
+            },
             dismissButton = { TextButton(onClick = { addOpen = false }) { Text(stringResource(R.string.action_cancel)) } })
     }
     rename?.let { c ->
         var name by remember { mutableStateOf(c.displayName) }
+        var avatar by remember { mutableStateOf(c.avatar) }
         AlertDialog(onDismissRequest = { rename = null }, title = { Text(stringResource(R.string.edit_profile_title)) },
-            text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.select(c.id); vm.renameChild(name.trim()); rename = null }) { Text(stringResource(R.string.action_save)) } },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.child_avatar), style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        childAvatarOptions.forEach { option ->
+                            FilterChip(
+                                selected = avatar == option.key,
+                                onClick = { avatar = option.key },
+                                label = { Text(option.emoji) },
+                            )
+                        }
+                    }
+                    TextButton(onClick = { pendingDelete = c; rename = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.delete_child))
+                    }
+                }
+            },
+            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.select(c.id); vm.updateChild(name.trim(), avatar); rename = null }) { Text(stringResource(R.string.action_save)) } },
             dismissButton = { TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel)) } })
+    }
+    pendingDelete?.let { c ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.delete_child_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_child_confirm_body, c.displayName)) },
+            confirmButton = {
+                TextButton(onClick = { vm.removeChild(c.id); pendingDelete = null }) {
+                    Text(stringResource(R.string.delete_child), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
 }
 
 @Composable
-private fun ChildSettingRow(child: Child, active: Boolean, onSelect: () -> Unit, onEdit: () -> Unit) {
-    val device = child.devices.firstOrNull()
-    val online = device?.lastSeenAt != null
+private fun ChildSettingRow(
+    child: Child,
+    active: Boolean,
+    pairingCode: String?,
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onGenerateCode: () -> Unit,
+) {
+    val device = child.primaryDevice()
+    val online = device?.isConnected() == true
+    val unpaired = device?.isUnpaired() == true
     Surface(onClick = onSelect, shape = MaterialTheme.shapes.large,
         color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(child.displayName, 44.dp, online = online)
-            Column(Modifier.weight(1f)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Avatar(child.displayName, 44.dp, online = online, avatar = child.avatar)
+                Column(Modifier.weight(1f)) {
                 Text(child.displayName, style = MaterialTheme.typography.titleMedium)
-                Text(if (online) stringResource(R.string.child_active, device?.batteryLevel?.let { " · $it%" } ?: "") else stringResource(R.string.child_offline),
-                    style = MaterialTheme.typography.bodySmall, color = if (online) Green else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    when {
+                        unpaired -> stringResource(R.string.child_unpaired)
+                        online -> stringResource(R.string.child_active, device?.batteryLevel?.let { " · $it%" } ?: "")
+                        else -> stringResource(R.string.child_offline)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (online) Green else if (unpaired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LastActivityText(device, null)
+                }
+                FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.cd_edit_child, child.displayName)) }
             }
-            FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.cd_edit_child, child.displayName)) }
+            OutlinedButton(onClick = onGenerateCode, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.VpnKey, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.generate_pairing_code))
+            }
+            if (active && pairingCode != null) {
+                PairingCodePanel(pairingCode)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PairingCodePanel(code: String) {
+    val clipboard = LocalClipboardManager.current
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    stringResource(R.string.pairing_code_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    code,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    stringResource(R.string.pairing_code_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                )
+            }
+            FilledTonalIconButton(onClick = { clipboard.setText(AnnotatedString(code)) }) {
+                Icon(Icons.Filled.ContentCopy, stringResource(R.string.copy_pairing_code))
+            }
         }
     }
 }
@@ -420,7 +543,7 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
     val scope = rememberCoroutineScope()
     val scopeId = vm.dashboardChildId
     val focused = vm.children.find { it.id == scopeId }
-    val onlineCount = vm.children.count { it.devices.firstOrNull()?.lastSeenAt != null }
+    val onlineCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
     val ringMsg = stringResource(R.string.snack_ring, focused?.displayName ?: stringResource(R.string.label_device))
     val emergencyMsg = stringResource(R.string.snack_emergency)
 
@@ -454,6 +577,30 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
                         style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
                     Text(stringResource(if (onlineCount == 1) R.string.child_online else R.string.children_online, onlineCount),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    focused?.primaryDevice()?.let { device ->
+                        if (device.isUnpaired()) {
+                            Text(stringResource(R.string.child_unpaired_notice, focused.displayName),
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        LastActivityText(device, vm.location)
+                    }
+                    focused?.let { child ->
+                        OutlinedButton(
+                            onClick = {
+                                vm.select(child.id)
+                                vm.generateCode()
+                            },
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.VpnKey, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.generate_pairing_code))
+                        }
+                        if (vm.selectedId == child.id) {
+                            vm.pairingCode?.let { PairingCodePanel(it) }
+                        }
+                    }
                     if (markers.isNotEmpty()) {
                         Box(Modifier.fillMaxWidth().height(240.dp).clip(MaterialTheme.shapes.medium)) {
                             OsmFamilyMap(markers, Modifier.fillMaxSize())
@@ -473,7 +620,7 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
                 }
             }
 
-            // Screen Time entry → App Usage
+            // Screen Time entry -> App Usage
             val usageChild = focused?.id ?: vm.children.firstOrNull()?.id
             if (usageChild != null) {
                 Surface(onClick = { onAppUsage(usageChild) }, shape = MaterialTheme.shapes.large,
@@ -539,7 +686,7 @@ private fun FamilyTopBar(vm: ParentViewModel, onBell: () -> Unit, onSettings: ()
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (child != null) Avatar(child.displayName, 40.dp, online = child.devices.firstOrNull()?.let { it.lastSeenAt != null })
+            if (child != null) Avatar(child.displayName, 40.dp, online = child.primaryDevice()?.isConnected() == true, avatar = child.avatar)
             else Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary)
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
@@ -556,7 +703,7 @@ private fun FilterPill(label: String, child: Child?, selected: Boolean, onClick:
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            child?.let { Avatar(it.displayName, 24.dp, online = it.devices.firstOrNull()?.let { d -> d.lastSeenAt != null }) }
+            child?.let { Avatar(it.displayName, 24.dp, online = it.primaryDevice()?.isConnected() == true, avatar = it.avatar) }
             Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                 color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
         }
@@ -614,6 +761,7 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
 private fun alertTypeLabel(type: String): String = when (type) {
     "low_battery" -> stringResource(R.string.alert_low_battery)
     "offline" -> stringResource(R.string.alert_offline)
+    "child_unpaired" -> stringResource(R.string.alert_child_unpaired)
     else -> stringResource(R.string.alert_generic)
 }
 
@@ -655,10 +803,10 @@ private fun ConversationList(vm: ParentViewModel, onSettings: () -> Unit) {
 private fun ConversationRow(vm: ParentViewModel, child: Child, onClick: () -> Unit) {
     val last = vm.lastMessageByChild[child.id]
     val unread = vm.unreadByChild[child.id] ?: 0
-    val online = child.devices.firstOrNull()?.lastSeenAt != null
+    val online = child.primaryDevice()?.isConnected() == true
     Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(child.displayName, 48.dp, online = online)
+            Avatar(child.displayName, 48.dp, online = online, avatar = child.avatar)
             Column(Modifier.weight(1f)) {
                 Text(child.displayName, style = MaterialTheme.typography.titleMedium)
                 Text(last?.body ?: stringResource(R.string.chat_tap_to_start),
@@ -680,7 +828,8 @@ private fun ConversationRow(vm: ParentViewModel, child: Child, onClick: () -> Un
 private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit) {
     val child = vm.chatChild
     val name = child?.displayName ?: stringResource(R.string.label_child)
-    val online = child?.devices?.firstOrNull()?.lastSeenAt != null
+    val device = child?.primaryDevice()
+    val online = device?.isConnected() == true
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val loc = vm.location
@@ -693,18 +842,25 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit) {
         if (vm.chatMessages.isNotEmpty()) listState.animateScrollToItem(vm.chatMessages.size - 1)
     }
     Column(Modifier.fillMaxSize().imePadding()) {
-        // Header — avatar + online status + settings
+        // Header: avatar + online status + settings
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { vm.closeChat() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.primary) }
-                if (child != null) Avatar(name, 40.dp, online = online)
+                if (child != null) Avatar(name, 40.dp, online = online, avatar = child.avatar)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(name, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (online) PulsingDot(Green, 6.dp)
-                        Text(if (online) stringResource(R.string.chat_online) else stringResource(R.string.child_offline),
-                            style = MaterialTheme.typography.labelMedium, color = if (online) Green else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when {
+                                device?.isUnpaired() == true -> stringResource(R.string.child_unpaired)
+                                online -> stringResource(R.string.chat_online)
+                                else -> stringResource(R.string.child_offline)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (online) Green else if (device?.isUnpaired() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -825,7 +981,8 @@ private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolea
 private fun MapTab(vm: ParentViewModel) {
     val child = vm.selected
     val loc = vm.location
-    val device = child?.devices?.firstOrNull()
+    val device = child?.primaryDevice()
+    val unpaired = device?.isUnpaired() == true
     val inZone = loc != null && vm.zones.any { distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
 
     Box(Modifier.fillMaxSize()) {
@@ -840,11 +997,21 @@ private fun MapTab(vm: ParentViewModel) {
         Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp,
             modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(16.dp).fillMaxWidth().widthIn(max = 560.dp)) {
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (child != null) Avatar(child.displayName, 40.dp, online = device?.lastSeenAt != null)
+                if (child != null) Avatar(child.displayName, 40.dp, online = device?.isConnected() == true, avatar = child.avatar)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(if (inZone) R.string.map_status_safe else R.string.map_status_moving,
+                    Text(stringResource(
+                        when {
+                            unpaired -> R.string.map_status_unpaired
+                            inZone -> R.string.map_status_safe
+                            else -> R.string.map_status_moving
+                        },
                         child?.displayName ?: stringResource(R.string.label_child)),
                         style = MaterialTheme.typography.titleMedium)
+                    if (unpaired && loc != null) {
+                        Text(stringResource(R.string.child_unpaired_last_location),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    LastActivityText(device, loc)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (inZone) Chip(stringResource(R.string.chip_safe_zone), Green, dot = true)
                         device?.batteryLevel?.let { Chip("$it%", batteryColor(it)) }
@@ -877,7 +1044,7 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
         ) {
             Text(stringResource(R.string.history_title), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
 
-            // Frequent / recurring routes — departure → return points.
+            // Frequent / recurring routes: departure -> return points.
             Text(stringResource(R.string.frequent_routes), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             if (vm.frequentRoutes.isEmpty()) {
                 EmptyCard(Icons.AutoMirrored.Filled.DirectionsWalk, stringResource(R.string.empty_routes_title),
@@ -1093,13 +1260,30 @@ private fun batteryColor(level: Int): Color = when {
     else -> Green
 }
 
+private fun Child.primaryDevice(): Device? =
+    devices.maxByOrNull { it.lastSeenAt ?: it.revokedAt ?: "" }
+
+private fun Device.isUnpaired(): Boolean = revokedAt != null
+
+private fun Device.isConnected(): Boolean = revokedAt == null && lastSeenAt != null
+
+@Composable
+private fun LastActivityText(device: Device?, location: CurrentLocation?) {
+    val last = device?.lastSeenAt ?: location?.recordedAt ?: device?.revokedAt ?: return
+    Text(
+        stringResource(R.string.last_kid_activity, ago(last)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 @Composable
 private fun rememberPlaceName(lat: Double?, lng: Double?): String {
     var name by remember(lat, lng) { mutableStateOf<String?>(null) }
     LaunchedEffect(lat, lng) {
         if (lat != null && lng != null) name = com.familyshield.app.net.Geocoding.reverse(lat, lng)
     }
-    return name ?: if (lat != null && lng != null) "%.4f, %.4f".format(lat, lng) else "—"
+    return name ?: if (lat != null && lng != null) "%.4f, %.4f".format(lat, lng) else "ג€”"
 }
 
 private fun timeOf(iso: String): String = try {

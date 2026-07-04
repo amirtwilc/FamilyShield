@@ -62,6 +62,19 @@ Useful routes:
 
 Do not treat the web client as the primary product UX. The Android app is the primary client.
 
+## Change Reporting
+
+After making code changes, explicitly summarize which deployable components changed so the user knows what must be pushed, migrated, redeployed, rebuilt, or reinstalled.
+
+Always include a short component impact list using these labels when applicable:
+
+- `DB`: schema changes, Drizzle schema changes, SQL migrations, seed/setup scripts, retention/storage behavior that requires a migration or database command.
+- `Backend`: Next.js API routes, server libraries, auth, alerts, cron jobs, OpenAPI, web test client, or any code that requires redeploying the backend.
+- `Android app`: Kotlin/Compose/client code, Android resources, Gradle config, permissions, services, or anything that requires rebuilding and reinstalling the APK.
+- `Tests/docs only`: tests, README/docs, AGENTS.md, or developer-only files that do not require runtime deployment.
+
+If `DB` changed, name the exact migration file or database command to run. If `Backend` changed, say that the backend must be redeployed. If `Android app` changed, say that a new APK must be built and installed.
+
 ## Local Development Requirements
 
 Required tools:
@@ -119,6 +132,19 @@ http://localhost:3000/api/health
 For normal local development, prefer running only the DB in Docker and running Next.js directly with `npm run dev`.
 
 Avoid `docker compose up -d --build` unless Docker Desktop has enough free disk space, because building the backend image can be brittle when Docker's data disk on `C:` is nearly full.
+
+## Production Reminder
+
+During development on Vercel's free tier, `vercel.json` may use `"crons": []`. Before a production launch, restore the scheduled cron jobs so offline alerts and location-retention cleanup run automatically:
+
+```json
+{
+  "crons": [
+    { "path": "/api/cron/offline-sweep", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/location-retention", "schedule": "0 * * * *" }
+  ]
+}
+```
 
 ## Run The Android App In An Emulator
 

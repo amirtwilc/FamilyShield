@@ -88,6 +88,7 @@
     <!-- Alerts -->
     <string name="alert_low_battery">Low battery</string>
     <string name="alert_offline">Offline</string>
+    <string name="alert_child_unpaired">Child unpaired device</string>
     <string name="alert_generic">Alert</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">Battery is running low</string>
@@ -98,6 +99,7 @@
     <string name="map_empty_body">Pair a device and send a location to track it here.</string>
     <string name="map_status_safe">%1$s is in a safe zone</string>
     <string name="map_status_moving">%1$s is on the move</string>
+    <string name="map_status_unpaired">%1$s unpaired this device</string>
     <string name="chip_safe_zone">Safe Zone</string>
 
     <!-- History -->
@@ -148,9 +150,22 @@
     <string name="alerts_off">Notifications off</string>
     <string name="child_active">● Active%1$s</string>
     <string name="child_offline">Offline</string>
+    <string name="child_unpaired">Unpaired by child</string>
+    <string name="child_unpaired_notice">%1$s deliberately unpaired this device.</string>
+    <string name="child_unpaired_last_location">Showing the last known location before unpairing.</string>
+    <string name="last_kid_activity">Last activity from kid device: %1$s</string>
+    <string name="generate_pairing_code">Generate pairing code</string>
+    <string name="pairing_code_label">Pairing code</string>
+    <string name="pairing_code_help">Enter this code on the kid device.</string>
+    <string name="copy_pairing_code">Copy pairing code</string>
     <string name="cd_edit_child">Edit %1$s</string>
     <string name="add_child_title">Add a child</string>
     <string name="edit_profile_title">Edit profile</string>
+    <string name="child_limit_reached">Your free tier allows up to 5 monitored children.</string>
+    <string name="child_avatar">Profile icon</string>
+    <string name="delete_child">Remove child</string>
+    <string name="delete_child_confirm_title">Remove child?</string>
+    <string name="delete_child_confirm_body">Remove %1$s from your family list? If this is the last linked parent, the kid device will be unpaired.</string>
 
     <!-- App usage / screen time -->
     <string name="appusage_title">App Usage</string>
@@ -198,10 +213,13 @@
     <string name="kid_unpair_confirm_title">Are you sure?</string>
     <string name="kid_unpair_confirm_body">Remove %1$s from monitoring this device?</string>
     <string name="kid_chat_title_with">Chat with %1$s</string>
-    <string name="cd_kid_map">Map — tap to set the device location</string>
-    <string name="kid_tap_to_move">Tap to move · %1$s, %2$s</string>
+    <string name="cd_kid_map">Map showing this device\'s current location</string>
+    <string name="kid_current_location">%1$s, %2$s</string>
+    <string name="kid_location_waiting">Waiting for this phone\'s GPS fix. Make sure location permission is allowed.</string>
+    <string name="kid_location_pending">Waiting for GPS</string>
+    <string name="kid_battery_pending">Reading this phone\'s battery...</string>
+    <string name="kid_auto_updates">Automatic upload every 5 minutes</string>
     <string name="telemetry">Telemetry</string>
     <string name="charging">Charging</string>
-    <string name="send_location">Send location</string>
     <string name="status">Status</string>
 </resources>

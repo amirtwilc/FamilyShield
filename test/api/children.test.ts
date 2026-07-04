@@ -2,10 +2,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedParent } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks } from '@/db/schema';
+import { childParentLinks, children } from '@/db/schema';
 import { signAccess } from '@/lib/auth/jwt';
 import { POST as createChild, GET as listChildren } from '@/app/api/children/route';
-import { PATCH as renameChild } from '@/app/api/children/[id]/route';
+import { DELETE as deleteChild, PATCH as renameChild } from '@/app/api/children/[id]/route';
 import { POST as genCode } from '@/app/api/children/[id]/pairing-code/route';
 
 beforeAll(async () => { await resetDb(); });
@@ -22,7 +22,9 @@ describe('children api', () => {
     const child = await r1.json();
 
     const r2 = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
-    expect((await r2.json()).children).toHaveLength(1);
+    const listed = await r2.json();
+    expect(listed.children).toHaveLength(1);
+    expect(listed.children[0].avatar).toBe('fox');
 
     const r3 = await genCode(auth(tok), { params: Promise.resolve({ id: child.id }) });
     const code = await r3.json();
@@ -67,5 +69,33 @@ describe('children api', () => {
     expect(denied.status).toBe(403);
     const body = await denied.json();
     expect(body.error.code).toBe('tier_limit_exceeded');
+  });
+
+  it('assigns unused avatars first and allows editing the avatar', async () => {
+    const p = await seedParent('avatars@test.io'); const tok = await signAccess(p.id);
+    const made = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await createChild(auth(tok, { displayName: `Kid ${i}` }));
+      made.push(await r.json());
+    }
+    expect(made.map((c) => c.avatar)).toEqual(['fox', 'panda', 'tiger', 'unicorn', 'bunny']);
+
+    const updated = await renameChild(auth(tok, { displayName: 'Kid 0', avatar: 'owl' }), { params: Promise.resolve({ id: made[0].id }) });
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).avatar).toBe('owl');
+  });
+
+  it('deletes a child from the parent list and cascades when no parents remain', async () => {
+    const p = await seedParent('delete-child@test.io'); const tok = await signAccess(p.id);
+    const created = await createChild(auth(tok, { displayName: 'Mia' }));
+    const child = await created.json();
+
+    const deleted = await deleteChild(new Request('http://t/', { method: 'DELETE', headers: { authorization: `Bearer ${tok}` } }),
+      { params: Promise.resolve({ id: child.id }) });
+    expect(deleted.status).toBe(200);
+
+    const listed = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
+    expect((await listed.json()).children).toHaveLength(0);
+    expect(await db.select().from(children)).not.toContainEqual(expect.objectContaining({ id: child.id }));
   });
 });

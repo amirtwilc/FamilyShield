@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.familyshield.app.net.ApiClient
+import com.familyshield.app.net.ApiException
 import com.familyshield.app.net.HttpApiClient
 import com.familyshield.app.net.Message
 import com.familyshield.app.net.Monitor
@@ -30,11 +31,12 @@ class KidViewModel(
     var deviceToken by mutableStateOf(store.deviceToken)
         private set
 
-    // Default near central Tel Aviv; tap the map to move.
-    var lat by mutableStateOf(32.0853)
-    var lng by mutableStateOf(34.7818)
-    var battery by mutableStateOf(80)
-    var charging by mutableStateOf(false)
+    var lat by mutableStateOf<Double?>(null)
+    var lng by mutableStateOf<Double?>(null)
+    var battery by mutableStateOf<Int?>(null)
+    var charging by mutableStateOf<Boolean?>(null)
+    var telemetryUpdatedAt by mutableStateOf<String?>(null)
+        private set
 
     var message by mutableStateOf<String?>(null)
         private set
@@ -56,7 +58,7 @@ class KidViewModel(
         error = null; message = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val r = api.pair(code.trim(), platform, "Simulator")
+                val r = api.pair(code.trim(), platform, AndroidTelemetry.deviceModel())
                 store.deviceToken = r.deviceToken
                 deviceToken = r.deviceToken
                 refreshMonitoring(r.deviceToken)
@@ -69,7 +71,7 @@ class KidViewModel(
         error = null; message = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val info = api.addParent(t, code.trim(), platform, "Simulator")
+                val info = api.addParent(t, code.trim(), platform, AndroidTelemetry.deviceModel())
                 monitors = info.monitors
                 message = "Parent added."
             } catch (e: Exception) { error = e.message } finally { busy = false }
@@ -81,9 +83,21 @@ class KidViewModel(
         refreshMonitoring(t)
     }
 
+    private fun handleDeviceAuthError(e: Exception): Boolean {
+        if (e is ApiException && e.status == 401) {
+            stopChat()
+            store.deviceToken = null
+            deviceToken = null
+            monitors = emptyList()
+            message = "This device is no longer paired."
+            return true
+        }
+        return false
+    }
+
     private fun refreshMonitoring(token: String) {
         viewModelScope.launch(dispatcher) {
-            try { monitors = api.monitoring(token).monitors } catch (_: Exception) {}
+            try { monitors = api.monitoring(token).monitors } catch (e: Exception) { handleDeviceAuthError(e) }
         }
     }
 
@@ -105,7 +119,7 @@ class KidViewModel(
                     monitors = result.monitors
                     message = "Parent removed."
                 }
-            } catch (e: Exception) { error = e.message } finally { busy = false }
+            } catch (e: Exception) { if (!handleDeviceAuthError(e)) error = e.message } finally { busy = false }
         }
     }
 
@@ -152,29 +166,22 @@ class KidViewModel(
                 val m = if (parentId == null) api.sendDeviceMessage(t, body.trim())
                 else api.sendMonitorMessage(t, parentId, body.trim())
                 if (chatMessages.none { it.id == m.id }) chatMessages = chatMessages + m
-            } catch (e: Exception) { error = e.message } finally { sending = false }
+            } catch (e: Exception) { if (!handleDeviceAuthError(e)) error = e.message } finally { sending = false }
         }
     }
 
     override fun onCleared() { stopChat(); super.onCleared() }
 
-    fun setPosition(newLat: Double, newLng: Double) { lat = newLat; lng = newLng }
-
-    fun sendLocation() {
-        val t = deviceToken ?: return
-        error = null; message = null
+    fun refreshTelemetry(context: Context) {
         viewModelScope.launch(dispatcher) {
-            try { api.sendLocation(t, lat, lng, battery); message = "Location sent." }
-            catch (e: Exception) { error = e.message }
-        }
-    }
-
-    fun sendStatus() {
-        val t = deviceToken ?: return
-        error = null; message = null
-        viewModelScope.launch(dispatcher) {
-            try { api.sendStatus(t, battery, charging); message = "Status sent." }
-            catch (e: Exception) { error = e.message }
+            val snapshot = AndroidTelemetry.snapshot(context.applicationContext)
+            battery = snapshot.batteryLevel
+            charging = snapshot.isCharging
+            snapshot.location?.let {
+                lat = it.latitude
+                lng = it.longitude
+            }
+            telemetryUpdatedAt = java.time.OffsetDateTime.now().toString()
         }
     }
 
