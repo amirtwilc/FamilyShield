@@ -197,6 +197,9 @@ data class RefreshBody(val refreshToken: String)
 data class GoogleLoginBody(val idToken: String)
 
 @Serializable
+data class PushTokenBody(@SerialName("fcm_token") val fcmToken: String)
+
+@Serializable
 data class CreateChildBody(val displayName: String, val avatar: String? = null)
 
 @Serializable

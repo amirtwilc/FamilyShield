@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedDevice, seedParent, seedChild } from '../helpers/factories';
 import { db } from '@/db/client';
@@ -9,8 +9,20 @@ import { GET as monitoring } from '@/app/api/device/monitoring/route';
 import { DELETE as removeMonitor } from '@/app/api/device/monitors/[parentId]/route';
 import { GET as currentLocation } from '@/app/api/children/[id]/location/current/route';
 import { signAccess } from '@/lib/auth/jwt';
+import { resetSender, setSender } from '@/lib/alerts/fcm';
 
 beforeAll(async () => { await resetDb(); });
+let sentPushes: Array<{ token: string; title: string; body: string; data?: Record<string, string> }> = [];
+beforeEach(() => {
+  sentPushes = [];
+  setSender({
+    async send(token, title, body, data) {
+      sentPushes.push({ token, title, body, data });
+      return true;
+    },
+  });
+});
+afterEach(() => resetSender());
 const post = (body: unknown, token?: string) => new Request('http://t/', {
   method: 'POST',
   headers: token ? { authorization: `Bearer ${token}` } : {},
@@ -96,11 +108,13 @@ describe('pairing', () => {
     const afterP2 = await removeP2.json();
     expect(afterP2.unpaired).toBe(false);
     expect(afterP2.monitors).toHaveLength(1);
+    expect(sentPushes.some((p) => p.token === p2.fcmToken && p.data?.type === 'child_unpaired')).toBe(true);
 
     const removeP1 = await removeMonitor(new Request('http://t/', { method: 'DELETE', headers: { authorization: `Bearer ${deviceToken}` } }),
       { params: Promise.resolve({ parentId: p1.id }) });
     expect(removeP1.status).toBe(200);
     expect((await removeP1.json()).unpaired).toBe(true);
+    expect(sentPushes.some((p) => p.token === p1.fcmToken && p.data?.type === 'child_unpaired')).toBe(true);
     expect((await monitoring(get(deviceToken))).status).toBe(401);
 
     const p1Token = await signAccess(p1.id);

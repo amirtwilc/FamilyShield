@@ -11,6 +11,7 @@ import com.familyshield.app.net.*
 class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     private val parents = mutableMapOf<String, String>()        // email -> password
+    val parentPushTokens = mutableMapOf<String, String>()       // parent email -> FCM token
     private val childName = linkedMapOf<String, String>()        // childId -> name
     private val childAvatar = mutableMapOf<String, String>()     // childId -> avatar key
     private val childParents = mutableMapOf<String, MutableMap<String, String>>() // childId -> parent email -> display name
@@ -49,6 +50,10 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         if (!refreshToken.startsWith("ref:")) throw ApiException(401, "Invalid refresh token")
         val email = refreshToken.removePrefix("ref:")
         return Tokens("acc:$email", "ref:$email")
+    }
+
+    override suspend fun registerParentPushToken(token: String, fcmToken: String) {
+        parentPushTokens[parentEmail(token)] = fcmToken
     }
 
     /** When set, the next listChildren call rejects with 401 (simulates an expired access token). */

@@ -277,10 +277,10 @@ private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
 @Composable
 private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones: () -> Unit) {
     var addOpen by remember { mutableStateOf(false) }
+    var showAddLimit by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Child?>(null) }
     var pendingDelete by remember { mutableStateOf<Child?>(null) }
     val activeCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
-    val childLimitMsg = stringResource(R.string.child_limit_reached)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -314,9 +314,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                 vm.children.forEach { c ->
                     ChildSettingRow(
                         child = c,
-                        active = c.id == vm.selectedId,
                         pairingCode = vm.pairingCode.takeIf { c.id == vm.selectedId },
-                        onSelect = { vm.select(c.id) },
                         onEdit = { rename = c },
                         onGenerateCode = {
                             vm.select(c.id)
@@ -326,7 +324,8 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                 }
 
                 Button(onClick = {
-                    if (vm.children.size >= 5) vm.showError(childLimitMsg) else addOpen = true
+                    showAddLimit = vm.children.size >= 5
+                    addOpen = true
                 }, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().height(54.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) {
                     Icon(Icons.Filled.PersonAdd, null, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.add_child), fontWeight = FontWeight.SemiBold)
@@ -363,18 +362,19 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     }
 
     if (addOpen) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { addOpen = false }, title = { Text(stringResource(R.string.add_child_title)) },
-            text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = {
-                    if (vm.children.size >= 5) vm.showError(childLimitMsg) else {
-                        vm.addChild(name.trim())
-                        addOpen = false
-                    }
-                }) { Text(stringResource(R.string.action_add)) }
+        AddChildDialog(
+            childrenCount = vm.children.size,
+            showInitialLimit = showAddLimit,
+            onDismiss = {
+                addOpen = false
+                showAddLimit = false
             },
-            dismissButton = { TextButton(onClick = { addOpen = false }) { Text(stringResource(R.string.action_cancel)) } })
+            onAdd = { name ->
+                vm.addChild(name)
+                addOpen = false
+                showAddLimit = false
+            },
+        )
     }
     rename?.let { c ->
         var name by remember { mutableStateOf(c.displayName) }
@@ -424,19 +424,67 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
 }
 
 @Composable
+private fun AddChildDialog(
+    childrenCount: Int,
+    showInitialLimit: Boolean,
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    val childLimitMsg = stringResource(R.string.child_limit_reached)
+    var localError by remember(showInitialLimit, childrenCount) {
+        mutableStateOf(if (showInitialLimit || childrenCount >= 5) childLimitMsg else null)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_child_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    name,
+                    {
+                        name = it
+                        if (childrenCount < 5) localError = null
+                    },
+                    label = { Text(stringResource(R.string.field_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = localError != null,
+                )
+                localError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    if (childrenCount >= 5) {
+                        localError = childLimitMsg
+                    } else {
+                        onAdd(name.trim())
+                    }
+                },
+            ) { Text(stringResource(R.string.action_add)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+@Composable
 private fun ChildSettingRow(
     child: Child,
-    active: Boolean,
     pairingCode: String?,
-    onSelect: () -> Unit,
     onEdit: () -> Unit,
     onGenerateCode: () -> Unit,
 ) {
     val device = child.primaryDevice()
     val online = device?.isConnected() == true
     val unpaired = device?.isUnpaired() == true
-    Surface(onClick = onSelect, shape = MaterialTheme.shapes.large,
-        color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+    Surface(shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -461,7 +509,7 @@ private fun ChildSettingRow(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.generate_pairing_code))
             }
-            if (active && pairingCode != null) {
+            if (pairingCode != null) {
                 PairingCodePanel(pairingCode)
             }
         }
@@ -546,9 +594,33 @@ private fun SettingMini(modifier: Modifier, icon: ImageVector, title: String, bo
 private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings: () -> Unit, onAppUsage: (String) -> Unit, snackbar: SnackbarHostState) {
     LaunchedEffect(Unit) { vm.loadFamilyOverview() }
     val scope = rememberCoroutineScope()
+    var addOpen by remember { mutableStateOf(false) }
+    var showAddLimit by remember { mutableStateOf(false) }
     val scopeId = vm.dashboardChildId
     val focused = vm.children.find { it.id == scopeId }
+    val focusedDevice = focused?.primaryDevice()
+    val focusedLocation = focused?.let { vm.allLocations[it.id] ?: vm.location }
     val onlineCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
+    val focusedOnline = focusedDevice?.isConnected() == true
+    val focusedUnpaired = focusedDevice?.isUnpaired() == true
+    val canPairFocusedChild = focused != null && (focusedDevice == null || focusedUnpaired)
+    val scopeActive = if (focused == null) onlineCount > 0 else focusedOnline
+    val scopeStatusColor = when {
+        scopeActive -> Green
+        focusedUnpaired -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val scopeStatusText = when {
+        focused == null -> stringResource(if (onlineCount == 1) R.string.child_online else R.string.children_online, onlineCount)
+        focusedUnpaired -> stringResource(R.string.child_unpaired)
+        focusedOnline -> stringResource(R.string.chat_online)
+        else -> stringResource(R.string.child_offline)
+    }
+    val monitoringText = when {
+        scopeActive -> stringResource(R.string.active_monitoring)
+        focusedUnpaired -> stringResource(R.string.child_unpaired)
+        else -> stringResource(R.string.child_offline)
+    }
     val ringMsg = stringResource(R.string.snack_ring, focused?.displayName ?: stringResource(R.string.label_device))
     val emergencyMsg = stringResource(R.string.snack_emergency)
 
@@ -558,15 +630,39 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
     }
     var bigMap by remember { mutableStateOf(false) }
     if (bigMap && markers.isNotEmpty()) FullScreenFamilyMap(markers) { bigMap = false }
+    if (addOpen) {
+        AddChildDialog(
+            childrenCount = vm.children.size,
+            showInitialLimit = showAddLimit,
+            onDismiss = {
+                addOpen = false
+                showAddLimit = false
+            },
+            onAdd = { name ->
+                vm.addChild(name)
+                addOpen = false
+                showAddLimit = false
+            },
+        )
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-        FamilyTopBar(vm, onBell = onTimeline, onSettings = onSettings)
+        FamilyTopBar(vm, onSettings = onSettings)
         Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
 
             // Child switcher chips
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterPill(stringResource(R.string.all_children), null, selected = scopeId == null) { vm.setDashboardChild(null) }
                 vm.children.forEach { c -> FilterPill(c.displayName, c, selected = scopeId == c.id) { vm.setDashboardChild(c.id) } }
+                FilledTonalIconButton(
+                    onClick = {
+                        showAddLimit = vm.children.size >= 5
+                        addOpen = true
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Filled.Add, stringResource(R.string.add_child), modifier = Modifier.size(20.dp))
+                }
             }
 
             // Family Network hero
@@ -575,21 +671,22 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
                 shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PulsingDot(Green)
-                        Text(stringResource(R.string.active_monitoring), style = MaterialTheme.typography.labelLarge, color = Green)
+                        PulsingDot(scopeStatusColor)
+                        Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
                     }
                     Text(focused?.displayName ?: stringResource(R.string.family_network),
                         style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-                    Text(stringResource(if (onlineCount == 1) R.string.child_online else R.string.children_online, onlineCount),
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    focused?.primaryDevice()?.let { device ->
+                    Text(scopeStatusText, style = MaterialTheme.typography.bodyMedium, color = scopeStatusColor)
+                    focusedDevice?.let { device ->
+                        val child = focused
                         if (device.isUnpaired()) {
-                            Text(stringResource(R.string.child_unpaired_notice, focused.displayName),
+                            Text(stringResource(R.string.child_unpaired_notice, child?.displayName ?: stringResource(R.string.label_your_child)),
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         }
-                        LastActivityText(device, vm.location)
+                        LastActivityText(device, focusedLocation)
                     }
-                    focused?.let { child ->
+                    if (canPairFocusedChild && focused != null) {
+                        val child = focused
                         OutlinedButton(
                             onClick = {
                                 vm.select(child.id)
@@ -686,7 +783,7 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
 }
 
 @Composable
-private fun FamilyTopBar(vm: ParentViewModel, onBell: () -> Unit, onSettings: () -> Unit) {
+private fun FamilyTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
     val child = vm.selected
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -695,10 +792,7 @@ private fun FamilyTopBar(vm: ParentViewModel, onBell: () -> Unit, onSettings: ()
             else Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary)
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBell) { Icon(Icons.Filled.Notifications, stringResource(R.string.cd_alerts), tint = MaterialTheme.colorScheme.primary) }
-            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings), tint = MaterialTheme.colorScheme.primary) }
-        }
+        IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings), tint = MaterialTheme.colorScheme.primary) }
     }
 }
 

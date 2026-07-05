@@ -22,6 +22,7 @@ interface ApiClient {
     suspend fun login(email: String, password: String): Tokens
     suspend fun googleLogin(idToken: String): Tokens
     suspend fun refreshTokens(refreshToken: String): Tokens
+    suspend fun registerParentPushToken(token: String, fcmToken: String)
     suspend fun listChildren(token: String): List<Child>
     suspend fun createChild(token: String, name: String, avatar: String? = null): Child
     suspend fun updateChild(token: String, childId: String, name: String, avatar: String? = null): Child
@@ -108,6 +109,10 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     override suspend fun refreshTokens(refreshToken: String): Tokens =
         json.decodeFromString(requestRaw("POST", "/api/auth/refresh",
             json.encodeToString(RefreshBody(refreshToken))))
+
+    override suspend fun registerParentPushToken(token: String, fcmToken: String) {
+        requestRaw("POST", "/api/parent/push-token", json.encodeToString(PushTokenBody(fcmToken)), token)
+    }
 
     override suspend fun listChildren(token: String): List<Child> =
         json.decodeFromString<ChildrenResponse>(requestRaw("GET", "/api/children", token = token)).children

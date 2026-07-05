@@ -151,7 +151,7 @@
     <string name="child_active">● Active%1$s</string>
     <string name="child_offline">Offline</string>
     <string name="child_unpaired">Unpaired by child</string>
-    <string name="child_unpaired_notice">%1$s deliberately unpaired this device.</string>
+    <string name="child_unpaired_notice">%1$s unpaired this device.</string>
     <string name="child_unpaired_last_location">Showing the last known location before unpairing.</string>
     <string name="last_kid_activity">Last activity from kid device: %1$s</string>
     <string name="generate_pairing_code">Generate pairing code</string>

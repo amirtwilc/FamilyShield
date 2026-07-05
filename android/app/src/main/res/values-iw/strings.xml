@@ -151,7 +151,7 @@
     <string name="child_active">● פעיל%1$s</string>
     <string name="child_offline">לא מקוון</string>
     <string name="child_unpaired">נותק על ידי הילד</string>
-    <string name="child_unpaired_notice">%1$s ניתק/ה את המכשיר בכוונה.</string>
+    <string name="child_unpaired_notice">%1$s ניתק/ה את המכשיר.</string>
     <string name="child_unpaired_last_location">מציגים את המיקום הידוע האחרון לפני הניתוק.</string>
     <string name="last_kid_activity">פעילות אחרונה ממכשיר הילד: %1$s</string>
     <string name="generate_pairing_code">יצירת קוד צימוד</string>

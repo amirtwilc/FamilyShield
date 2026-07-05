@@ -21,6 +21,11 @@ async function sendToParents(childId: string, title: string, body: string, data:
   return sent;
 }
 
+async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>) {
+  const [parent] = await db.select({ token: parents.fcmToken }).from(parents).where(eq(parents.id, parentId));
+  return parent?.token ? getSender().send(parent.token, title, body, data) : false;
+}
+
 export async function fireLowBatteryIfNeeded(device: Device): Promise<void> {
   const threshold = Number(process.env.LOW_BATTERY_THRESHOLD ?? 15);
   const cooldownMin = Number(process.env.LOW_BATTERY_COOLDOWN_MIN ?? 60);
@@ -52,6 +57,13 @@ export async function fireChildUnpaired(device: Device): Promise<void> {
   if (await sendToParents(device.childId, 'Child device unpaired', 'The child deliberately unpaired this device', { type: 'child_unpaired' })) {
     await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
   }
+}
+
+export async function fireParentRemovedByChild(parentId: string, device: Device): Promise<void> {
+  await sendToParent(parentId, 'Child device unpaired', 'The child removed this parent from the device', {
+    type: 'child_unpaired',
+    childId: device.childId,
+  });
 }
 
 export async function fireOfflineSweep(): Promise<{ fired: number }> {

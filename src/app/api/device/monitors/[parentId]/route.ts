@@ -4,7 +4,7 @@ import { childParentLinks, devices } from '@/db/schema';
 import { requireDevice } from '@/lib/auth/device';
 import { ok, err } from '@/lib/http';
 import { monitoringInfo } from '@/lib/monitoring';
-import { fireChildUnpaired } from '@/lib/alerts/engine';
+import { fireChildUnpaired, fireParentRemovedByChild } from '@/lib/alerts/engine';
 
 export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ parentId: string }> };
@@ -36,5 +36,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
     await fireChildUnpaired(a.device);
     return ok({ unpaired: true, childId: a.device.childId, monitors: [] });
   }
+  await fireParentRemovedByChild(parentId, a.device);
   return ok({ unpaired: false, ...(await monitoringInfo(a.device.childId)) });
 }

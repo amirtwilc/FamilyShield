@@ -27,9 +27,12 @@ class ParentViewModel(
     private val store: TokenStore,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : ViewModel() {
-
     var token by mutableStateOf(store.parentToken)
         private set
+
+    init {
+        registerPushToken()
+    }
     var children by mutableStateOf<List<Child>>(emptyList())
         private set
     var selectedId by mutableStateOf<String?>(null)
@@ -200,6 +203,18 @@ class ParentViewModel(
     fun updateBiometricLock(v: Boolean) { store.biometricLock = v; biometricLock = v }
     fun updateAlertsEnabled(v: Boolean) { store.alertsEnabled = v; alertsEnabled = v }
 
+    private fun registerPushToken() {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                val fcmToken = parentFcmTokenOrNull() ?: return@launch
+                authed { api.registerParentPushToken(it, fcmToken) }
+            } catch (_: Exception) {
+                // Push registration should never block the parent app from opening.
+            }
+        }
+    }
+
     fun updateChild(name: String, avatar: String? = null) {
         val id = selectedId ?: return
         if (token == null || name.isBlank()) return
@@ -241,6 +256,7 @@ class ParentViewModel(
                 store.parentToken = fresh.accessToken
                 store.parentRefreshToken = fresh.refreshToken
                 token = fresh.accessToken
+                registerPushToken()
                 call(fresh.accessToken)
             } else throw e
         }
@@ -254,6 +270,7 @@ class ParentViewModel(
                 store.parentToken = t.accessToken
                 store.parentRefreshToken = t.refreshToken
                 token = t.accessToken
+                registerPushToken()
                 refreshChildren()
             } catch (e: Exception) { error = e.message } finally { busy = false }
         }
@@ -268,6 +285,7 @@ class ParentViewModel(
                 store.parentToken = t.accessToken
                 store.parentRefreshToken = t.refreshToken
                 token = t.accessToken
+                registerPushToken()
                 refreshChildren()
             } catch (e: Exception) { error = e.message } finally { busy = false }
         }
