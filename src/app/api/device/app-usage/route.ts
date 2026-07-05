@@ -13,17 +13,33 @@ export async function POST(req: Request) {
   const a = await requireDevice(req); if ('response' in a) return a.response;
   const p = await parseBody(req, reportUsageSchema); if ('response' in p) return p.response;
 
-  // De-dupe by (app, day) so one batch can't hit the same conflict target twice,
+  // De-dupe by (package, day) so one batch can't hit the same conflict target twice,
   // then upsert every row in a single statement (one round-trip, not N).
   const byKey = new Map<string, typeof p.data.items[number]>();
-  for (const it of p.data.items) byKey.set(`${it.app}|${it.day ?? ''}`, it);
+  for (const it of p.data.items) byKey.set(`${it.package_name ?? it.app}|${it.day ?? ''}`, it);
   const items = [...byKey.values()];
 
-  const rows = items.map((it) => sql`(${a.device.childId}, ${it.app}, ${it.category}, ${it.minutes}, COALESCE(${it.day ?? null}::date, CURRENT_DATE))`);
+  const rows = items.map((it) => sql`(
+    ${a.device.childId},
+    ${it.package_name ?? it.app},
+    ${it.app},
+    ${it.category},
+    ${it.minutes},
+    COALESCE(${it.day ?? null}::date, CURRENT_DATE),
+    ${it.is_relevant ?? true},
+    ${it.hidden_reason ?? null},
+    now()
+  )`);
   await db.execute(sql`
-    INSERT INTO app_usage (child_id, app, category, minutes, day)
+    INSERT INTO app_usage (child_id, package_name, app, category, minutes, day, is_relevant, hidden_reason, last_reported_at)
     VALUES ${sql.join(rows, sql`, `)}
-    ON CONFLICT (child_id, app, day) DO UPDATE SET minutes = EXCLUDED.minutes, category = EXCLUDED.category`);
+    ON CONFLICT (child_id, package_name, day) DO UPDATE SET
+      app = EXCLUDED.app,
+      minutes = EXCLUDED.minutes,
+      category = EXCLUDED.category,
+      is_relevant = EXCLUDED.is_relevant,
+      hidden_reason = EXCLUDED.hidden_reason,
+      last_reported_at = EXCLUDED.last_reported_at`);
   await db.execute(sql`UPDATE devices SET last_seen_at = now() WHERE id = ${a.device.id}`);
   return ok({ inserted: items.length });
 }

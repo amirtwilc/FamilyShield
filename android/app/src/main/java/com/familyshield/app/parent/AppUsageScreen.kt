@@ -16,6 +16,8 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayCircle
@@ -42,6 +44,8 @@ import com.familyshield.app.ui.theme.Navy
 import com.familyshield.app.ui.theme.SkyBright
 import com.familyshield.app.ui.theme.SkyTint
 import kotlinx.coroutines.launch
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 private fun fmtDur(min: Int): String {
     val h = min / 60; val m = min % 60
@@ -56,6 +60,7 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
     val scope = rememberCoroutineScope()
     val limitsMsg = stringResource(R.string.appusage_limits_soon)
     val usage = vm.appUsage
+    var showSystemActivity by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -83,7 +88,7 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
 
                 if (usage == null) {
                     Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else if (usage.totalTodayMin == 0 && usage.apps.isEmpty()) {
+                } else if (usage.totalTodayMin == 0 && usage.apps.isEmpty() && usage.hiddenApps.isEmpty()) {
                     Text(
                         stringResource(if (usage.appUsageAccessGranted == false) R.string.appusage_permission_missing else R.string.appusage_empty),
                         style = MaterialTheme.typography.bodyLarge,
@@ -91,14 +96,47 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                     )
                 } else {
                     SummaryCard(usage.totalTodayMin, usage.yesterdayMin)
+                    usage.lastUpdatedAt?.let { LastUpdatedText(it) }
                     WeeklyTrend(usage.week.map { it.dow to it.min }, usage.avgWeekMin)
-                    Breakdown(usage.apps)
+                    if (usage.apps.isEmpty() && usage.hiddenApps.isNotEmpty()) {
+                        Text(
+                            stringResource(R.string.appusage_only_system),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Breakdown(usage.apps)
+                    }
+                    if (usage.hiddenApps.isNotEmpty()) {
+                        SystemActivitySection(
+                            apps = usage.hiddenApps,
+                            hiddenTodayMin = usage.hiddenTodayMin,
+                            hiddenActivityCount = usage.hiddenActivityCount,
+                            expanded = showSystemActivity,
+                            onToggle = { showSystemActivity = !showSystemActivity },
+                        )
+                    }
                     LimitsCard { scope.launch { snackbar.showSnackbar(limitsMsg) } }
                     Spacer(Modifier.height(8.dp))
                 }
             }
         }
     }
+}
+
+@Composable
+private fun LastUpdatedText(iso: String) {
+    val text = remember(iso) {
+        val formatted = runCatching {
+            OffsetDateTime.parse(iso).toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a"))
+        }.getOrNull()
+        formatted ?: iso
+    }
+    Text(
+        stringResource(R.string.appusage_last_updated, text),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -171,8 +209,52 @@ private fun WeeklyTrend(days: List<Pair<String, Int>>, avgMin: Int) {
 private fun Breakdown(apps: List<AppUsageEntry>) {
     val maxApp = (apps.maxOfOrNull { it.min } ?: 1).coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.appusage_breakdown), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.appusage_relevant_apps), style = MaterialTheme.typography.headlineSmall)
         apps.forEach { e -> AppRow(e, maxApp) }
+    }
+}
+
+@Composable
+private fun SystemActivitySection(
+    apps: List<AppUsageEntry>,
+    hiddenTodayMin: Int,
+    hiddenActivityCount: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val maxApp = (apps.maxOfOrNull { it.min } ?: 1).coerceAtLeast(1)
+    Surface(
+        onClick = onToggle,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Filled.Apps, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.appusage_system_activity), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.appusage_system_summary, hiddenActivityCount, fmtDur(hiddenTodayMin)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    stringResource(if (expanded) R.string.cd_collapse else R.string.cd_expand),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (expanded) {
+                Text(
+                    stringResource(R.string.appusage_system_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                apps.forEach { e -> AppRow(e, maxApp, compact = true) }
+            }
+        }
     }
 }
 
@@ -191,18 +273,23 @@ private fun appVisual(app: String): AppVisual = when (app.lowercase()) {
 }
 
 @Composable
-private fun AppRow(e: AppUsageEntry, maxApp: Int) {
+private fun AppRow(e: AppUsageEntry, maxApp: Int, compact: Boolean = false) {
     val v = appVisual(e.app)
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.large,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)), shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.padding(if (compact) 12.dp else 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(v.bg), contentAlignment = Alignment.Center) {
                     Icon(v.icon, null, tint = v.tint, modifier = Modifier.size(22.dp))
                 }
                 Column {
                     Text(e.app, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                    Text(e.category.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
+                    Text(
+                        (e.hiddenReason?.let { hiddenReasonLabel(it) } ?: e.category).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 0.8.sp,
+                    )
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -213,6 +300,15 @@ private fun AppRow(e: AppUsageEntry, maxApp: Int) {
             }
         }
     }
+}
+
+private fun hiddenReasonLabel(reason: String): String = when (reason) {
+    "launcher" -> "Home screen"
+    "keyboard" -> "Keyboard"
+    "self" -> "FamilyShield"
+    "non_launchable" -> "Background component"
+    "system_component" -> "System component"
+    else -> "System activity"
 }
 
 @Composable

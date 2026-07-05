@@ -32,6 +32,9 @@ class ParentViewModelTest {
     private fun viewModel(api: ApiClient) =
         ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher)
 
+    private fun viewModel(api: ApiClient, store: InMemoryTokenStore) =
+        ParentViewModel(api, store, mainRule.dispatcher)
+
     @Test
     fun `register succeeds and stores a token`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
@@ -41,6 +44,18 @@ class ParentViewModelTest {
 
         assertNotNull("token should be set after register", vm.token)
         assertNull(vm.error)
+    }
+
+    @Test
+    fun `parent authentication clears kid device token`() = runTest(mainRule.dispatcher) {
+        val store = InMemoryTokenStore(deviceToken = "kid-device-token")
+        val vm = viewModel(FakeApiClient(), store)
+
+        vm.authenticate("parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+
+        assertNotNull(vm.token)
+        assertNull(store.deviceToken)
     }
 
     @Test

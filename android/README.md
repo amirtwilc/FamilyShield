@@ -1,82 +1,85 @@
-# FamilyShield — Native Android Client
+# FamilyShield Android App
 
-The native Android client for FamilyShield. One app with a role chooser:
+The native Android client for FamilyShield. It is one app with two experiences:
 
-- **Parent dashboard** — register/login, add children, generate pairing codes, and
-  watch a child's live location on an OpenStreetMap map with online/battery status
-  and alerts.
-- **Kid device client** — pair with a 6-digit code, then report real location and
-  battery/charging status to the backend.
+- **Parent dashboard**: sign in, manage children, generate pairing codes, view
+  location/status/alerts/app usage, manage zones, and chat.
+- **Kid device**: pair with a six-digit code, then report location, battery/status,
+  app usage, and kid messages to the backend.
 
-It talks to the [FamilyShield backend](../README.md) REST API.
+A paired kid device owns that install until all monitoring parents are unpaired.
+Reopening the app goes straight back to the kid device screen. Parent login is
+available only when the device is not paired as a kid device.
 
 ## Stack
 
-Kotlin · Jetpack Compose + **Material 3** (incl. **Material 3 Adaptive** —
-`ListDetailPaneScaffold` for the foldable/large-screen parent dashboard) · Navigation
-Compose · OkHttp + kotlinx.serialization · Coroutines · **osmdroid** (OpenStreetMap —
-never Google Maps, per project constraints). Min SDK 26, target/compile SDK 35.
+Kotlin, Jetpack Compose, Material 3, Navigation Compose, OkHttp,
+kotlinx.serialization, coroutines, and osmdroid/OpenStreetMap. Min SDK 26,
+target/compile SDK 35.
 
-The UI follows the `android-skills` **M3 compliance audit**: adaptive List-Detail layout,
-theme-token colors/shapes, accessible semantics (content descriptions, headings),
-lifecycle-aware map, predictive back, and rich motion (animated panes, shimmer skeletons,
-content-size/colour animations, snackbar feedback).
+## Backend
 
-> UI/UX direction informed by the official [`android/skills`](https://github.com/android/skills)
-> Compose guidance and the [`awesome-android-ui`](https://github.com/wasabeef/awesome-android-ui)
-> pattern catalog. (Those `android/skills` are packaged for Google's `android` CLI /
-> Gemini-Antigravity agents, a different ecosystem from Claude Code, so they were used
-> as design reference rather than installed as agent skills.)
+Debug emulator builds default to:
 
-## Prerequisites
+```text
+http://10.0.2.2:3000
+```
 
-- Android Studio (bundles a JDK 17) or a standalone JDK 17 + Android SDK (platforms
-  android-35, build-tools 35).
-- The backend running and reachable. The app targets `http://10.0.2.2:3000`
-  (`API_BASE_URL` in `app/build.gradle.kts`) — the Android emulator's alias for the
-  host machine's `localhost`.
-
-## Build & run
+That is the Android emulator alias for the host machine's `localhost`. For a
+physical device, build with a reachable backend:
 
 ```bash
-# 1. Start the backend (from the repo root)
-npm run db:setup && npm run dev          # http://localhost:3000
+./gradlew :app:assembleDebug -PAPI_BASE=http://192.168.x.x:3000
+```
 
-# 2. Build the app  (JAVA_HOME must point at a JDK 17, e.g. Android Studio's jbr)
+Use HTTPS for deployed builds.
+
+## Build And Run
+
+From the repo root, start the backend first:
+
+```bash
+npm run db:setup
+npm run dev
+```
+
+Then build and install the Android app:
+
+```bash
 cd android
-./gradlew :app:assembleDebug             # -> app/build/outputs/apk/debug/app-debug.apk
-
-# 3. Install & launch on an emulator/device
+./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell monkey -p com.familyshield.app -c android.intent.category.LAUNCHER 1
 ```
 
-For a physical phone using the Vercel backend, build with the deployed HTTPS API:
+`local.properties` is git-ignored and must point `sdk.dir` at the local Android SDK.
 
-```bash
-./gradlew :app:assembleDebug -PAPI_BASE=https://your-familyshield.vercel.app
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+## Monitoring Permissions
 
-The kid mode requests location permissions and runs a visible foreground monitoring
-service that uploads location and battery/status about every 5 minutes while paired.
+Kid mode requests sensitive permissions only after pairing:
 
-`local.properties` (git-ignored) must point `sdk.dir` at your Android SDK.
+- foreground/background location for child safety location reporting
+- usage access via Android settings for screen-time telemetry
+- notification permission for visible foreground monitoring notifications
+
+The manifest includes the Google Play `isMonitoringTool` metadata flag with
+`child_monitoring`, a visible location foreground service, scoped package visibility
+queries, and no `QUERY_ALL_PACKAGES` permission.
 
 ## Structure
 
-```
+```text
 app/src/main/java/com/familyshield/app/
-  MainActivity.kt          # NavHost + role chooser (home)
-  net/                     # ApiClient, Models, TokenStore
-  parent/                  # ParentViewModel + ParentApp (login → dashboard → child detail)
-  kid/                     # KidViewModel + KidApp (pair → monitored device)
-  ui/                      # OsmMap (osmdroid in Compose), TapOverlay, theme/
+  MainActivity.kt          NavHost and parent/kid startup routing
+  net/                     ApiClient, models, token storage
+  parent/                  Parent UI, ViewModel, app-usage screen
+  kid/                     Kid UI, ViewModel, telemetry, monitoring service
+  ui/                      Maps, shared Compose UI, theme
 ```
 
-## Verified flow
+## Verification
 
-Parent registers → adds a child → generates a pairing code; the kid device pairs
-with that code and sends battery + location; the parent refreshes and sees the
-device online, the location on the map, and a low-battery alert. Verified on a
-Pixel Fold (API 35) emulator against the running backend.
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+```

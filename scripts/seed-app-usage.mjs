@@ -12,9 +12,14 @@ const url = process.env.SEED_DB_URL
   || 'postgres://familyshield:familyshield@localhost:5433/familyshield';
 
 const CATALOG = [
-  ['YouTube', 'Entertainment'], ['Roblox', 'Games'], ['WhatsApp', 'Social'],
-  ['TikTok', 'Entertainment'], ['Spotify', 'Music'], ['Chrome', 'Productivity'],
-  ['Instagram', 'Social'], ['Minecraft', 'Games'],
+  ['com.google.android.youtube', 'YouTube', 'Entertainment'],
+  ['com.roblox.client', 'Roblox', 'Games'],
+  ['com.whatsapp', 'WhatsApp', 'Social'],
+  ['com.zhiliaoapp.musically', 'TikTok', 'Entertainment'],
+  ['com.spotify.music', 'Spotify', 'Music'],
+  ['com.android.chrome', 'Chrome', 'Productivity'],
+  ['com.instagram.android', 'Instagram', 'Social'],
+  ['com.mojang.minecraftpe', 'Minecraft', 'Games'],
 ];
 
 // Deterministic per-child pseudo-random so re-seeding looks stable.
@@ -36,13 +41,13 @@ for (const kid of kids) {
     // today (d=0): a fuller breakdown; past days: 3–4 apps.
     const count = d === 0 ? 6 : 3 + Math.floor(rand() * 2);
     const picks = [...CATALOG].sort(() => rand() - 0.5).slice(0, count);
-    for (const [app, category] of picks) {
+    for (const [packageName, app, category] of picks) {
       const minutes = 8 + Math.floor(rand() * (app === 'YouTube' ? 75 : 50));
       await client.query(
-        `INSERT INTO app_usage (child_id, app, category, minutes, day)
-         VALUES ($1, $2, $3, $4, CURRENT_DATE - $5::int)
-         ON CONFLICT (child_id, app, day) DO UPDATE SET minutes = EXCLUDED.minutes`,
-        [kid.id, app, category, minutes, d],
+        `INSERT INTO app_usage (child_id, package_name, app, category, minutes, day, is_relevant)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_DATE - $6::int, true)
+         ON CONFLICT (child_id, package_name, day) DO UPDATE SET minutes = EXCLUDED.minutes, app = EXCLUDED.app`,
+        [kid.id, packageName, app, category, minutes, d],
       );
       total++;
     }

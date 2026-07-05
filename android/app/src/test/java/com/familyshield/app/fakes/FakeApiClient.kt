@@ -138,8 +138,16 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun appUsage(token: String, childId: String): AppUsageSummary {
         val reported = reportedAppUsage[childId]
         return if (reported == null) appUsageResult else AppUsageSummary(
-            totalTodayMin = reported.sumOf { it.minutes },
-            apps = reported.map { AppUsageEntry(it.app, it.category, it.minutes) },
+            totalTodayMin = reported.filter { it.isRelevant }.sumOf { it.minutes },
+            apps = reported.filter { it.isRelevant }.map {
+                AppUsageEntry(it.app, it.category, it.minutes, it.packageName)
+            },
+            hiddenApps = reported.filter { !it.isRelevant }.map {
+                AppUsageEntry(it.app, it.category, it.minutes, it.packageName, it.hiddenReason)
+            },
+            hiddenTodayMin = reported.filter { !it.isRelevant }.sumOf { it.minutes },
+            hiddenActivityCount = reported.count { !it.isRelevant },
+            lastUpdatedAt = now,
             appUsageAccessGranted = appUsageAccessByChild[childId],
         )
     }

@@ -61,6 +61,8 @@ class KidViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val r = api.pair(code.trim(), platform, AndroidTelemetry.deviceModel())
+                store.parentToken = null
+                store.parentRefreshToken = null
                 store.deviceToken = r.deviceToken
                 deviceToken = r.deviceToken
                 refreshMonitoring(r.deviceToken)

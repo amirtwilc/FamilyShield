@@ -22,7 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val ACTION_STOP = "com.familyshield.app.kid.STOP_MONITORING"
-private const val FIVE_MINUTES_MS = 5 * 60 * 1000L
+private const val APP_USAGE_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
 
 class KidMonitoringService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,7 +65,7 @@ class KidMonitoringService : Service() {
                 stopSelf()
                 return
             }
-            delay(FIVE_MINUTES_MS)
+            delay(APP_USAGE_UPLOAD_INTERVAL_MS)
         }
     }
 

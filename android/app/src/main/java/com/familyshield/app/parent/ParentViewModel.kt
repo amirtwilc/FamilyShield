@@ -267,6 +267,7 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val t = if (register) api.register(email, password) else api.login(email, password)
+                store.deviceToken = null
                 store.parentToken = t.accessToken
                 store.parentRefreshToken = t.refreshToken
                 token = t.accessToken
@@ -282,6 +283,7 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val t = api.googleLogin(idToken)
+                store.deviceToken = null
                 store.parentToken = t.accessToken
                 store.parentRefreshToken = t.refreshToken
                 token = t.accessToken

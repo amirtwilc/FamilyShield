@@ -19,7 +19,7 @@ FamilyShield ships as **one Android app** with two experiences plus a shared bac
 | Experience | Who | Purpose |
 |---|---|---|
 | **Parent** | The guardian | Sign in, manage children, see locations/history/usage, set safe zones, chat, change settings. The app opens here by default. |
-| **Kid device** | The child's phone | A pairing-code flow (no login) that links the device to a parent, then reports location / battery / app usage and lets the child chat back. (In this repo the kid side is a **simulator** for testing.) |
+| **Kid device** | The child's phone | A pairing-code flow (no login) that links the device to a parent, then reports location / battery / app usage and lets the child chat back. |
 | **Backend** | — | A REST API + PostgreSQL/PostGIS data core the apps consume. |
 
 ---
@@ -88,9 +88,9 @@ FamilyShield ships as **one Android app** with two experiences plus a shared bac
   breakdown** (app icon + category + duration + relative usage bar) for YouTube, Roblox,
   WhatsApp, TikTok, Chrome, Spotify, Instagram, Minecraft, etc.
 - An **App Limits** entry point (placeholder for daily time allocations).
-- Data model + API are real; on a real device the kid app would source per-app minutes from
-  Android's `UsageStatsManager` (requires the `PACKAGE_USAGE_STATS` permission). In this
-  repo the data is seeded for the demo.
+- The Android kid app sources per-app minutes from Android's `UsageStatsManager`
+  after usage access is granted. It reports every 5 minutes while paired, and the
+  backend separates relevant launchable apps from hidden system/background activity.
 
 ### 10. Settings
 - **Manage profiles** (add child, rename, per-child status).
@@ -220,7 +220,7 @@ android/app/src/main/java/com/familyshield/app/
   ui/                        # OsmMap, FullScreenMap, theme, effects
   Locales.kt                 # in-app language / RTL
   res/values/, res/values-iw/  # English + Hebrew strings
-stitch_familyshield_safety_monitor/   # Figma design references per screen
+docs/design/stitch_familyshield_safety_monitor/   # Figma design references per screen
 ```
 
 ---
@@ -232,8 +232,8 @@ zones, alerts, multi-child dashboard, parent⇄kid chat, app-usage screen, setti
 English/Hebrew + RTL, Dockerized backend, full backend + Android unit test suites green.
 
 **For production:** deploy the backend behind real **HTTPS** with strong secrets; move the
-rate limiter to a shared store (Redis/Upstash); on-device app-usage via `UsageStatsManager`;
-enforceable **App Limits**; FCM push when the app is closed; Play Store signing + privacy
+rate limiter to a shared store (Redis/Upstash); enforceable **App Limits**; FCM push when
+the app is closed; Play Store signing + privacy
 policy / data-safety disclosures (this is a location + child-monitoring app — Google Play
 has strict requirements for the category).
 

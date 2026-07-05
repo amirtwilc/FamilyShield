@@ -23,6 +23,9 @@ class KidViewModelTest {
     private fun viewModel(api: ApiClient) =
         KidViewModel(api, InMemoryTokenStore(), mainRule.dispatcher)
 
+    private fun viewModel(api: ApiClient, store: InMemoryTokenStore) =
+        KidViewModel(api, store, mainRule.dispatcher)
+
     /** Seeds a parent + child + pairing code and returns (api, parentToken, childId, code). */
     private suspend fun seedCode(api: FakeApiClient): Triple<String, String, String> {
         val token = api.register("parent@x.com", "pw123456").accessToken
@@ -43,6 +46,21 @@ class KidViewModelTest {
         assertNotNull("device token should be set after pairing", vm.deviceToken)
         assertNull(vm.error)
         assertEquals(listOf("parent@x.com"), vm.monitors.map { it.email })
+    }
+
+    @Test
+    fun `pairing as kid clears parent session tokens`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val (_, _, code) = seedCode(api)
+        val store = InMemoryTokenStore(parentToken = "parent-access", parentRefreshToken = "parent-refresh")
+        val vm = viewModel(api, store)
+
+        vm.pair(code, "android")
+        advanceUntilIdle()
+
+        assertNotNull(vm.deviceToken)
+        assertNull(store.parentToken)
+        assertNull(store.parentRefreshToken)
     }
 
     @Test

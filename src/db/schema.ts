@@ -145,12 +145,17 @@ export const messages = pgTable('messages', {
 export const appUsage = pgTable('app_usage', {
   id: uuid('id').primaryKey().defaultRandom(),
   childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  packageName: text('package_name').notNull(),
   app: text('app').notNull(),
   category: text('category').notNull(),
   minutes: integer('minutes').notNull(),
   day: date('day').notNull(),
+  isRelevant: boolean('is_relevant').default(true).notNull(),
+  hiddenReason: text('hidden_reason'),
+  lastReportedAt: timestamp('last_reported_at', { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   byChildDay: index('app_usage_child_day_idx').on(t.childId, t.day),
-  uniqPerApp: uniqueIndex('app_usage_unique_idx').on(t.childId, t.app, t.day),
+  byRelevant: index('app_usage_relevant_idx').on(t.childId, t.day, t.isRelevant),
+  uniqPerApp: uniqueIndex('app_usage_unique_idx').on(t.childId, t.packageName, t.day),
 }));

@@ -50,13 +50,29 @@ export async function POST(req: Request) {
   let appUsageInserted = 0;
   if (usageItems.length > 0) {
     const byKey = new Map<string, typeof usageItems[number]>();
-    for (const it of usageItems) byKey.set(`${it.app}|${it.day ?? ''}`, it);
+    for (const it of usageItems) byKey.set(`${it.package_name ?? it.app}|${it.day ?? ''}`, it);
     const items = [...byKey.values()];
-    const rows = items.map((it) => sql`(${a.device.childId}, ${it.app}, ${it.category}, ${it.minutes}, COALESCE(${it.day ?? null}::date, CURRENT_DATE))`);
+    const rows = items.map((it) => sql`(
+      ${a.device.childId},
+      ${it.package_name ?? it.app},
+      ${it.app},
+      ${it.category},
+      ${it.minutes},
+      COALESCE(${it.day ?? null}::date, CURRENT_DATE),
+      ${it.is_relevant ?? true},
+      ${it.hidden_reason ?? null},
+      now()
+    )`);
     await db.execute(sql`
-      INSERT INTO app_usage (child_id, app, category, minutes, day)
+      INSERT INTO app_usage (child_id, package_name, app, category, minutes, day, is_relevant, hidden_reason, last_reported_at)
       VALUES ${sql.join(rows, sql`, `)}
-      ON CONFLICT (child_id, app, day) DO UPDATE SET minutes = EXCLUDED.minutes, category = EXCLUDED.category`);
+      ON CONFLICT (child_id, package_name, day) DO UPDATE SET
+        app = EXCLUDED.app,
+        minutes = EXCLUDED.minutes,
+        category = EXCLUDED.category,
+        is_relevant = EXCLUDED.is_relevant,
+        hidden_reason = EXCLUDED.hidden_reason,
+        last_reported_at = EXCLUDED.last_reported_at`);
     appUsageInserted = items.length;
   }
 

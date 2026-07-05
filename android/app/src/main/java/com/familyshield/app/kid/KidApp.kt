@@ -1,5 +1,11 @@
 package com.familyshield.app.kid
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -55,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -75,18 +82,31 @@ import kotlinx.coroutines.delay
 @Composable
 fun KidApp(
     onBack: () -> Unit,
+    onKidPaired: () -> Unit,
+    onKidUnpaired: () -> Unit,
     vm: KidViewModel = viewModel(factory = KidViewModel.factory(LocalContext.current)),
 ) {
     val context = LocalContext.current
     var hadDeviceToken by remember { mutableStateOf(vm.deviceToken != null) }
     var settingsOpen by remember { mutableStateOf(false) }
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val foregroundLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        if (Build.VERSION.SDK_INT >= 29 && hasForegroundLocationPermission(context)) {
+            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+    }
     LaunchedEffect(vm.deviceToken) {
         if (vm.deviceToken != null) {
             hadDeviceToken = true
+            onKidPaired()
+            requestKidLocationPermissions(context, foregroundLocationLauncher, backgroundLocationLauncher)
             startKidMonitoring(context)
         } else if (hadDeviceToken) {
             hadDeviceToken = false
             stopKidMonitoring(context)
+            onKidUnpaired()
         }
     }
     if (settingsOpen) {
@@ -96,9 +116,29 @@ fun KidApp(
     } else {
         var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
         if (chatMonitor != null) KidChatScreen(vm, monitor = chatMonitor!!, onBack = { chatMonitor = null })
-        else DeviceDashboard(vm, onBack, onSettings = { settingsOpen = true }, onChat = { chatMonitor = it })
+        else DeviceDashboard(vm, onSettings = { settingsOpen = true }, onChat = { chatMonitor = it })
     }
 }
+
+private fun requestKidLocationPermissions(
+    context: Context,
+    foregroundLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
+    backgroundLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+) {
+    if (!hasForegroundLocationPermission(context)) {
+        foregroundLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        return
+    }
+    if (Build.VERSION.SDK_INT >= 29 &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+    ) {
+        backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
+}
+
+private fun hasForegroundLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
 /* ------------------------------- Connect to Parent ------------------------------- */
 
@@ -277,7 +317,7 @@ private fun PingDot(color: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onSettings: () -> Unit, onChat: (Monitor) -> Unit) {
+private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (Monitor) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbar = remember { SnackbarHostState() }
@@ -322,7 +362,6 @@ private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onSettings: ()
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.kid_my_device), style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back)) } },
                 actions = {
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings))

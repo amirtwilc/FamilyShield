@@ -1,5 +1,6 @@
 *.iml
 .gradle/
+/.kotlin/
 /local.properties
 .idea/
 build/
@@ -7,7 +8,12 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.apk
+*.aab
+*.ap_
+google-services.json
+app/google-services.json
 *.keystore
+*.jks
 # local verification artifacts (screenshots at the android/ root only — NOT res/ assets)
 /*.png
 /ui.xml
