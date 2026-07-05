@@ -182,6 +182,7 @@
     <string name="appusage_limits_title">App Limits</string>
     <string name="appusage_limits_body">Manage daily time allocations</string>
     <string name="appusage_empty">No app usage recorded yet.</string>
+    <string name="appusage_permission_missing">App usage access is not enabled on the kid device. Open the kid device and enable Usage Access for FamilyShield to start tracking app activity.</string>
     <string name="appusage_limits_soon">App limits are coming soon.</string>
 
     <!-- Language picker -->
@@ -201,7 +202,7 @@
     <string name="kid_monitors_loading">Loading monitoring details...</string>
     <string name="kid_pair_another_parent">Pair another parent</string>
     <string name="kid_monitoring_notification_title">FamilyShield monitoring active</string>
-    <string name="kid_monitoring_notification_body">Linked parents can see this device\'s safety information.</string>
+    <string name="kid_monitoring_notification_body">Linked parents can see this device\'s location, battery/status, app usage, and messages.</string>
     <string name="kid_privacy_label">PRIVACY</string>
     <string name="kid_privacy_title">Secure Tunnel Enabled</string>
     <string name="kid_sync_label">SYNC</string>
@@ -209,6 +210,7 @@
     <string name="kid_waiting">Waiting for connection…</string>
     <string name="kid_version">FamilyShield Guardian System v4.2.0</string>
     <string name="kid_my_device">My device</string>
+    <string name="kid_settings_title">Kid Settings</string>
     <string name="kid_unpair">Unpair</string>
     <string name="kid_unpair_confirm_title">Are you sure?</string>
     <string name="kid_unpair_confirm_body">Remove %1$s from monitoring this device?</string>
@@ -219,6 +221,12 @@
     <string name="kid_location_pending">Waiting for GPS</string>
     <string name="kid_battery_pending">Reading this phone\'s battery...</string>
     <string name="kid_auto_updates">Automatic upload every 5 minutes</string>
+    <string name="kid_app_usage_title">App usage sharing</string>
+    <string name="kid_app_usage_body">FamilyShield shares app names, categories, and minutes used today with linked parents. It does not collect screen contents, keystrokes, URLs, or notification text.</string>
+    <string name="kid_app_usage_help">Tap Open Usage Access, find FamilyShield in the list, open it, and enable usage access. Some devices show separate Personal or Work tabs; if they appear, choose the tab where FamilyShield is listed. Return here afterwards; uploads happen automatically every 5 minutes.</string>
+    <string name="kid_app_usage_enabled">Usage Access enabled</string>
+    <string name="kid_app_usage_disabled">Usage Access not enabled</string>
+    <string name="kid_app_usage_settings">Open Usage Access</string>
     <string name="telemetry">Telemetry</string>
     <string name="charging">Charging</string>
     <string name="status">Status</string>

@@ -154,6 +154,38 @@ data class AppUsageSummary(
     val avgWeekMin: Int = 0,
     val week: List<UsageDay> = emptyList(),
     val apps: List<AppUsageEntry> = emptyList(),
+    val appUsageAccessGranted: Boolean? = null,
+)
+
+@Serializable
+data class AppUsageReportItem(
+    val app: String,
+    val category: String,
+    val minutes: Int,
+    val day: String? = null,
+)
+
+@Serializable
+data class AppUsageReportBody(val items: List<AppUsageReportItem>)
+
+@Serializable
+data class AppUsageTelemetryBody(
+    @SerialName("access_granted") val accessGranted: Boolean,
+    val items: List<AppUsageReportItem> = emptyList(),
+)
+
+@Serializable
+data class DeviceTelemetryBody(
+    val status: StatusBody? = null,
+    val location: LocationPoint? = null,
+    @SerialName("app_usage") val appUsage: AppUsageTelemetryBody? = null,
+)
+
+@Serializable
+data class DeviceTelemetryResult(
+    val ok: Boolean = true,
+    val locationInserted: Int = 0,
+    val appUsageInserted: Int = 0,
 )
 
 @Serializable

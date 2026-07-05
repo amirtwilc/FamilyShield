@@ -5,9 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import com.familyshield.app.net.HttpApiClient
+import com.familyshield.app.net.AppUsageTelemetryBody
 import com.familyshield.app.net.ApiException
+import com.familyshield.app.net.DeviceTelemetryBody
+import com.familyshield.app.net.HttpApiClient
+import com.familyshield.app.net.LocationPoint
 import com.familyshield.app.net.PrefsTokenStore
+import com.familyshield.app.net.StatusBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,10 +71,24 @@ class KidMonitoringService : Service() {
 
     private suspend fun uploadTick(token: String) {
         val telemetry = AndroidTelemetry.snapshot(this)
-        val battery = telemetry.batteryLevel ?: return
-        api.sendStatus(token, battery, telemetry.isCharging)
-        val loc = telemetry.location ?: return
-        api.sendLocation(token, loc.latitude, loc.longitude, battery)
+        val appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(this)
+        val usage = if (appUsageAccessGranted) AppUsageTelemetry.todayUsage(this) else emptyList()
+        val battery = telemetry.batteryLevel
+        val loc = telemetry.location
+        api.sendTelemetry(
+            token,
+            DeviceTelemetryBody(
+                status = battery?.let { StatusBody(it, telemetry.isCharging) },
+                location = if (loc != null) LocationPoint(loc.latitude, loc.longitude, nowIso(), battery) else null,
+                appUsage = AppUsageTelemetryBody(appUsageAccessGranted, usage),
+            ),
+        )
+    }
+
+    private fun nowIso(): String {
+        val df = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+        df.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return df.format(java.util.Date())
     }
 }
 

@@ -146,6 +146,11 @@ During development on Vercel's free tier, `vercel.json` may use `"crons": []`. B
 }
 ```
 
+Before a production Android release, configure Firebase Cloud Messaging on both sides so parent push notifications can be delivered immediately:
+
+- Backend: set `FCM_SERVICE_ACCOUNT_JSON` to the Firebase service-account JSON for the production Firebase project.
+- Android app: add the production Firebase `google-services.json` at `android/app/google-services.json` before building the production APK/AAB. Without this file, Firebase Messaging cannot issue a real FCM token for the parent device, and the backend has no target for push notifications.
+
 ## Run The Android App In An Emulator
 
 Keep the backend running first:

@@ -70,6 +70,8 @@ export const devices = pgTable('devices', {
   fcmToken: text('fcm_token'),
   lastLocation: point('last_location'),
   lastLocationAt: timestamp('last_location_at', { withTimezone: true }),
+  appUsageAccessGranted: boolean('app_usage_access_granted'),
+  appUsageAccessCheckedAt: timestamp('app_usage_access_checked_at', { withTimezone: true }),
 }, (t) => ({ byChild: index('devices_child_idx').on(t.childId) }));
 
 export const pairingCodes = pgTable('pairing_codes', {

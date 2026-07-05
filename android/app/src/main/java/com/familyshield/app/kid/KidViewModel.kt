@@ -37,6 +37,8 @@ class KidViewModel(
     var charging by mutableStateOf<Boolean?>(null)
     var telemetryUpdatedAt by mutableStateOf<String?>(null)
         private set
+    var appUsageAccessGranted by mutableStateOf(false)
+        private set
 
     var message by mutableStateOf<String?>(null)
         private set
@@ -174,15 +176,21 @@ class KidViewModel(
 
     fun refreshTelemetry(context: Context) {
         viewModelScope.launch(dispatcher) {
-            val snapshot = AndroidTelemetry.snapshot(context.applicationContext)
+            val app = context.applicationContext
+            val snapshot = AndroidTelemetry.snapshot(app)
             battery = snapshot.batteryLevel
             charging = snapshot.isCharging
             snapshot.location?.let {
                 lat = it.latitude
                 lng = it.longitude
             }
+            appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(app)
             telemetryUpdatedAt = java.time.OffsetDateTime.now().toString()
         }
+    }
+
+    fun refreshAppUsageAccess(context: Context) {
+        appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(context.applicationContext)
     }
 
     companion object {

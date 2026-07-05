@@ -47,6 +47,8 @@ interface ApiClient {
     suspend fun sendMonitorMessage(token: String, parentId: String, body: String): Message
     suspend fun sendLocation(token: String, lat: Double, lng: Double, battery: Int): InsertResult
     suspend fun sendStatus(token: String, battery: Int, charging: Boolean)
+    suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult
+    suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult
     suspend fun deviceMessages(token: String, after: String? = null): MessagesResponse
     suspend fun sendDeviceMessage(token: String, body: String): Message
 }
@@ -212,6 +214,14 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     override suspend fun sendStatus(token: String, battery: Int, charging: Boolean) {
         requestRaw("POST", "/api/device/status", json.encodeToString(StatusBody(battery, charging)), token)
     }
+
+    override suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult =
+        json.decodeFromString(requestRaw("POST", "/api/device/app-usage",
+            json.encodeToString(AppUsageReportBody(items)), token))
+
+    override suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult =
+        json.decodeFromString(requestRaw("POST", "/api/device/telemetry",
+            json.encodeToString(body), token))
 
     override suspend fun deviceMessages(token: String, after: String?): MessagesResponse {
         val path = "/api/device/messages" + if (after != null) "?after=" + java.net.URLEncoder.encode(after, "UTF-8") else ""

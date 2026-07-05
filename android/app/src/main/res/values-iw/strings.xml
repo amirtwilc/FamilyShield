@@ -182,6 +182,7 @@
     <string name="appusage_limits_title">מגבלות אפליקציה</string>
     <string name="appusage_limits_body">ניהול הקצאות זמן יומיות</string>
     <string name="appusage_empty">לא נרשם שימוש באפליקציות עדיין.</string>
+    <string name="appusage_permission_missing">גישת שימוש באפליקציות אינה מופעלת במכשיר הילד. פתחו את מכשיר הילד והפעילו גישת שימוש עבור FamilyShield כדי להתחיל לעקוב אחר פעילות באפליקציות.</string>
     <string name="appusage_limits_soon">מגבלות אפליקציה יגיעו בקרוב.</string>
 
     <!-- Language picker -->
@@ -202,6 +203,7 @@
     <string name="kid_waiting">ממתין לחיבור…</string>
     <string name="kid_version">מערכת FamilyShield Guardian v4.2.0</string>
     <string name="kid_my_device">המכשיר שלי</string>
+    <string name="kid_settings_title">הגדרות הילד</string>
     <string name="kid_unpair">ביטול צימוד</string>
     <string name="cd_kid_map">מפה המציגה את המיקום הנוכחי של המכשיר</string>
     <string name="kid_current_location">%1$s, %2$s</string>
@@ -209,6 +211,12 @@
     <string name="kid_location_pending">ממתינים ל-GPS</string>
     <string name="kid_battery_pending">קוראים את סוללת הטלפון...</string>
     <string name="kid_auto_updates">העלאה אוטומטית כל 5 דקות</string>
+    <string name="kid_app_usage_title">שיתוף שימוש באפליקציות</string>
+    <string name="kid_app_usage_body">FamilyShield משתף עם הורים מקושרים שמות אפליקציות, קטגוריות ודקות שימוש מהיום. הוא לא אוסף תוכן מסך, הקשות, כתובות אתרים או טקסט מהתראות.</string>
+    <string name="kid_app_usage_help">הקישו על פתיחת גישת שימוש, מצאו את FamilyShield ברשימה, פתחו אותו והפעילו גישת שימוש. במכשירים מסוימים מוצגות לשוניות אישי או עבודה; אם הן מופיעות, בחרו בלשונית שבה FamilyShield מופיע. לאחר מכן חזרו לכאן; ההעלאה מתבצעת אוטומטית כל 5 דקות.</string>
+    <string name="kid_app_usage_enabled">גישת שימוש מופעלת</string>
+    <string name="kid_app_usage_disabled">גישת שימוש לא מופעלת</string>
+    <string name="kid_app_usage_settings">פתיחת גישת שימוש</string>
     <string name="telemetry">טלמטריה</string>
     <string name="charging">בטעינה</string>
     <string name="status">מצב</string>

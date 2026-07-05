@@ -4,6 +4,7 @@ import { registerSchema, loginSchema, refreshSchema, tokenPairSchema } from '@/l
 import { pairSchema } from '@/lib/schemas/pair';
 import { locationBatch } from '@/lib/schemas/locations';
 import { statusSchema } from '@/lib/schemas/status';
+import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
 import { createChildSchema } from '@/lib/schemas/children';
 import { createZoneSchema } from '@/lib/schemas/zones';
 import { pushTokenSchema, historyQuery } from '@/lib/schemas/parent';
@@ -30,6 +31,8 @@ export function buildOpenApiDocument() {
     request: { body: json(locationBatch) }, responses: { 200: { description: 'Ingested' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'post', path: '/api/device/status', security: [{ deviceToken: [] }],
     request: { body: json(statusSchema) }, responses: { 200: { description: 'OK' } } });
+  registry.registerPath({ method: 'post', path: '/api/device/telemetry', security: [{ deviceToken: [] }],
+    request: { body: json(deviceTelemetrySchema) }, responses: { 200: { description: 'Telemetry ingested' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/device/monitoring', security: [{ deviceToken: [] }],
     responses: { 200: { description: 'Current monitoring relationships' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'delete', path: '/api/device/monitors/{parentId}', security: [{ deviceToken: [] }],

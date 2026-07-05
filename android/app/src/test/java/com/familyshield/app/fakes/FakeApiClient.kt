@@ -132,7 +132,43 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun routes(token: String, childId: String): RoutesResponse = routesResult
 
     var appUsageResult = AppUsageSummary()
-    override suspend fun appUsage(token: String, childId: String): AppUsageSummary = appUsageResult
+    private val reportedAppUsage = mutableMapOf<String, List<AppUsageReportItem>>()
+    private val appUsageAccessByChild = mutableMapOf<String, Boolean>()
+
+    override suspend fun appUsage(token: String, childId: String): AppUsageSummary {
+        val reported = reportedAppUsage[childId]
+        return if (reported == null) appUsageResult else AppUsageSummary(
+            totalTodayMin = reported.sumOf { it.minutes },
+            apps = reported.map { AppUsageEntry(it.app, it.category, it.minutes) },
+            appUsageAccessGranted = appUsageAccessByChild[childId],
+        )
+    }
+
+    override suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        reportedAppUsage[childId] = items
+        return InsertResult(items.size)
+    }
+
+    override suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        body.appUsage?.let {
+            appUsageAccessByChild[childId] = it.accessGranted
+            if (it.items.isNotEmpty()) reportedAppUsage[childId] = it.items
+        }
+        body.status?.let { status ->
+            deviceByChild[childId] = (deviceByChild[childId] ?: error("no device"))
+                .copy(batteryLevel = status.batteryLevel, isCharging = status.isCharging, lastSeenAt = now)
+            if (status.batteryLevel <= lowBatteryThreshold) {
+                alertsByChild.getOrPut(childId) { mutableListOf() }
+                    .add(0, Alert("alert-${++seq}", "low_battery", now))
+            }
+        }
+        body.location?.let { location ->
+            locations[childId] = CurrentLocation(location.lat, location.lng, location.recordedAt)
+        }
+        return DeviceTelemetryResult(ok = true, locationInserted = if (body.location == null) 0 else 1, appUsageInserted = body.appUsage?.items?.size ?: 0)
+    }
 
     // ---- Chat ----
     private val messagesByChild = mutableMapOf<String, MutableList<Message>>()

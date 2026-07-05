@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.aspectRatio
@@ -29,9 +30,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.*
@@ -51,7 +55,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.familyshield.app.Locales
 import com.familyshield.app.R
 import com.familyshield.app.net.Monitor
 import com.familyshield.app.ui.OsmMap
@@ -71,6 +79,7 @@ fun KidApp(
 ) {
     val context = LocalContext.current
     var hadDeviceToken by remember { mutableStateOf(vm.deviceToken != null) }
+    var settingsOpen by remember { mutableStateOf(false) }
     LaunchedEffect(vm.deviceToken) {
         if (vm.deviceToken != null) {
             hadDeviceToken = true
@@ -80,19 +89,21 @@ fun KidApp(
             stopKidMonitoring(context)
         }
     }
-    if (vm.deviceToken == null) {
-        ConnectScreen(vm, onBack)
+    if (settingsOpen) {
+        KidSettingsScreen(onBack = { settingsOpen = false })
+    } else if (vm.deviceToken == null) {
+        ConnectScreen(vm, onBack, onSettings = { settingsOpen = true })
     } else {
         var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
         if (chatMonitor != null) KidChatScreen(vm, monitor = chatMonitor!!, onBack = { chatMonitor = null })
-        else DeviceDashboard(vm, onBack, onChat = { chatMonitor = it })
+        else DeviceDashboard(vm, onBack, onSettings = { settingsOpen = true }, onChat = { chatMonitor = it })
     }
 }
 
 /* ------------------------------- Connect to Parent ------------------------------- */
 
 @Composable
-private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit) {
+private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var disclosureAccepted by remember { mutableStateOf(false) }
 
@@ -105,6 +116,9 @@ private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit) {
         Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = onSettings, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings), tint = MaterialTheme.colorScheme.primary)
             }
             Column(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,8 +277,9 @@ private fun PingDot(color: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onChat: (Monitor) -> Unit) {
+private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onSettings: () -> Unit, onChat: (Monitor) -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val snackbar = remember { SnackbarHostState() }
     var addParentOpen by remember { mutableStateOf(false) }
     var pendingUnpair by remember { mutableStateOf<Monitor?>(null) }
@@ -272,10 +287,18 @@ private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onChat: (Monit
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(Unit) {
         vm.refreshMonitoring()
+        vm.refreshAppUsageAccess(context)
         while (true) {
             vm.refreshTelemetry(context)
             delay(30_000)
         }
+    }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refreshAppUsageAccess(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (addParentOpen) AddParentDialog(vm, onDismiss = { addParentOpen = false })
@@ -300,6 +323,11 @@ private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onChat: (Monit
             TopAppBar(
                 title = { Text(stringResource(R.string.kid_my_device), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back)) } },
+                actions = {
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings))
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -400,6 +428,96 @@ private fun DeviceDashboard(vm: KidViewModel, onBack: () -> Unit, onChat: (Monit
                     )
                     TelemetryRow(Icons.Filled.Bolt, stringResource(R.string.status), stringResource(R.string.kid_auto_updates))
                 }
+            }
+            AppUsageAccessCard(vm, context)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KidSettingsScreen(onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.kid_settings_title), style = MaterialTheme.typography.titleLarge) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back)) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { pad ->
+        Column(
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).widthIn(max = 600.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            KidLanguageCard()
+        }
+    }
+}
+
+@Composable
+private fun KidLanguageCard() {
+    val context = LocalContext.current
+    val current = remember { Locales.saved(context) }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Filled.Language, null, tint = MaterialTheme.colorScheme.secondary)
+                Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.height(4.dp))
+            KidLanguageOption(stringResource(R.string.lang_system), current == "") { Locales.apply(context, "") }
+            KidLanguageOption(stringResource(R.string.lang_english), current == "en") { Locales.apply(context, "en") }
+            KidLanguageOption(stringResource(R.string.lang_hebrew), current == "he") { Locales.apply(context, "he") }
+        }
+    }
+}
+
+@Composable
+private fun KidLanguageOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun AppUsageAccessCard(vm: KidViewModel, context: android.content.Context) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.Apps, null, tint = MaterialTheme.colorScheme.secondary)
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.kid_app_usage_title), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(if (vm.appUsageAccessGranted) R.string.kid_app_usage_enabled else R.string.kid_app_usage_disabled),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (vm.appUsageAccessGranted) Green else MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Text(
+                stringResource(R.string.kid_app_usage_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.kid_app_usage_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { context.startActivity(AppUsageTelemetry.usageAccessIntent()) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.Settings, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.kid_app_usage_settings))
             }
         }
     }

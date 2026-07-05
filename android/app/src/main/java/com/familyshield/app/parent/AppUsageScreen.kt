@@ -84,7 +84,11 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                 if (usage == null) {
                     Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else if (usage.totalTodayMin == 0 && usage.apps.isEmpty()) {
-                    Text(stringResource(R.string.appusage_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        stringResource(if (usage.appUsageAccessGranted == false) R.string.appusage_permission_missing else R.string.appusage_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 } else {
                     SummaryCard(usage.totalTodayMin, usage.yesterdayMin)
                     WeeklyTrend(usage.week.map { it.dow to it.min }, usage.avgWeekMin)

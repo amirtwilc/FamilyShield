@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
+import { devices } from '@/db/schema';
 import { requireParent } from '@/lib/auth/parent';
 import { assertChildOwned } from '@/lib/ownership';
 import { ok, err } from '@/lib/http';
@@ -21,6 +22,11 @@ export async function GET(req: Request, { params }: Ctx) {
   const appsR = await db.execute(sql`
     SELECT app, category, SUM(minutes)::int AS min FROM app_usage
     WHERE child_id=${id} AND day = CURRENT_DATE GROUP BY app, category ORDER BY min DESC`);
+  const accessR = await db.execute(sql`
+    SELECT
+      bool_or(${devices.appUsageAccessGranted}) FILTER (WHERE ${devices.appUsageAccessGranted} IS NOT NULL) AS granted
+    FROM ${devices}
+    WHERE ${devices.childId} = ${id} AND ${devices.revokedAt} IS NULL`);
   const weekR = await db.execute(sql`
     SELECT to_char(d.day::date, 'YYYY-MM-DD') AS day, COALESCE(SUM(u.minutes),0)::int AS min
     FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, interval '1 day') AS d(day)
@@ -35,5 +41,6 @@ export async function GET(req: Request, { params }: Ctx) {
   const avgWeekMin = Math.round(week.reduce((s, w) => s + w.min, 0) / 7);
   const apps = (appsR.rows as { app: string; category: string; min: number }[])
     .map((r) => ({ app: r.app, category: r.category, min: r.min }));
-  return ok({ totalTodayMin, yesterdayMin, avgWeekMin, week, apps });
+  const appUsageAccessGranted = (accessR.rows[0] as { granted: boolean | null }).granted;
+  return ok({ totalTodayMin, yesterdayMin, avgWeekMin, week, apps, appUsageAccessGranted });
 }
