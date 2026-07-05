@@ -79,15 +79,6 @@ export function buildOpenApiDocument() {
       avgWeekMin: z.number(),
       week: z.array(z.object({ day: z.string(), dow: z.string(), min: z.number() })),
       apps: z.array(z.object({ packageName: z.string(), app: z.string(), category: z.string(), min: z.number() })),
-      hiddenApps: z.array(z.object({
-        packageName: z.string(),
-        app: z.string(),
-        category: z.string(),
-        hiddenReason: z.string(),
-        min: z.number(),
-      })),
-      hiddenTodayMin: z.number(),
-      hiddenActivityCount: z.number(),
       lastUpdatedAt: z.union([z.string(), z.null()]),
       appUsageAccessGranted: z.union([z.boolean(), z.null()]),
     })) } } });

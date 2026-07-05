@@ -9,6 +9,7 @@ import { parseBody } from '@/lib/validate';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
 
 export const runtime = 'nodejs';
+const MIN_REPORTED_MINUTES = 5;
 
 export async function POST(req: Request) {
   const a = await requireDevice(req); if ('response' in a) return a.response;
@@ -50,8 +51,16 @@ export async function POST(req: Request) {
   let appUsageInserted = 0;
   if (usageItems.length > 0) {
     const byKey = new Map<string, typeof usageItems[number]>();
-    for (const it of usageItems) byKey.set(`${it.package_name ?? it.app}|${it.day ?? ''}`, it);
+    for (const it of usageItems) {
+      if ((it.is_relevant ?? true) !== true || it.minutes < MIN_REPORTED_MINUTES) continue;
+      byKey.set(`${it.package_name ?? it.app}|${it.day ?? ''}`, it);
+    }
     const items = [...byKey.values()];
+    if (items.length === 0) {
+      const [fresh] = await db.select().from(devices).where(eq(devices.id, deviceId));
+      await fireLowBatteryIfNeeded(fresh);
+      return ok({ ok: true, locationInserted, appUsageInserted: 0 });
+    }
     const rows = items.map((it) => sql`(
       ${a.device.childId},
       ${it.package_name ?? it.app},
@@ -59,8 +68,8 @@ export async function POST(req: Request) {
       ${it.category},
       ${it.minutes},
       COALESCE(${it.day ?? null}::date, CURRENT_DATE),
-      ${it.is_relevant ?? true},
-      ${it.hidden_reason ?? null},
+      true,
+      null,
       now()
     )`);
     await db.execute(sql`
@@ -70,8 +79,8 @@ export async function POST(req: Request) {
         app = EXCLUDED.app,
         minutes = EXCLUDED.minutes,
         category = EXCLUDED.category,
-        is_relevant = EXCLUDED.is_relevant,
-        hidden_reason = EXCLUDED.hidden_reason,
+        is_relevant = true,
+        hidden_reason = NULL,
         last_reported_at = EXCLUDED.last_reported_at`);
     appUsageInserted = items.length;
   }

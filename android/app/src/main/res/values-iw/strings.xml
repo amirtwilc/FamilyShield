@@ -179,10 +179,6 @@
     <string name="appusage_avg">ממוצע: %1$s</string>
     <string name="appusage_breakdown">פירוט</string>
     <string name="appusage_relevant_apps">אפליקציות רלוונטיות</string>
-    <string name="appusage_system_activity">פעילות מערכת</string>
-    <string name="appusage_system_summary">%1$d פעילויות מוסתרות · %2$s</string>
-    <string name="appusage_system_help">מסכי בית, מקלדות ורכיבי מערכת של Android מוסתרים מהרשימה הראשית.</string>
-    <string name="appusage_only_system">היום נרשמה רק פעילות מערכת. אפליקציות של הילד יופיעו כאן אחרי שימוש.</string>
     <string name="appusage_last_updated">עודכן לאחרונה %1$s</string>
     <string name="appusage_see_all">הצג הכול</string>
     <string name="appusage_limits_title">מגבלות אפליקציה</string>

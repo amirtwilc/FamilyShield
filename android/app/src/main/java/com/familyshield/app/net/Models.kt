@@ -147,7 +147,6 @@ data class AppUsageEntry(
     val category: String,
     val min: Int,
     val packageName: String? = null,
-    val hiddenReason: String? = null,
 )
 
 @Serializable
@@ -160,9 +159,6 @@ data class AppUsageSummary(
     val avgWeekMin: Int = 0,
     val week: List<UsageDay> = emptyList(),
     val apps: List<AppUsageEntry> = emptyList(),
-    val hiddenApps: List<AppUsageEntry> = emptyList(),
-    val hiddenTodayMin: Int = 0,
-    val hiddenActivityCount: Int = 0,
     val lastUpdatedAt: String? = null,
     val appUsageAccessGranted: Boolean? = null,
 )
@@ -174,8 +170,6 @@ data class AppUsageReportItem(
     val category: String,
     val minutes: Int,
     val day: String? = null,
-    @SerialName("is_relevant") val isRelevant: Boolean = true,
-    @SerialName("hidden_reason") val hiddenReason: String? = null,
 )
 
 @Serializable

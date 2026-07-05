@@ -138,15 +138,10 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun appUsage(token: String, childId: String): AppUsageSummary {
         val reported = reportedAppUsage[childId]
         return if (reported == null) appUsageResult else AppUsageSummary(
-            totalTodayMin = reported.filter { it.isRelevant }.sumOf { it.minutes },
-            apps = reported.filter { it.isRelevant }.map {
+            totalTodayMin = reported.filter { it.minutes >= 5 }.sumOf { it.minutes },
+            apps = reported.filter { it.minutes >= 5 }.map {
                 AppUsageEntry(it.app, it.category, it.minutes, it.packageName)
             },
-            hiddenApps = reported.filter { !it.isRelevant }.map {
-                AppUsageEntry(it.app, it.category, it.minutes, it.packageName, it.hiddenReason)
-            },
-            hiddenTodayMin = reported.filter { !it.isRelevant }.sumOf { it.minutes },
-            hiddenActivityCount = reported.count { !it.isRelevant },
             lastUpdatedAt = now,
             appUsageAccessGranted = appUsageAccessByChild[childId],
         )
@@ -154,15 +149,16 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     override suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
-        reportedAppUsage[childId] = items
-        return InsertResult(items.size)
+        val visibleItems = items.filter { it.minutes >= 5 }
+        reportedAppUsage[childId] = visibleItems
+        return InsertResult(visibleItems.size)
     }
 
     override suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         body.appUsage?.let {
             appUsageAccessByChild[childId] = it.accessGranted
-            if (it.items.isNotEmpty()) reportedAppUsage[childId] = it.items
+            if (it.items.isNotEmpty()) reportedAppUsage[childId] = it.items.filter { item -> item.minutes >= 5 }
         }
         body.status?.let { status ->
             deviceByChild[childId] = (deviceByChild[childId] ?: error("no device"))
@@ -175,7 +171,11 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         body.location?.let { location ->
             locations[childId] = CurrentLocation(location.lat, location.lng, location.recordedAt)
         }
-        return DeviceTelemetryResult(ok = true, locationInserted = if (body.location == null) 0 else 1, appUsageInserted = body.appUsage?.items?.size ?: 0)
+        return DeviceTelemetryResult(
+            ok = true,
+            locationInserted = if (body.location == null) 0 else 1,
+            appUsageInserted = body.appUsage?.items?.count { it.minutes >= 5 } ?: 0,
+        )
     }
 
     // ---- Chat ----

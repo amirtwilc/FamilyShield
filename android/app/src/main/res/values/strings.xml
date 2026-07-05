@@ -179,10 +179,6 @@
     <string name="appusage_avg">Avg: %1$s</string>
     <string name="appusage_breakdown">Breakdown</string>
     <string name="appusage_relevant_apps">Relevant apps</string>
-    <string name="appusage_system_activity">System activity</string>
-    <string name="appusage_system_summary">%1$d hidden activities · %2$s</string>
-    <string name="appusage_system_help">Launchers, keyboards, and Android system components are hidden from the main app list.</string>
-    <string name="appusage_only_system">Only system activity was recorded today. Child-facing apps will appear here after they are used.</string>
     <string name="appusage_last_updated">Last updated %1$s</string>
     <string name="appusage_see_all">See All</string>
     <string name="appusage_limits_title">App Limits</string>

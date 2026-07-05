@@ -26,7 +26,7 @@ describe('app usage', () => {
     const data = await g.json();
     expect(data.totalTodayMin).toBe(155);
     expect(data.apps[0]).toMatchObject({ packageName: 'com.google.android.youtube', app: 'YouTube', min: 80 });
-    expect(data.hiddenTodayMin).toBe(0);
+    expect(data.hiddenTodayMin).toBeUndefined();
     expect(data.week).toHaveLength(7);
     expect(data.week[6].min).toBe(155); // today is the last bar
   });
@@ -43,7 +43,7 @@ describe('app usage', () => {
     expect((await g.json()).totalTodayMin).toBe(35);
   });
 
-  it('hides system activity from the default parent breakdown', async () => {
+  it('drops system activity and sessions shorter than 5 minutes', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     const { token: dtok } = await seedDevice(c.id);
     const ptok = await signAccess(p.id);
@@ -53,16 +53,18 @@ describe('app usage', () => {
       body: JSON.stringify({ items: [
         { package_name: 'com.nianticlabs.pokemongo', app: 'Pokemon GO', category: 'Games', minutes: 25, is_relevant: true },
         { package_name: 'com.mi.android.globallauncher', app: 'POCO Launcher', category: 'System', minutes: 12, is_relevant: false, hidden_reason: 'launcher' },
+        { package_name: 'com.example.short', app: 'Short Game', category: 'Games', minutes: 4, is_relevant: true },
       ] }) }));
     expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ inserted: 1 });
 
     const g = await usageGet(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
     const data = await g.json();
     expect(data.totalTodayMin).toBe(25);
     expect(data.apps).toHaveLength(1);
     expect(data.apps[0]).toMatchObject({ app: 'Pokemon GO', packageName: 'com.nianticlabs.pokemongo' });
-    expect(data.hiddenTodayMin).toBe(12);
-    expect(data.hiddenActivityCount).toBe(1);
-    expect(data.hiddenApps[0]).toMatchObject({ app: 'POCO Launcher', hiddenReason: 'launcher' });
+    expect(data.hiddenTodayMin).toBeUndefined();
+    expect(data.hiddenActivityCount).toBeUndefined();
+    expect(data.hiddenApps).toBeUndefined();
   });
 });

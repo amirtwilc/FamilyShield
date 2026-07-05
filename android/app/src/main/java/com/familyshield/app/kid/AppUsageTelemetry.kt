@@ -15,6 +15,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 object AppUsageTelemetry {
+    private const val MIN_REPORTED_MINUTES = 5
+
     private val infrastructurePackages = setOf(
         "android",
         "com.android.providers.downloads",
@@ -81,7 +83,7 @@ object AppUsageTelemetry {
 
         return totals.asSequence()
             .filter { (_, foregroundMs) -> foregroundMs > 0 }
-            .map { (packageName, foregroundMs) ->
+            .mapNotNull { (packageName, foregroundMs) ->
                 val info = catalog[packageName]?.info
                     ?: runCatching { pm.getApplicationInfoCompat(packageName) }.getOrNull()
                 val minutes = (foregroundMs / 60_000L).toInt().coerceAtLeast(1)
@@ -93,26 +95,24 @@ object AppUsageTelemetry {
                     homePackages = homePackages,
                     keyboardPackages = keyboardPackages,
                 )
+                if (!classification.isRelevant || minutes < MIN_REPORTED_MINUTES) return@mapNotNull null
                 val label = catalog[packageName]?.label
                     ?: appLabel(pm, info, packageName)
-                val category = if (classification.isRelevant) appCategory(info) else "System"
                 AppUsageReportItem(
                     app = label.take(64),
                     packageName = packageName.take(128),
-                    category = category.take(32),
+                    category = appCategory(info).take(32),
                     minutes = minutes.coerceIn(0, 1440),
                     day = day.toString(),
-                    isRelevant = classification.isRelevant,
-                    hiddenReason = classification.hiddenReason,
                 )
             }
-            .sortedWith(compareByDescending<AppUsageReportItem> { it.isRelevant }.thenByDescending { it.minutes })
+            .sortedByDescending { it.minutes }
             .take(maxItems)
             .toList()
     }
 
     private data class CatalogEntry(val label: String, val info: ApplicationInfo?)
-    private data class Classification(val isRelevant: Boolean, val hiddenReason: String? = null)
+    private data class Classification(val isRelevant: Boolean)
 
     private fun launchableCatalog(pm: PackageManager): Map<String, CatalogEntry> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -156,15 +156,15 @@ object AppUsageTelemetry {
         homePackages: Set<String>,
         keyboardPackages: Set<String>,
     ): Classification {
-        if (packageName == appPackage) return Classification(false, "self")
-        if (packageName in homePackages) return Classification(false, "launcher")
-        if (packageName in keyboardPackages) return Classification(false, "keyboard")
-        if (packageName in infrastructurePackages) return Classification(false, "system_component")
+        if (packageName == appPackage) return Classification(false)
+        if (packageName in homePackages) return Classification(false)
+        if (packageName in keyboardPackages) return Classification(false)
+        if (packageName in infrastructurePackages) return Classification(false)
         if (infrastructurePrefixes.any { packageName.startsWith(it) } && !launchable) {
-            return Classification(false, "system_component")
+            return Classification(false)
         }
-        if (!launchable && info?.isSystemApp() == true) return Classification(false, "system_component")
-        if (!launchable) return Classification(false, "non_launchable")
+        if (!launchable && info?.isSystemApp() == true) return Classification(false)
+        if (!launchable) return Classification(false)
         return Classification(true)
     }
 

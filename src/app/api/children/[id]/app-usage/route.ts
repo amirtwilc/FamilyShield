@@ -9,6 +9,7 @@ export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ id: string }> };
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MIN_VISIBLE_MINUTES = 5;
 
 /** Screen-time summary for a child: today's total + per-app breakdown, the last
  *  7 days of daily totals (for the trend chart), and yesterday's total. */
@@ -20,36 +21,21 @@ export async function GET(req: Request, { params }: Ctx) {
   const today = await db.execute(sql`
     SELECT COALESCE(SUM(minutes),0)::int AS m
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true`);
+    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const yest = await db.execute(sql`
     SELECT COALESCE(SUM(minutes),0)::int AS m
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE - 1 AND is_relevant = true`);
+    WHERE child_id=${id} AND day = CURRENT_DATE - 1 AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const appsR = await db.execute(sql`
     SELECT package_name AS "packageName", app, category, SUM(minutes)::int AS min
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true
+    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}
     GROUP BY package_name, app, category
     ORDER BY min DESC`);
-  const hiddenR = await db.execute(sql`
-    SELECT
-      package_name AS "packageName",
-      app,
-      category,
-      COALESCE(hidden_reason, 'system') AS "hiddenReason",
-      SUM(minutes)::int AS min
-    FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = false
-    GROUP BY package_name, app, category, hidden_reason
-    ORDER BY min DESC`);
-  const hiddenTotalR = await db.execute(sql`
-    SELECT COALESCE(SUM(minutes),0)::int AS m, COUNT(*)::int AS c
-    FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = false`);
   const updatedR = await db.execute(sql`
     SELECT MAX(last_reported_at) AS "lastUpdatedAt"
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE`);
+    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const accessR = await db.execute(sql`
     SELECT
       bool_or(${devices.appUsageAccessGranted}) FILTER (WHERE ${devices.appUsageAccessGranted} IS NOT NULL) AS granted
@@ -58,7 +44,7 @@ export async function GET(req: Request, { params }: Ctx) {
   const weekR = await db.execute(sql`
     SELECT to_char(d.day::date, 'YYYY-MM-DD') AS day, COALESCE(SUM(u.minutes),0)::int AS min
     FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, interval '1 day') AS d(day)
-    LEFT JOIN app_usage u ON u.child_id=${id} AND u.day = d.day::date AND u.is_relevant = true
+    LEFT JOIN app_usage u ON u.child_id=${id} AND u.day = d.day::date AND u.is_relevant = true AND u.minutes >= ${MIN_VISIBLE_MINUTES}
     GROUP BY d.day ORDER BY d.day ASC`);
 
   const totalTodayMin = (today.rows[0] as { m: number }).m;
@@ -69,16 +55,6 @@ export async function GET(req: Request, { params }: Ctx) {
   const avgWeekMin = Math.round(week.reduce((s, w) => s + w.min, 0) / 7);
   const apps = (appsR.rows as { packageName: string; app: string; category: string; min: number }[])
     .map((r) => ({ packageName: r.packageName, app: r.app, category: r.category, min: r.min }));
-  const hiddenApps = (hiddenR.rows as { packageName: string; app: string; category: string; hiddenReason: string; min: number }[])
-    .map((r) => ({
-      packageName: r.packageName,
-      app: r.app,
-      category: r.category,
-      hiddenReason: r.hiddenReason,
-      min: r.min,
-    }));
-  const hiddenTodayMin = (hiddenTotalR.rows[0] as { m: number; c: number }).m;
-  const hiddenActivityCount = (hiddenTotalR.rows[0] as { m: number; c: number }).c;
   const lastUpdatedAt = (updatedR.rows[0] as { lastUpdatedAt: Date | string | null }).lastUpdatedAt;
   const appUsageAccessGranted = (accessR.rows[0] as { granted: boolean | null }).granted;
   return ok({
@@ -87,9 +63,6 @@ export async function GET(req: Request, { params }: Ctx) {
     avgWeekMin,
     week,
     apps,
-    hiddenApps,
-    hiddenTodayMin,
-    hiddenActivityCount,
     lastUpdatedAt,
     appUsageAccessGranted,
   });
