@@ -15,6 +15,7 @@ data class Device(
     val isCharging: Boolean? = null,
     val lastSeenAt: String? = null,
     val revokedAt: String? = null,
+    val isOnline: Boolean? = null,
 )
 
 @Serializable

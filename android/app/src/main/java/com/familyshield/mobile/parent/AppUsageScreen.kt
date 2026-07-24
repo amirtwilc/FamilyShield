@@ -216,7 +216,14 @@ private fun Child.primaryDevice(): Device? =
     devices.filter { it.revokedAt == null }
         .maxByOrNull { it.lastSeenAt ?: "" }
 
-private fun Device.isConnected(): Boolean = revokedAt == null && lastSeenAt != null
+private fun Device.isConnected(): Boolean {
+    if (revokedAt != null) return false
+    isOnline?.let { return it }
+    val last = lastSeenAt ?: return false
+    return runCatching {
+        java.time.Duration.between(OffsetDateTime.parse(last).toInstant(), java.time.Instant.now()).toMinutes() < 30
+    }.getOrDefault(false)
+}
 
 private data class AppVisual(val icon: ImageVector, val tint: Color, val bg: Color)
 

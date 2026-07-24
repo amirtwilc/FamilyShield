@@ -212,6 +212,7 @@ private fun ParentShell(vm: ParentViewModel) {
     var tab by remember { mutableStateOf(Tab.Dashboard) }
     var showSettings by remember { mutableStateOf(false) }
     var appUsageFor by remember { mutableStateOf<String?>(null) }
+    var showAllAlerts by remember { mutableStateOf(false) }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val navLabelStyle = MaterialTheme.typography.labelSmall.copy(
         fontSize = when {
@@ -228,10 +229,16 @@ private fun ParentShell(vm: ParentViewModel) {
     )
     val openSettings = { showSettings = true }
     // Stop chat polling whenever the Chat tab isn't the one on screen.
-    LaunchedEffect(tab, showSettings, appUsageFor) { if (tab != Tab.Chat || showSettings || appUsageFor != null) vm.closeChat() }
+    LaunchedEffect(tab, showSettings, appUsageFor, showAllAlerts) {
+        if (tab != Tab.Chat || showSettings || appUsageFor != null || showAllAlerts) vm.closeChat()
+    }
 
     if (showSettings) {
         SettingsScreen(vm, onBack = { showSettings = false }, onOpenZones = { showSettings = false; tab = Tab.Zones })
+        return
+    }
+    if (showAllAlerts) {
+        AllAlertsScreen(vm, onBack = { showAllAlerts = false })
         return
     }
     appUsageFor?.let { id ->
@@ -271,7 +278,7 @@ private fun ParentShell(vm: ParentViewModel) {
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                Tab.Dashboard -> DashboardTab(vm, onTimeline = { tab = Tab.History }, onSettings = openSettings,
+                Tab.Dashboard -> DashboardTab(vm, onTimeline = { tab = Tab.History }, onAlerts = { showAllAlerts = true }, onSettings = openSettings,
                     onAppUsage = { id -> appUsageFor = id }, snackbar = snackbar)
                 Tab.Chat -> ChatTab(vm, onSettings = openSettings)
                 Tab.Map -> MapTab(vm)
@@ -618,7 +625,14 @@ private fun SettingMini(modifier: Modifier, icon: ImageVector, title: String, bo
 /* --------------------------------- Dashboard --------------------------------- */
 
 @Composable
-private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings: () -> Unit, onAppUsage: (String) -> Unit, snackbar: SnackbarHostState) {
+private fun DashboardTab(
+    vm: ParentViewModel,
+    onTimeline: () -> Unit,
+    onAlerts: () -> Unit,
+    onSettings: () -> Unit,
+    onAppUsage: (String) -> Unit,
+    snackbar: SnackbarHostState,
+) {
     LaunchedEffect(Unit) { vm.loadFamilyOverview() }
     val scope = rememberCoroutineScope()
     var addOpen by remember { mutableStateOf(false) }
@@ -782,7 +796,7 @@ private fun DashboardTab(vm: ParentViewModel, onTimeline: () -> Unit, onSettings
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.recent_alerts), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                    TextButton(onClick = onTimeline) { Text(stringResource(R.string.view_all)) }
+                    TextButton(onClick = onAlerts) { Text(stringResource(R.string.view_all)) }
                 }
                 val fa = if (scopeId == null) vm.familyAlerts else vm.familyAlerts.filter { it.childId == scopeId }
                 if (fa.isEmpty()) {
@@ -820,6 +834,47 @@ private fun FamilyTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
         IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, stringResource(R.string.cd_settings), tint = MaterialTheme.colorScheme.primary) }
+    }
+}
+
+@Composable
+private fun AllAlertsScreen(vm: ParentViewModel, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    LaunchedEffect(Unit) { vm.loadAllFamilyAlerts() }
+    val scopeId = vm.dashboardChildId
+    val alerts = if (scopeId == null) vm.allFamilyAlerts else vm.allFamilyAlerts.filter { it.childId == scopeId }
+
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+            Row(
+                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.primary)
+                }
+                Text(
+                    stringResource(R.string.all_alerts_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Column(
+            Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (vm.loadingAllAlerts) {
+                Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (alerts.isEmpty()) {
+                EmptyCard(Icons.Filled.NotificationsNone, stringResource(R.string.empty_alerts_title), stringResource(R.string.empty_alerts_body))
+            } else {
+                alerts.forEach { FamilyAlertRow(it) }
+            }
+        }
     }
 }
 
@@ -875,10 +930,14 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.alert_named, fa.childName, alertTypeLabel(a.type)),
                     style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(if (low) R.string.alert_battery_body else R.string.alert_status_body),
+                Text(stringResource(when {
+                    low -> R.string.alert_battery_body
+                    a.type == "offline" -> R.string.alert_offline_body
+                    else -> R.string.alert_status_body
+                }),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(timeOf(a.createdAt), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(dateTimeOf(a.createdAt), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -906,7 +965,17 @@ private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, bg
 
 @Composable
 private fun ChatTab(vm: ParentViewModel, onSettings: () -> Unit) {
-    if (vm.chatChildId == null) ConversationList(vm, onSettings) else ChatThread(vm, onSettings)
+    val onlyChild = vm.children.singleOrNull()
+    LaunchedEffect(onlyChild?.id, vm.chatChildId) {
+        if (onlyChild != null && vm.chatChildId == null) vm.openChat(onlyChild.id)
+    }
+    when {
+        onlyChild != null && vm.chatChildId == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        vm.chatChildId == null -> ConversationList(vm, onSettings)
+        else -> ChatThread(vm, onSettings, showBack = onlyChild == null)
+    }
 }
 
 @Composable
@@ -951,7 +1020,7 @@ private fun ConversationRow(vm: ParentViewModel, child: Child, onClick: () -> Un
 }
 
 @Composable
-private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit) {
+private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Boolean) {
     val child = vm.chatChild
     val name = child?.displayName ?: stringResource(R.string.label_child)
     val device = child?.primaryDevice()
@@ -962,6 +1031,7 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit) {
     val zoneName = if (vm.chatChildId == vm.selectedId)
         vm.zones.firstOrNull { z -> loc != null && distanceM(loc.lat, loc.lng, z.lat, z.lng) <= z.radiusM }?.name else null
     val requestMsg = stringResource(R.string.chat_request_location_msg)
+    if (showBack) BackHandler { vm.closeChat() }
     // Only auto-scroll to the bottom when a NEWER message arrives (last id changes),
     // not when older history is prepended.
     LaunchedEffect(vm.chatMessages.lastOrNull()?.id) {
@@ -972,7 +1042,11 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit) {
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { vm.closeChat() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.primary) }
+                if (showBack) {
+                    IconButton(onClick = { vm.closeChat() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 if (child != null) Avatar(name, 40.dp, online = online, avatar = child.avatar)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(name, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
@@ -1109,6 +1183,7 @@ private fun MapTab(vm: ParentViewModel) {
     val loc = vm.location
     val device = child?.primaryDevice()
     val unpaired = device?.isUnpaired() == true
+    val online = device?.isConnected() == true
     val inZone = loc != null && vm.zones.any { distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
 
     Box(Modifier.fillMaxSize()) {
@@ -1128,6 +1203,7 @@ private fun MapTab(vm: ParentViewModel) {
                     Text(stringResource(
                         when {
                             unpaired -> R.string.map_status_unpaired
+                            !online -> R.string.map_status_offline
                             inZone -> R.string.map_status_safe
                             else -> R.string.map_status_moving
                         },
@@ -1391,7 +1467,16 @@ private fun Child.primaryDevice(): Device? =
 
 private fun Device.isUnpaired(): Boolean = revokedAt != null
 
-private fun Device.isConnected(): Boolean = revokedAt == null && lastSeenAt != null
+private fun Device.isConnected(): Boolean {
+    if (revokedAt != null) return false
+    isOnline?.let { return it }
+    val last = lastSeenAt ?: return false
+    return try {
+        java.time.Duration.between(OffsetDateTime.parse(last).toInstant(), java.time.Instant.now()).toMinutes() < 30
+    } catch (e: Exception) {
+        false
+    }
+}
 
 @Composable
 private fun LastActivityText(device: Device?, location: CurrentLocation?) {
@@ -1415,6 +1500,10 @@ private fun rememberPlaceName(lat: Double?, lng: Double?): String {
 private fun timeOf(iso: String): String = try {
     OffsetDateTime.parse(iso).toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a"))
 } catch (e: Exception) { "" }
+
+private fun dateTimeOf(iso: String): String = try {
+    OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("MMM d, h:mm a"))
+} catch (e: Exception) { timeOf(iso) }
 
 private fun ago(iso: String): String = try {
     val mins = java.time.Duration.between(OffsetDateTime.parse(iso).toInstant(), java.time.Instant.now()).toMinutes()

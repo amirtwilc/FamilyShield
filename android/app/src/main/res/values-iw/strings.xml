@@ -85,7 +85,10 @@
     <string name="snack_ring">בקשת צלצול נשלחה אל %1$s</string>
     <string name="snack_emergency">מצב חירום הופעל</string>
 
+    <string name="all_alerts_title">כל ההתראות</string>
+
     <!-- Alerts -->
+    <string name="alert_offline_body">מכשיר הילד לא מקוון</string>
     <string name="alert_low_battery">סוללה חלשה</string>
     <string name="alert_offline">לא מקוון</string>
     <string name="alert_child_unpaired">הילד ניתק את המכשיר</string>
@@ -95,6 +98,7 @@
     <string name="alert_status_body">עדכון מצב המכשיר</string>
 
     <!-- Map -->
+    <string name="map_status_offline">%1$s לא מקוון</string>
     <string name="map_empty_title">אין מיקום פעיל</string>
     <string name="map_empty_body">חברו מכשיר ושלחו מיקום כדי לעקוב כאן.</string>
     <string name="map_status_safe">%1$s נמצא באזור בטוח</string>

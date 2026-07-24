@@ -72,6 +72,10 @@ class ParentViewModel(
         private set
     var familyAlerts by mutableStateOf<List<FamilyAlert>>(emptyList())
         private set
+    var allFamilyAlerts by mutableStateOf<List<FamilyAlert>>(emptyList())
+        private set
+    var loadingAllAlerts by mutableStateOf(false)
+        private set
     /** null = "All Children"; otherwise the focused child id. */
     var dashboardChildId by mutableStateOf<String?>(null)
         private set
@@ -384,6 +388,23 @@ class ParentViewModel(
                 topPlaces = places.sortedByDescending { it.arriveAt }.take(6)
                 familyAlerts = alerts.sortedByDescending { it.alert.createdAt }.take(6)
             } catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun loadAllFamilyAlerts() {
+        if (token == null) return
+        loadingAllAlerts = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                val kids = authed { api.listChildren(it) }
+                children = kids
+                val alerts = ArrayList<FamilyAlert>()
+                for (c in kids) {
+                    authed { api.alerts(it, c.id) }.forEach { a -> alerts.add(FamilyAlert(c.id, c.displayName, a)) }
+                }
+                allFamilyAlerts = alerts.sortedByDescending { it.alert.createdAt }
+            } catch (e: Exception) { error = e.message }
+            finally { loadingAllAlerts = false }
         }
     }
 

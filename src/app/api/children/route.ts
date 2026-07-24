@@ -7,6 +7,7 @@ import { ok, err } from '@/lib/http';
 import { createChildSchema } from '@/lib/schemas/children';
 import { enforceCanAddChild } from '@/lib/retention';
 import { nextAvailableAvatar } from '@/lib/avatars';
+import { isDeviceOnline } from '@/lib/device-status';
 
 export const runtime = 'nodejs';
 
@@ -50,9 +51,13 @@ export async function GET(req: Request) {
     batteryLevel: devices.batteryLevel, isCharging: devices.isCharging, lastSeenAt: devices.lastSeenAt,
     revokedAt: devices.revokedAt,
   }).from(devices).where(inArray(devices.childId, ids));
+  const devicesWithStatus = devs.map((d) => ({
+    ...d,
+    isOnline: isDeviceOnline(d),
+  }));
 
-  const byChild = new Map<string, typeof devs>();
-  for (const d of devs) (byChild.get(d.childId) ?? byChild.set(d.childId, []).get(d.childId)!).push(d);
+  const byChild = new Map<string, typeof devicesWithStatus>();
+  for (const d of devicesWithStatus) (byChild.get(d.childId) ?? byChild.set(d.childId, []).get(d.childId)!).push(d);
   const result = kids.map((k) => ({ ...k, devices: byChild.get(k.id) ?? [] }));
   return ok({ children: result });
 }

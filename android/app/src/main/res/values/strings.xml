@@ -74,6 +74,7 @@
     <string name="empty_places_body">Visited places appear here as your family moves around.</string>
     <string name="place_visited">%1$s visited · %2$s–%3$s</string>
     <string name="recent_alerts">Recent Alerts</string>
+    <string name="all_alerts_title">All Alerts</string>
     <string name="view_all">View All</string>
     <string name="empty_alerts_title">All clear</string>
     <string name="empty_alerts_body">No recent alerts for your family.</string>
@@ -92,6 +93,7 @@
     <string name="alert_generic">Alert</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">Battery is running low</string>
+    <string name="alert_offline_body">Child device is offline</string>
     <string name="alert_status_body">Device status update</string>
 
     <!-- Map -->
@@ -99,6 +101,7 @@
     <string name="map_empty_body">Pair a device and send a location to track it here.</string>
     <string name="map_status_safe">%1$s is in a safe zone</string>
     <string name="map_status_moving">%1$s is on the move</string>
+    <string name="map_status_offline">%1$s is offline</string>
     <string name="map_status_unpaired">%1$s unpaired this device</string>
     <string name="chip_safe_zone">Safe Zone</string>
 

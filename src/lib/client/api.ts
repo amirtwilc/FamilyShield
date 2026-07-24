@@ -38,7 +38,7 @@ async function call<T>(path: string, opts: { method?: string; body?: unknown; to
 export type Tokens = { accessToken: string; refreshToken: string };
 export type Device = {
   id: string; platform: string; model: string | null; batteryLevel: number | null;
-  isCharging: boolean | null; lastSeenAt: string | null; revokedAt: string | null;
+  isCharging: boolean | null; lastSeenAt: string | null; revokedAt: string | null; isOnline?: boolean;
 };
 export type Child = { id: string; displayName: string; avatar: string; devices: Device[] };
 export type CurrentLocation = { lat: number; lng: number; recordedAt: string } | null;
