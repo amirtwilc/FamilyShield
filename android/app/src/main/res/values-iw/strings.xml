@@ -183,6 +183,7 @@
     <string name="appusage_see_all">הצג הכול</string>
     <string name="appusage_limits_title">מגבלות אפליקציה</string>
     <string name="appusage_limits_body">ניהול הקצאות זמן יומיות</string>
+    <string name="appusage_connect_child">חברו את מכשיר הילד כדי לראות שימוש באפליקציות.</string>
     <string name="appusage_empty">לא נרשם שימוש באפליקציות עדיין.</string>
     <string name="appusage_permission_missing">גישת שימוש באפליקציות אינה מופעלת במכשיר הילד. פתחו את מכשיר הילד והפעילו גישת שימוש עבור FamilyShield כדי להתחיל לעקוב אחר פעילות באפליקציות.</string>
     <string name="appusage_limits_soon">מגבלות אפליקציה יגיעו בקרוב.</string>

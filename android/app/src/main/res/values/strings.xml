@@ -183,6 +183,7 @@
     <string name="appusage_see_all">See All</string>
     <string name="appusage_limits_title">App Limits</string>
     <string name="appusage_limits_body">Manage daily time allocations</string>
+    <string name="appusage_connect_child">Connect child device to view app usage.</string>
     <string name="appusage_empty">No app usage recorded yet.</string>
     <string name="appusage_permission_missing">App usage access is not enabled on the kid device. Open the kid device and enable Usage Access for FamilyShield to start tracking app activity.</string>
     <string name="appusage_limits_soon">App limits are coming soon.</string>

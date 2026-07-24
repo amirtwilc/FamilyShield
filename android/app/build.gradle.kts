@@ -5,27 +5,39 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+fun configuredApiBase(): String? = (project.findProperty("API_BASE") as String?)?.trimEnd('/')
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name.contains("Release") }) {
+        val apiBase = configuredApiBase()
+            ?: throw GradleException("Release builds require -PAPI_BASE=https://your-production-backend")
+        if (!apiBase.startsWith("https://")) {
+            throw GradleException("Release API_BASE must use HTTPS, got: $apiBase")
+        }
+    }
+}
+
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.familyshield.app"
+    namespace = "com.familyshield.mobile"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.familyshield.app"
+        applicationId = "com.familyshield.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 3
         versionName = "1.0"
         // Backend base URL.
         //  - Dev default: http://10.0.2.2:3000 (the emulator's alias for the dev PC).
         //  - Physical phone on the LAN:  -PAPI_HOST=192.168.x.x  (-> http://IP:3000)
         //  - Deployed HTTPS server:      -PAPI_BASE=https://your-app.up.railway.app
-        val apiBase = (project.findProperty("API_BASE") as String?)
+        val debugApiBase = configuredApiBase()
             ?: "http://${(project.findProperty("API_HOST") as String?) ?: "10.0.2.2"}:3000"
-        buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+        buildConfigField("String", "API_BASE_URL", "\"$debugApiBase\"")
 
         // Google sign-in: the OAuth *Web* client id (server client id). Blank hides
         // the button.  -PGOOGLE_CLIENT_ID=xxxxx.apps.googleusercontent.com
@@ -36,6 +48,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
+            val releaseApiBase = configuredApiBase() ?: "https://missing-release-api-base.invalid"
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiBase\"")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

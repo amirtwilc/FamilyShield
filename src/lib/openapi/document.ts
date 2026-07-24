@@ -76,8 +76,9 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'App usage summary', ...json(z.object({
       totalTodayMin: z.number(),
       yesterdayMin: z.number(),
+      yesterdayHasData: z.boolean(),
       avgWeekMin: z.number(),
-      week: z.array(z.object({ day: z.string(), dow: z.string(), min: z.number() })),
+      week: z.array(z.object({ day: z.string(), dow: z.string(), min: z.number(), hasData: z.boolean() })),
       apps: z.array(z.object({ packageName: z.string(), app: z.string(), category: z.string(), min: z.number() })),
       lastUpdatedAt: z.union([z.string(), z.null()]),
       appUsageAccessGranted: z.union([z.boolean(), z.null()]),

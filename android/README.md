@@ -49,7 +49,7 @@ Then build and install the Android app:
 cd android
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell monkey -p com.familyshield.app -c android.intent.category.LAUNCHER 1
+adb shell monkey -p com.familyshield.mobile -c android.intent.category.LAUNCHER 1
 ```
 
 `local.properties` is git-ignored and must point `sdk.dir` at the local Android SDK.
@@ -69,7 +69,7 @@ queries, and no `QUERY_ALL_PACKAGES` permission.
 ## Structure
 
 ```text
-app/src/main/java/com/familyshield/app/
+app/src/main/java/com/familyshield/mobile/
   MainActivity.kt          NavHost and parent/kid startup routing
   net/                     ApiClient, models, token storage
   parent/                  Parent UI, ViewModel, app-usage screen

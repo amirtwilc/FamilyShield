@@ -75,6 +75,21 @@ Always include a short component impact list using these labels when applicable:
 
 If `DB` changed, name the exact migration file or database command to run. If `Backend` changed, say that the backend must be redeployed. If `Android app` changed, say that a new APK must be built and installed.
 
+## Testing Requirements
+
+Always add or update tests for new features and behavioral fixes when the behavior can be covered by the repo's test tooling. Keep tests focused on the changed behavior.
+
+After every code change, run the relevant automated tests before reporting completion. At minimum, run backend type-check/tests for backend changes and Android unit/build verification for Android changes.
+
+If any Android app code, resources, Gradle config, permissions, or other APK-affecting files changed, run the Android debug build and create the APK:
+
+```powershell
+cd android
+.\gradlew.bat :app:assembleDebug
+```
+
+If the default Java runtime fails Gradle/Kotlin compatibility, use Android Studio's bundled JBR or another supported JDK root for `JAVA_HOME`, then rerun the build.
+
 ## Local Development Requirements
 
 Required tools:
