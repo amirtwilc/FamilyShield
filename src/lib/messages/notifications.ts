@@ -12,10 +12,36 @@ function notificationBody(body: string): string {
   return `${trimmed.slice(0, MAX_NOTIFICATION_BODY - 3)}...`;
 }
 
+function pushError(error: unknown): Record<string, string | undefined> {
+  const maybe = error as { code?: unknown; message?: unknown };
+  return {
+    code: typeof maybe.code === 'string' ? maybe.code : undefined,
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
 async function sendSafely(token: string, title: string, body: string, data: Record<string, string>): Promise<boolean> {
   try {
-    return await getSender().send(token, title, notificationBody(body), data);
-  } catch {
+    const sent = await getSender().send(token, title, notificationBody(body), data);
+    if (!sent) {
+      console.warn('[push] Chat notification was not sent', {
+        type: data.type,
+        recipient: data.recipient,
+        childId: data.childId,
+        parentId: data.parentId,
+        messageId: data.messageId,
+      });
+    }
+    return sent;
+  } catch (error) {
+    console.error('[push] Chat notification send failed', {
+      type: data.type,
+      recipient: data.recipient,
+      childId: data.childId,
+      parentId: data.parentId,
+      messageId: data.messageId,
+      error: pushError(error),
+    });
     return false;
   }
 }

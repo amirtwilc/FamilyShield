@@ -173,7 +173,7 @@ class KidViewModelTest {
     }
 
     @Test
-    fun `background monitoring status is ready only when all access is granted`() {
+    fun `background monitoring status is ready when required access is granted`() {
         assertEquals(
             true,
             BackgroundMonitoringStatus(
@@ -211,7 +211,7 @@ class KidViewModelTest {
             ).ready,
         )
         assertEquals(
-            false,
+            true,
             BackgroundMonitoringStatus(
                 foregroundLocationGranted = true,
                 backgroundLocationGranted = true,
@@ -236,7 +236,7 @@ class KidViewModelTest {
             manufacturerAccessConfirmed = false,
         ).toPermissionStatus()
         assertEquals("g", generic.g)
-        assertEquals(31, generic.r)
+        assertEquals(15, generic.r)
         assertEquals(15, generic.m)
 
         val xiaomi = BackgroundMonitoringStatus(
@@ -249,7 +249,7 @@ class KidViewModelTest {
             manufacturerAccessConfirmed = false,
         ).toPermissionStatus()
         assertEquals("x", xiaomi.g)
-        assertEquals(63, xiaomi.r)
+        assertEquals(47, xiaomi.r)
         assertEquals(31, xiaomi.m)
     }
 

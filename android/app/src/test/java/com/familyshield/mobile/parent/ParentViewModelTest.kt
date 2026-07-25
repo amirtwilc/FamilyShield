@@ -507,7 +507,8 @@ class ParentViewModelTest {
         )
 
         assertTrue(!device.hasMissingPermissions())
-        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 15)).hasMissingPermissions())
+        assertTrue(!device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 15)).hasMissingPermissions())
+        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 23)).hasMissingPermissions())
         assertTrue(device.copy(permissionStatus = null).hasMissingPermissions() == false)
     }
 }

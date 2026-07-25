@@ -44,7 +44,6 @@ data class BackgroundMonitoringStatus(
             backgroundLocationGranted &&
             notificationsEnabled &&
             batteryUnrestricted &&
-            appUsageGranted &&
             (!manufacturerGuide.requiresManualConfirmation || manufacturerAccessConfirmed)
 
     val requiredMask: Int
@@ -52,7 +51,6 @@ data class BackgroundMonitoringStatus(
             PERMISSION_BACKGROUND_LOCATION or
             PERMISSION_NOTIFICATIONS or
             PERMISSION_BATTERY_UNRESTRICTED or
-            PERMISSION_APP_USAGE or
             (if (manufacturerGuide.requiresManualConfirmation) PERMISSION_MANUFACTURER_BACKGROUND else 0)
 
     val grantedMask: Int

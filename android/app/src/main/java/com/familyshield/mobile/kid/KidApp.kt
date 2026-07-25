@@ -594,17 +594,10 @@ private fun PermissionsCard(
             )
             PermissionRow(
                 icon = Icons.Filled.LocationOn,
-                label = stringResource(R.string.kid_permission_location_foreground),
-                granted = status.foregroundLocationGranted,
+                label = stringResource(R.string.kid_permission_location),
+                granted = status.foregroundLocationGranted && status.backgroundLocationGranted,
                 onClick = { openAppPermissionSettings(context) },
-                onInfo = { info = PermissionInfo.ForegroundLocation },
-            )
-            PermissionRow(
-                icon = Icons.Filled.LocationOn,
-                label = stringResource(R.string.kid_permission_location_background),
-                granted = status.backgroundLocationGranted,
-                onClick = { openAppPermissionSettings(context) },
-                onInfo = { info = PermissionInfo.BackgroundLocation },
+                onInfo = { info = PermissionInfo.Location },
             )
             PermissionRow(
                 icon = Icons.Filled.Notifications,
@@ -660,6 +653,9 @@ private fun PermissionRow(
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        if (checked != null && onCheckedChange != null) {
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        }
         IconButton(onClick = onInfo, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.Info, stringResource(R.string.kid_permission_info, label), modifier = Modifier.size(20.dp))
         }
@@ -669,15 +665,11 @@ private fun PermissionRow(
             tint = if (granted) Green else MaterialTheme.colorScheme.error,
             modifier = Modifier.size(20.dp),
         )
-        if (checked != null && onCheckedChange != null) {
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        }
     }
 }
 
 private enum class PermissionInfo {
-    ForegroundLocation,
-    BackgroundLocation,
+    Location,
     Notifications,
     Battery,
     AppUsage,
@@ -687,8 +679,7 @@ private enum class PermissionInfo {
 @Composable
 private fun permissionInfoTitle(info: PermissionInfo): String = stringResource(
     when (info) {
-        PermissionInfo.ForegroundLocation -> R.string.kid_permission_location_foreground
-        PermissionInfo.BackgroundLocation -> R.string.kid_permission_location_background
+        PermissionInfo.Location -> R.string.kid_permission_location
         PermissionInfo.Notifications -> R.string.kid_permission_notifications
         PermissionInfo.Battery -> R.string.kid_permission_battery
         PermissionInfo.AppUsage -> R.string.kid_permission_app_usage
@@ -699,8 +690,7 @@ private fun permissionInfoTitle(info: PermissionInfo): String = stringResource(
 @Composable
 private fun permissionInfoBody(info: PermissionInfo): String = stringResource(
     when (info) {
-        PermissionInfo.ForegroundLocation -> R.string.kid_permission_location_foreground_info
-        PermissionInfo.BackgroundLocation -> R.string.kid_permission_location_background_info
+        PermissionInfo.Location -> R.string.kid_permission_location_info
         PermissionInfo.Notifications -> R.string.kid_permission_notifications_info
         PermissionInfo.Battery -> R.string.kid_permission_battery_info
         PermissionInfo.AppUsage -> R.string.kid_permission_app_usage_info

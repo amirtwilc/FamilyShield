@@ -1766,7 +1766,9 @@ internal fun Device?.shouldShowBackgroundAccessHelp(): Boolean {
 }
 
 internal fun PermissionStatus?.hasMissingRequiredAccess(): Boolean =
-    this != null && (m and r) != r
+    this != null && (m and criticalRequiredMask()) != criticalRequiredMask()
+
+private fun PermissionStatus.criticalRequiredMask(): Int = r and P_APP_USAGE.inv()
 
 internal fun Device?.hasMissingPermissions(): Boolean =
     this?.permissionStatus.hasMissingRequiredAccess()
@@ -1788,19 +1790,12 @@ private fun PermissionAttentionText(device: Device?) {
 private fun PermissionActionButton(device: Device?, onClick: () -> Unit) {
     if (device == null || device.isUnpaired()) return
     val missing = device.hasMissingPermissions()
+    if (!missing) return
     val label = stringResource(R.string.parent_permissions_action)
-    if (missing) {
-        OutlinedButton(onClick = onClick, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Warning, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.width(8.dp))
-            Text(label)
-        }
-    } else {
-        TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(label)
-        }
+    OutlinedButton(onClick = onClick, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Filled.Warning, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+        Spacer(Modifier.width(8.dp))
+        Text(label)
     }
 }
 
@@ -1842,11 +1837,15 @@ private fun ChildPermissionsDialog(child: Child, onDismiss: () -> Unit) {
 
 @Composable
 private fun ParentPermissionRows(status: PermissionStatus) {
-    ParentPermissionRow(Icons.Filled.LocationOn, stringResource(R.string.parent_permission_location), status, P_FOREGROUND_LOCATION)
-    ParentPermissionRow(Icons.Filled.LocationOn, stringResource(R.string.parent_permission_background_location), status, P_BACKGROUND_LOCATION)
+    ParentPermissionRow(
+        Icons.Filled.LocationOn,
+        stringResource(R.string.parent_permission_location),
+        granted = (status.m and P_FOREGROUND_LOCATION) != 0 && (status.m and P_BACKGROUND_LOCATION) != 0,
+        required = (status.r and P_FOREGROUND_LOCATION) != 0 || (status.r and P_BACKGROUND_LOCATION) != 0,
+    )
     ParentPermissionRow(Icons.Filled.Notifications, stringResource(R.string.parent_permission_notifications), status, P_NOTIFICATIONS)
     ParentPermissionRow(Icons.Filled.BatteryFull, stringResource(R.string.parent_permission_battery), status, P_BATTERY_UNRESTRICTED)
-    ParentPermissionRow(Icons.Filled.Apps, stringResource(R.string.parent_permission_app_usage), status, P_APP_USAGE)
+    ParentPermissionRow(Icons.Filled.Apps, stringResource(R.string.parent_permission_app_usage), granted = (status.m and P_APP_USAGE) != 0, required = true)
     if ((status.r and P_PHONE_BACKGROUND) != 0) {
         ParentPermissionRow(Icons.Filled.PhoneAndroid, stringResource(R.string.parent_permission_phone_background), status, P_PHONE_BACKGROUND)
     }
@@ -1854,8 +1853,12 @@ private fun ParentPermissionRows(status: PermissionStatus) {
 
 @Composable
 private fun ParentPermissionRow(icon: ImageVector, label: String, status: PermissionStatus, bit: Int) {
-    if ((status.r and bit) == 0) return
-    val granted = (status.m and bit) != 0
+    ParentPermissionRow(icon, label, granted = (status.m and bit) != 0, required = (status.r and bit) != 0)
+}
+
+@Composable
+private fun ParentPermissionRow(icon: ImageVector, label: String, granted: Boolean, required: Boolean) {
+    if (!required) return
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
