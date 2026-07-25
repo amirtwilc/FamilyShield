@@ -1,11 +1,16 @@
 package com.familyshield.mobile.ui
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
+import android.graphics.Point
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -20,8 +25,14 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private fun newMap(context: Context, zoom: Double): MapView = MapView(context).apply {
     setTileSource(TileSourceFactory.MAPNIK)
@@ -132,6 +143,16 @@ fun OsmMapZones(
 
 data class MapMarker(val lat: Double, val lng: Double, val label: String)
 
+data class MapPoint(val lat: Double, val lng: Double)
+
+data class FamilyMapMarker(
+    val id: String,
+    val lat: Double,
+    val lng: Double,
+    val label: String,
+    val selected: Boolean = false,
+)
+
 /** OSM map showing several labelled child markers, auto-fitted to all of them. */
 @Composable
 fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, description: String = "Family map") {
@@ -164,6 +185,112 @@ fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, descri
         },
         onRelease = { it.onDetach() },
     )
+}
+
+/** Live map with every located child, all safe zones, parent location, and explicit camera commands. */
+@Composable
+fun OsmLiveFamilyMap(
+    childMarkers: List<FamilyMapMarker>,
+    zones: List<Zone>,
+    parentLocation: MapPoint?,
+    cameraTarget: MapPoint?,
+    cameraCommand: Long,
+    modifier: Modifier = Modifier,
+    zoom: Double = 14.5,
+    description: String = "Map showing family locations and safe zones",
+) {
+    val context = LocalContext.current
+    val mapView = remember { newMap(context, zoom) }
+    var lastCameraCommand by remember { mutableStateOf<Long?>(null) }
+    lifecycleBind(mapView)
+    AndroidView(
+        modifier = modifier.semantics { contentDescription = description },
+        factory = { mapView },
+        update = { mv ->
+            mv.overlays.clear()
+            zones.forEach { z ->
+                if (z.lat != 0.0 || z.lng != 0.0) {
+                    mv.overlays.add(Polygon(mv).apply {
+                        points = Polygon.pointsAsCircle(GeoPoint(z.lat, z.lng), z.radiusM.toDouble())
+                        fillPaint.color = AndroidColor.argb(36, 0x2E, 0x9E, 0x4F)
+                        fillPaint.style = Paint.Style.FILL
+                        outlinePaint.color = AndroidColor.argb(150, 0x2E, 0x9E, 0x4F)
+                        outlinePaint.strokeWidth = 4f
+                        setOnClickListener { _, _, _ -> true }
+                    })
+                    mv.overlays.add(Marker(mv).apply {
+                        position = GeoPoint(z.lat, z.lng)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        title = z.name
+                        setTextIcon(z.name)
+                        infoWindow = null
+                        setOnMarkerClickListener { _, _ -> true }
+                    })
+                }
+            }
+            offsetOverlappingMarkers(childMarkers).forEach { marker ->
+                mv.overlays.add(Marker(mv).apply {
+                    position = GeoPoint(marker.lat, marker.lng)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    title = marker.label
+                    setTextIcon(if (marker.selected) "* ${marker.label}" else marker.label)
+                    alpha = if (marker.selected) 1f else 0.88f
+                    infoWindow = null
+                })
+            }
+            parentLocation?.let { parent ->
+                mv.overlays.add(UserLocationDotOverlay(GeoPoint(parent.lat, parent.lng)))
+            }
+            if (cameraTarget != null && cameraCommand != lastCameraCommand) {
+                if (mv.zoomLevelDouble < zoom) mv.controller.setZoom(zoom)
+                mv.controller.animateTo(GeoPoint(cameraTarget.lat, cameraTarget.lng))
+                lastCameraCommand = cameraCommand
+            }
+            mv.invalidate()
+        },
+        onRelease = { it.onDetach() },
+    )
+}
+
+private class UserLocationDotOverlay(private val point: GeoPoint) : Overlay() {
+    private val screenPoint = Point()
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.argb(55, 0x1A, 0x73, 0xE8)
+        style = Paint.Style.FILL
+    }
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.WHITE
+        style = Paint.Style.FILL
+    }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.rgb(0x1A, 0x73, 0xE8)
+        style = Paint.Style.FILL
+    }
+
+    override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
+        if (shadow) return
+        mapView.projection.toPixels(point, screenPoint)
+        canvas.drawCircle(screenPoint.x.toFloat(), screenPoint.y.toFloat(), 21f, shadowPaint)
+        canvas.drawCircle(screenPoint.x.toFloat(), screenPoint.y.toFloat(), 11f, ringPaint)
+        canvas.drawCircle(screenPoint.x.toFloat(), screenPoint.y.toFloat(), 8f, dotPaint)
+    }
+}
+
+private fun offsetOverlappingMarkers(markers: List<FamilyMapMarker>): List<FamilyMapMarker> {
+    val groups = markers.groupBy { "${(it.lat * 100000).roundToInt()}:${(it.lng * 100000).roundToInt()}" }
+    return groups.values.flatMap { group ->
+        if (group.size == 1) return@flatMap group
+        val centerLat = group.map { it.lat }.average()
+        val centerLng = group.map { it.lng }.average()
+        val radiusM = 18.0
+        group.mapIndexed { index, marker ->
+            val angle = (2.0 * PI * index) / group.size
+            val latOffset = (sin(angle) * radiusM) / 111_320.0
+            val lngMeters = max(0.2, cos(Math.toRadians(centerLat)) * 111_320.0)
+            val lngOffset = (cos(angle) * radiusM) / lngMeters
+            marker.copy(lat = centerLat + latOffset, lng = centerLng + lngOffset)
+        }
+    }
 }
 
 /** Draws a route (departure → return) as a line with two markers. */

@@ -68,6 +68,8 @@ class ParentViewModel(
     // Family-overview (multi-child dashboard) state.
     var allLocations by mutableStateOf<Map<String, CurrentLocation>>(emptyMap())
         private set
+    var mapZonesByChild by mutableStateOf<Map<String, List<Zone>>>(emptyMap())
+        private set
     var topPlaces by mutableStateOf<List<TopPlace>>(emptyList())
         private set
     var familyAlerts by mutableStateOf<List<FamilyAlert>>(emptyList())
@@ -303,6 +305,7 @@ class ParentViewModel(
     fun logout() {
         store.parentToken = null; store.parentRefreshToken = null
         token = null; children = emptyList(); selectedId = null
+        location = null; allLocations = emptyMap(); mapZonesByChild = emptyMap()
     }
 
     fun refreshChildren() {
@@ -339,12 +342,34 @@ class ParentViewModel(
 
     fun select(id: String) {
         selectedId = id; pairingCode = null; location = null; alerts = emptyList()
-        zones = emptyList(); history = emptyList(); distanceKm = 0.0
+        zones = mapZonesByChild[id] ?: emptyList(); history = emptyList(); distanceKm = 0.0
         frequentRoutes = emptyList(); trips = emptyList()
         refreshDetail()
         loadZones()
         loadHistory(today())
         loadRoutes()
+    }
+
+    fun selectMapChild(id: String) {
+        selectedId = id; pairingCode = null; alerts = emptyList()
+        location = allLocations[id]
+        zones = mapZonesByChild[id] ?: emptyList()
+        history = emptyList(); distanceKm = 0.0
+        frequentRoutes = emptyList(); trips = emptyList()
+        loadZones()
+        loadHistory(today())
+        loadRoutes()
+    }
+
+    fun ensureMapTargetChild(): String? {
+        val current = selectedId
+        val target = if (current != null && allLocations.containsKey(current)) {
+            current
+        } else {
+            children.firstOrNull { c -> allLocations.containsKey(c.id) }?.id ?: allLocations.keys.firstOrNull()
+        }
+        if (target != null && target != selectedId) selectMapChild(target)
+        return target
     }
 
     private var liveJob: Job? = null
@@ -362,7 +387,7 @@ class ParentViewModel(
                         val locs = HashMap<String, CurrentLocation>()
                         for (c in kids) authed { api.currentLocation(it, c.id) }?.let { locs[c.id] = it }
                         allLocations = locs
-                        selectedId?.let { location = locs[it] }
+                        location = selectedId?.let { locs[it] }
                     } catch (_: Exception) { /* stay quiet during live polling */ }
                 }
                 delay(intervalMs)
@@ -428,7 +453,24 @@ class ParentViewModel(
         val id = selectedId ?: return
         if (token == null) return
         viewModelScope.launch(dispatcher) {
-            try { zones = authed { api.listZones(it, id) } } catch (e: Exception) { error = e.message }
+            try {
+                val loaded = authed { api.listZones(it, id) }
+                zones = loaded
+                mapZonesByChild = mapZonesByChild + (id to loaded)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun loadMapZones() {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                val kids = if (children.isNotEmpty()) children else authed { api.listChildren(it) }.also { children = it }
+                val loaded = LinkedHashMap<String, List<Zone>>()
+                for (c in kids) loaded[c.id] = authed { api.listZones(it, c.id) }
+                mapZonesByChild = loaded
+                selectedId?.let { id -> zones = loaded[id] ?: emptyList() }
+            } catch (e: Exception) { error = e.message }
         }
     }
 

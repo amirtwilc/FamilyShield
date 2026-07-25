@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
-import { seedParent } from '../helpers/factories';
+import { seedDevice, seedParent } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks, children } from '@/db/schema';
+import { childParentLinks, children, devices } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { signAccess } from '@/lib/auth/jwt';
 import { POST as createChild, GET as listChildren } from '@/app/api/children/route';
 import { DELETE as deleteChild, PATCH as renameChild } from '@/app/api/children/[id]/route';
@@ -104,5 +105,20 @@ describe('children api', () => {
     const listed = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
     expect((await listed.json()).children).toHaveLength(0);
     expect(await db.select().from(children)).not.toContainEqual(expect.objectContaining({ id: child.id }));
+  });
+
+  it('returns child device permission status', async () => {
+    const p = await seedParent('permissions@test.io'); const tok = await signAccess(p.id);
+    const child = await createChild(auth(tok, { displayName: 'Mia' })).then((r) => r.json());
+    const { device } = await seedDevice(child.id);
+    await db.update(devices).set({
+      permissionStatus: { g: 'x', r: 63, m: 31 },
+      permissionStatusCheckedAt: new Date('2026-07-25T10:00:00Z'),
+    }).where(eq(devices.id, device.id));
+
+    const listed = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
+    const body = await listed.json();
+    expect(body.children[0].devices[0].permissionStatus).toEqual({ g: 'x', r: 63, m: 31 });
+    expect(body.children[0].devices[0].permissionStatusCheckedAt).toBeTruthy();
   });
 });

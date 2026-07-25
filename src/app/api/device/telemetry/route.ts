@@ -21,6 +21,12 @@ export async function POST(req: Request) {
     update.batteryLevel = p.data.status.battery_level ?? a.device.batteryLevel;
     update.isCharging = p.data.status.is_charging ?? a.device.isCharging;
     update.fcmToken = p.data.status.fcm_token ?? a.device.fcmToken;
+    if (p.data.status.p) {
+      update.permissionStatus = p.data.status.p;
+      update.permissionStatusCheckedAt = new Date();
+      update.appUsageAccessGranted = Boolean(p.data.status.p.m & 16);
+      update.appUsageAccessCheckedAt = new Date();
+    }
   }
   if (p.data.app_usage) {
     update.appUsageAccessGranted = p.data.app_usage.access_granted;

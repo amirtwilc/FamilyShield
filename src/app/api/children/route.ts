@@ -49,7 +49,8 @@ export async function GET(req: Request) {
   const devs = await db.select({
     id: devices.id, childId: devices.childId, platform: devices.platform, model: devices.model,
     batteryLevel: devices.batteryLevel, isCharging: devices.isCharging, lastSeenAt: devices.lastSeenAt,
-    revokedAt: devices.revokedAt,
+    revokedAt: devices.revokedAt, permissionStatus: devices.permissionStatus,
+    permissionStatusCheckedAt: devices.permissionStatusCheckedAt,
   }).from(devices).where(inArray(devices.childId, ids));
   const devicesWithStatus = devs.map((d) => ({
     ...d,

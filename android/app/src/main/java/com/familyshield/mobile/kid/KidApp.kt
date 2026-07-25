@@ -2,7 +2,6 @@ package com.familyshield.mobile.kid
 
 import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,16 +34,21 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,7 +69,6 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -98,19 +101,24 @@ fun KidApp(
     val context = LocalContext.current
     var hadDeviceToken by remember { mutableStateOf(vm.deviceToken != null) }
     var settingsOpen by remember { mutableStateOf(false) }
-    val backgroundLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        requestKidNotificationPermission(context, notificationLauncher)
+    }
     val foregroundLocationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
-        if (Build.VERSION.SDK_INT >= 29 && hasForegroundLocationPermission(context)) {
+        if (Build.VERSION.SDK_INT >= 29 && hasKidForegroundLocationPermission(context) && !hasKidBackgroundLocationPermission(context)) {
             backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        } else {
+            requestKidNotificationPermission(context, notificationLauncher)
         }
     }
     LaunchedEffect(vm.deviceToken) {
         if (vm.deviceToken != null) {
             hadDeviceToken = true
             onKidPaired()
-            requestKidLocationPermissions(context, foregroundLocationLauncher, backgroundLocationLauncher)
+            requestKidMonitoringPermissions(context, foregroundLocationLauncher, backgroundLocationLauncher, notificationLauncher)
             startKidMonitoring(context)
         } else if (hadDeviceToken) {
             hadDeviceToken = false
@@ -129,25 +137,31 @@ fun KidApp(
     }
 }
 
-private fun requestKidLocationPermissions(
+private fun requestKidMonitoringPermissions(
     context: Context,
     foregroundLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
     backgroundLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>,
 ) {
-    if (!hasForegroundLocationPermission(context)) {
+    if (!hasKidForegroundLocationPermission(context)) {
         foregroundLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         return
     }
-    if (Build.VERSION.SDK_INT >= 29 &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
-    ) {
+    if (Build.VERSION.SDK_INT >= 29 && !hasKidBackgroundLocationPermission(context)) {
         backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        return
     }
+    requestKidNotificationPermission(context, notificationLauncher)
 }
 
-private fun hasForegroundLocationPermission(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+private fun requestKidNotificationPermission(
+    context: Context,
+    notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+) {
+    if (Build.VERSION.SDK_INT >= 33 && !hasKidNotificationPermission(context)) {
+        notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+}
 
 /* ------------------------------- Connect to Parent ------------------------------- */
 
@@ -334,6 +348,7 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
     val snackbar = remember { SnackbarHostState() }
     var addParentOpen by remember { mutableStateOf(false) }
     var pendingUnpair by remember { mutableStateOf<Monitor?>(null) }
+    var monitoringStatus by remember { mutableStateOf(backgroundMonitoringStatus(context)) }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(Unit) {
@@ -341,12 +356,16 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
         vm.refreshAppUsageAccess(context)
         while (true) {
             vm.refreshTelemetry(context)
+            monitoringStatus = backgroundMonitoringStatus(context)
             delay(30_000)
         }
     }
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) vm.refreshAppUsageAccess(context)
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.refreshAppUsageAccess(context)
+                monitoringStatus = backgroundMonitoringStatus(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -479,7 +498,13 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                     TelemetryRow(Icons.Filled.Bolt, stringResource(R.string.status), stringResource(R.string.kid_auto_updates))
                 }
             }
-            AppUsageAccessCard(vm, context)
+            PermissionsCard(
+                status = monitoringStatus,
+                onManualConfirmationChange = { confirmed ->
+                    setManufacturerBackgroundAccessConfirmed(context, confirmed)
+                    monitoringStatus = backgroundMonitoringStatus(context)
+                },
+            )
         }
     }
 }
@@ -488,6 +513,17 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
 @Composable
 private fun KidSettingsScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var monitoringStatus by remember { mutableStateOf(backgroundMonitoringStatus(context)) }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) monitoringStatus = backgroundMonitoringStatus(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -503,10 +539,174 @@ private fun KidSettingsScreen(onBack: () -> Unit) {
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).widthIn(max = 600.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            PermissionsCard(
+                status = monitoringStatus,
+                onManualConfirmationChange = { confirmed ->
+                    setManufacturerBackgroundAccessConfirmed(context, confirmed)
+                    monitoringStatus = backgroundMonitoringStatus(context)
+                },
+            )
             KidLanguageCard()
         }
     }
 }
+
+@Composable
+private fun PermissionsCard(
+    status: BackgroundMonitoringStatus,
+    onManualConfirmationChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    val okColor = Green
+    val warnColor = MaterialTheme.colorScheme.error
+    var info by remember { mutableStateOf<PermissionInfo?>(null) }
+    info?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { info = null },
+            title = { Text(permissionInfoTitle(selected)) },
+            text = { Text(permissionInfoBody(selected)) },
+            confirmButton = {
+                TextButton(onClick = { info = null }) { Text(stringResource(R.string.action_ok)) }
+            },
+        )
+    }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    if (status.ready) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                    null,
+                    tint = if (status.ready) okColor else warnColor,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.kid_permissions_title), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(if (status.ready) R.string.kid_permissions_ready else R.string.kid_permissions_needs_attention),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (status.ready) okColor else warnColor,
+                    )
+                }
+            }
+            Text(
+                stringResource(R.string.kid_permissions_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            PermissionRow(
+                icon = Icons.Filled.LocationOn,
+                label = stringResource(R.string.kid_permission_location_foreground),
+                granted = status.foregroundLocationGranted,
+                onClick = { openAppPermissionSettings(context) },
+                onInfo = { info = PermissionInfo.ForegroundLocation },
+            )
+            PermissionRow(
+                icon = Icons.Filled.LocationOn,
+                label = stringResource(R.string.kid_permission_location_background),
+                granted = status.backgroundLocationGranted,
+                onClick = { openAppPermissionSettings(context) },
+                onInfo = { info = PermissionInfo.BackgroundLocation },
+            )
+            PermissionRow(
+                icon = Icons.Filled.Notifications,
+                label = stringResource(R.string.kid_permission_notifications),
+                granted = status.notificationsEnabled,
+                onClick = { openAppNotificationSettings(context) },
+                onInfo = { info = PermissionInfo.Notifications },
+            )
+            PermissionRow(
+                icon = Icons.Filled.BatteryFull,
+                label = stringResource(R.string.kid_permission_battery),
+                granted = status.batteryUnrestricted,
+                onClick = { openBatteryOptimizationSettings(context) },
+                onInfo = { info = PermissionInfo.Battery },
+            )
+            PermissionRow(
+                icon = Icons.Filled.Apps,
+                label = stringResource(R.string.kid_permission_app_usage),
+                granted = status.appUsageGranted,
+                onClick = { context.startActivity(AppUsageTelemetry.usageAccessIntent()) },
+                onInfo = { info = PermissionInfo.AppUsage },
+            )
+            if (status.manufacturerGuide.requiresManualConfirmation) {
+                PermissionRow(
+                    icon = Icons.Filled.PhoneAndroid,
+                    label = stringResource(R.string.kid_permission_manufacturer_background),
+                    granted = status.manufacturerAccessConfirmed,
+                    onClick = { openManufacturerBackgroundSettings(context) },
+                    onInfo = { info = PermissionInfo.ManufacturerBackground },
+                    checked = status.manufacturerAccessConfirmed,
+                    onCheckedChange = onManualConfirmationChange,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    granted: Boolean,
+    onClick: () -> Unit,
+    onInfo: () -> Unit,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = onInfo, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Info, stringResource(R.string.kid_permission_info, label), modifier = Modifier.size(20.dp))
+        }
+        Icon(
+            if (granted) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+            null,
+            tint = if (granted) Green else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp),
+        )
+        if (checked != null && onCheckedChange != null) {
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+private enum class PermissionInfo {
+    ForegroundLocation,
+    BackgroundLocation,
+    Notifications,
+    Battery,
+    AppUsage,
+    ManufacturerBackground,
+}
+
+@Composable
+private fun permissionInfoTitle(info: PermissionInfo): String = stringResource(
+    when (info) {
+        PermissionInfo.ForegroundLocation -> R.string.kid_permission_location_foreground
+        PermissionInfo.BackgroundLocation -> R.string.kid_permission_location_background
+        PermissionInfo.Notifications -> R.string.kid_permission_notifications
+        PermissionInfo.Battery -> R.string.kid_permission_battery
+        PermissionInfo.AppUsage -> R.string.kid_permission_app_usage
+        PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background
+    },
+)
+
+@Composable
+private fun permissionInfoBody(info: PermissionInfo): String = stringResource(
+    when (info) {
+        PermissionInfo.ForegroundLocation -> R.string.kid_permission_location_foreground_info
+        PermissionInfo.BackgroundLocation -> R.string.kid_permission_location_background_info
+        PermissionInfo.Notifications -> R.string.kid_permission_notifications_info
+        PermissionInfo.Battery -> R.string.kid_permission_battery_info
+        PermissionInfo.AppUsage -> R.string.kid_permission_app_usage_info
+        PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background_info
+    },
+)
 
 @Composable
 private fun KidLanguageCard() {
@@ -535,43 +735,6 @@ private fun KidLanguageOption(label: String, selected: Boolean, onClick: () -> U
     ) {
         RadioButton(selected = selected, onClick = onClick)
         Text(label, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-@Composable
-private fun AppUsageAccessCard(vm: KidViewModel, context: android.content.Context) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.Apps, null, tint = MaterialTheme.colorScheme.secondary)
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.kid_app_usage_title), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(if (vm.appUsageAccessGranted) R.string.kid_app_usage_enabled else R.string.kid_app_usage_disabled),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (vm.appUsageAccessGranted) Green else MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-            Text(
-                stringResource(R.string.kid_app_usage_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                stringResource(R.string.kid_app_usage_help),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = { context.startActivity(AppUsageTelemetry.usageAccessIntent()) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Settings, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.kid_app_usage_settings))
-            }
-        }
     }
 }
 
@@ -642,6 +805,7 @@ private fun AddParentDialog(vm: KidViewModel, onDismiss: () -> Unit) {
 private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit) {
     DisposableEffect(monitor.parentId) { vm.startChat(monitor.parentId); onDispose { vm.stopChat() } }
     LaunchedEffect(vm.error) { vm.error?.let { vm.clearError() } }
+    BackHandler(onBack = onBack)
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     LaunchedEffect(vm.chatMessages.size) {
@@ -657,7 +821,7 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
             )
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().imePadding()) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
             if (vm.chatMessages.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.kid_chat_empty), style = MaterialTheme.typography.bodyMedium,
@@ -670,7 +834,7 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
                         val currentDate = messageLocalDate(m.createdAt)
                         val previousDate = vm.chatMessages.getOrNull(index - 1)?.createdAt?.let { messageLocalDate(it) }
                         if (index == 0 || currentDate != previousDate) KidDateChip(kidChatDateLabel(m.createdAt))
-                        KidBubble(m.sender == "child", m.body, m.createdAt)
+                        KidBubble(m.sender == "child", m.body, m.createdAt, m.readAt != null)
                     }
                 }
             }
@@ -708,16 +872,24 @@ private fun KidDateChip(text: String) {
 }
 
 @Composable
-private fun KidBubble(mine: Boolean, body: String, createdAt: String) {
+private fun KidBubble(mine: Boolean, body: String, createdAt: String, read: Boolean) {
     val bg = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
     val fg = if (mine) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val metaColor = MaterialTheme.colorScheme.onSurfaceVariant
     val shape = RoundedCornerShape(16.dp, 16.dp, if (mine) 4.dp else 16.dp, if (mine) 16.dp else 4.dp)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         Surface(color = bg, shape = shape, shadowElevation = if (mine) 3.dp else 1.dp, modifier = Modifier.widthIn(max = 300.dp)) {
             Text(body, color = fg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
-        Text(formatMessageTime(createdAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(top = 3.dp, start = 4.dp, end = 4.dp))
+        Row(
+            Modifier.padding(top = 4.dp, start = 6.dp, end = 6.dp).heightIn(min = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(formatMessageTime(createdAt), style = MaterialTheme.typography.labelMedium, color = metaColor)
+            if (mine) Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(14.dp),
+                tint = if (read) MaterialTheme.colorScheme.secondary else metaColor)
+        }
     }
 }
 
@@ -732,11 +904,11 @@ private fun KidQuickReplyChip(text: String, onClick: () -> Unit) {
 @Composable
 private fun KidChatInput(value: String, onChange: (String) -> Unit, sending: Boolean, onSend: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
-        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(8.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value, onChange, modifier = Modifier.weight(1f),
                 placeholder = { Text(stringResource(R.string.chat_hint)) }, shape = CircleShape, maxLines = 4)
-            FilledIconButton(onClick = onSend, enabled = value.isNotBlank() && !sending, modifier = Modifier.size(52.dp)) {
+            FilledIconButton(onClick = onSend, enabled = value.isNotBlank() && !sending, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.cd_send))
             }
         }

@@ -24,4 +24,18 @@ describe('device status', () => {
     expect(d.fcmToken).toBe('fcm-abc');
     expect(d.lastSeenAt).toBeTruthy();
   });
+
+  it('stores compact permission status', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const { token, device } = await seedDevice(c.id);
+    const r = await status(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify({ p: { g: 'x', r: 63, m: 47 } }),
+    }));
+    expect(r.status).toBe(200);
+    const [d] = await db.select().from(devices).where(eq(devices.id, device.id));
+    expect(d.permissionStatus).toEqual({ g: 'x', r: 63, m: 47 });
+    expect(d.permissionStatusCheckedAt).toBeTruthy();
+    expect(d.appUsageAccessGranted).toBe(false);
+  });
 });

@@ -167,7 +167,10 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
                     batteryLevel = status.batteryLevel ?: current.batteryLevel,
                     isCharging = status.isCharging ?: current.isCharging,
                     lastSeenAt = now,
+                    permissionStatus = status.permissionStatus ?: current.permissionStatus,
+                    permissionStatusCheckedAt = if (status.permissionStatus != null) now else current.permissionStatusCheckedAt,
                 )
+            status.permissionStatus?.let { appUsageAccessByChild[childId] = (it.m and 16) != 0 }
             if ((status.batteryLevel ?: current.batteryLevel ?: 100) <= lowBatteryThreshold) {
                 alertsByChild.getOrPut(childId) { mutableListOf() }
                     .add(0, Alert("alert-${++seq}", "low_battery", now))
@@ -329,9 +332,16 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         return InsertResult(1)
     }
 
-    override suspend fun sendStatus(token: String, battery: Int, charging: Boolean) {
+    override suspend fun sendStatus(token: String, battery: Int, charging: Boolean, permissionStatus: PermissionStatus?) {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         deviceByChild[childId] = (deviceByChild[childId] ?: error("no device"))
-            .copy(batteryLevel = battery, isCharging = charging, lastSeenAt = now)
+            .copy(
+                batteryLevel = battery,
+                isCharging = charging,
+                permissionStatus = permissionStatus,
+                permissionStatusCheckedAt = if (permissionStatus != null) now else deviceByChild[childId]?.permissionStatusCheckedAt,
+                lastSeenAt = now,
+            )
+        permissionStatus?.let { appUsageAccessByChild[childId] = (it.m and 16) != 0 }
     }
 }

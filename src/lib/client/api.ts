@@ -36,9 +36,11 @@ async function call<T>(path: string, opts: { method?: string; body?: unknown; to
 
 // ---- Parent ----
 export type Tokens = { accessToken: string; refreshToken: string };
+export type PermissionStatus = { g: 'g' | 'x'; r: number; m: number };
 export type Device = {
   id: string; platform: string; model: string | null; batteryLevel: number | null;
   isCharging: boolean | null; lastSeenAt: string | null; revokedAt: string | null; isOnline?: boolean;
+  permissionStatus?: PermissionStatus | null; permissionStatusCheckedAt?: string | null;
 };
 export type Child = { id: string; displayName: string; avatar: string; devices: Device[] };
 export type CurrentLocation = { lat: number; lng: number; recordedAt: string } | null;

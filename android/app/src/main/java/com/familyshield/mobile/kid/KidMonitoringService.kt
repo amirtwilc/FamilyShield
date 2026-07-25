@@ -76,11 +76,7 @@ class KidMonitoringService : Service() {
         val fcmToken = kidFcmTokenOrNull()
         val battery = telemetry.batteryLevel
         val loc = telemetry.location
-        val status = if (battery != null || fcmToken != null) {
-            StatusBody(battery, telemetry.isCharging, fcmToken)
-        } else {
-            null
-        }
+        val status = StatusBody(battery, telemetry.isCharging, fcmToken, permissionStatusPayload(this))
         api.sendTelemetry(
             token,
             DeviceTelemetryBody(
@@ -98,11 +94,16 @@ class KidMonitoringService : Service() {
     }
 }
 
-fun startKidMonitoring(context: Context) {
+fun startKidMonitoring(context: Context): Boolean {
     val app = context.applicationContext
     val intent = Intent(app, KidMonitoringService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(intent)
-    else app.startService(intent)
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(intent)
+        else app.startService(intent)
+        true
+    } catch (_: RuntimeException) {
+        false
+    }
 }
 
 fun stopKidMonitoring(context: Context) {

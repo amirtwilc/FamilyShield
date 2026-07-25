@@ -171,4 +171,94 @@ class KidViewModelTest {
         assertNull(vm.battery)
         assertNull(vm.charging)
     }
+
+    @Test
+    fun `background monitoring status is ready only when all access is granted`() {
+        assertEquals(
+            true,
+            BackgroundMonitoringStatus(
+                foregroundLocationGranted = true,
+                backgroundLocationGranted = true,
+                notificationsEnabled = true,
+                batteryUnrestricted = true,
+                appUsageGranted = true,
+                manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
+                manufacturerAccessConfirmed = true,
+            ).ready,
+        )
+        assertEquals(
+            false,
+            BackgroundMonitoringStatus(
+                foregroundLocationGranted = true,
+                backgroundLocationGranted = true,
+                notificationsEnabled = false,
+                batteryUnrestricted = true,
+                appUsageGranted = true,
+                manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
+                manufacturerAccessConfirmed = true,
+            ).ready,
+        )
+        assertEquals(
+            false,
+            BackgroundMonitoringStatus(
+                foregroundLocationGranted = true,
+                backgroundLocationGranted = true,
+                notificationsEnabled = true,
+                batteryUnrestricted = true,
+                appUsageGranted = true,
+                manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
+                manufacturerAccessConfirmed = false,
+            ).ready,
+        )
+        assertEquals(
+            false,
+            BackgroundMonitoringStatus(
+                foregroundLocationGranted = true,
+                backgroundLocationGranted = true,
+                notificationsEnabled = true,
+                batteryUnrestricted = true,
+                appUsageGranted = false,
+                manufacturerGuide = ManufacturerBackgroundGuide.Generic,
+                manufacturerAccessConfirmed = false,
+            ).ready,
+        )
+    }
+
+    @Test
+    fun `permission status payload uses compact required and granted bitmasks`() {
+        val generic = BackgroundMonitoringStatus(
+            foregroundLocationGranted = true,
+            backgroundLocationGranted = true,
+            notificationsEnabled = true,
+            batteryUnrestricted = true,
+            appUsageGranted = false,
+            manufacturerGuide = ManufacturerBackgroundGuide.Generic,
+            manufacturerAccessConfirmed = false,
+        ).toPermissionStatus()
+        assertEquals("g", generic.g)
+        assertEquals(31, generic.r)
+        assertEquals(15, generic.m)
+
+        val xiaomi = BackgroundMonitoringStatus(
+            foregroundLocationGranted = true,
+            backgroundLocationGranted = true,
+            notificationsEnabled = true,
+            batteryUnrestricted = true,
+            appUsageGranted = true,
+            manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
+            manufacturerAccessConfirmed = false,
+        ).toPermissionStatus()
+        assertEquals("x", xiaomi.g)
+        assertEquals(63, xiaomi.r)
+        assertEquals(31, xiaomi.m)
+    }
+
+    @Test
+    fun `manufacturer background guide detects Xiaomi Poco and Redmi devices`() {
+        assertEquals(ManufacturerBackgroundGuide.Xiaomi, backgroundGuideFor("Xiaomi", "Xiaomi"))
+        assertEquals(ManufacturerBackgroundGuide.Xiaomi, backgroundGuideFor("POCO", "POCO"))
+        assertEquals(ManufacturerBackgroundGuide.Xiaomi, backgroundGuideFor("Xiaomi", "Redmi"))
+        assertEquals(ManufacturerBackgroundGuide.Generic, backgroundGuideFor("Google", "Pixel"))
+        assertEquals(ManufacturerBackgroundGuide.Generic, backgroundGuideFor("Samsung", "Samsung"))
+    }
 }

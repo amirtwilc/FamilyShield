@@ -16,6 +16,10 @@ export async function POST(req: Request) {
     batteryLevel: p.data.battery_level ?? a.device.batteryLevel,
     isCharging: p.data.is_charging ?? a.device.isCharging,
     fcmToken: p.data.fcm_token ?? a.device.fcmToken,
+    permissionStatus: p.data.p ?? a.device.permissionStatus,
+    permissionStatusCheckedAt: p.data.p ? new Date() : a.device.permissionStatusCheckedAt,
+    appUsageAccessGranted: p.data.p ? Boolean(p.data.p.m & 16) : a.device.appUsageAccessGranted,
+    appUsageAccessCheckedAt: p.data.p ? new Date() : a.device.appUsageAccessCheckedAt,
     lastSeenAt: new Date(),
   }).where(eq(devices.id, a.device.id));
   const [fresh] = await db.select().from(devices).where(eq(devices.id, a.device.id));

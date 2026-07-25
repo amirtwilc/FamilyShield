@@ -46,7 +46,7 @@ interface ApiClient {
     suspend fun monitorMessages(token: String, parentId: String, after: String? = null): MessagesResponse
     suspend fun sendMonitorMessage(token: String, parentId: String, body: String): Message
     suspend fun sendLocation(token: String, lat: Double, lng: Double, battery: Int): InsertResult
-    suspend fun sendStatus(token: String, battery: Int, charging: Boolean)
+    suspend fun sendStatus(token: String, battery: Int, charging: Boolean, permissionStatus: PermissionStatus? = null)
     suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult
     suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult
     suspend fun deviceMessages(token: String, after: String? = null): MessagesResponse
@@ -211,8 +211,8 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
             json.encodeToString(batch), token))
     }
 
-    override suspend fun sendStatus(token: String, battery: Int, charging: Boolean) {
-        requestRaw("POST", "/api/device/status", json.encodeToString(StatusBody(battery, charging)), token)
+    override suspend fun sendStatus(token: String, battery: Int, charging: Boolean, permissionStatus: PermissionStatus?) {
+        requestRaw("POST", "/api/device/status", json.encodeToString(StatusBody(battery, charging, permissionStatus = permissionStatus)), token)
     }
 
     override suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult =

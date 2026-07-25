@@ -6,6 +6,8 @@ import com.familyshield.mobile.fakes.InMemoryTokenStore
 import com.familyshield.mobile.net.ApiClient
 import com.familyshield.mobile.net.AppUsageEntry
 import com.familyshield.mobile.net.AppUsageSummary
+import com.familyshield.mobile.net.Device
+import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.UsageDay
 import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.Geo
@@ -210,6 +212,82 @@ class ParentViewModelTest {
         }
 
     @Test
+    fun `map target defaults to first child with live location`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val vm = viewModel(api)
+            vm.authenticate("parent@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+            vm.addChild("Mia"); advanceUntilIdle()
+            val miaId = vm.selectedId!!
+            vm.addChild("Noah"); advanceUntilIdle()
+            val noahId = vm.selectedId!!
+            vm.select(miaId)
+            advanceUntilIdle()
+
+            val code = api.pairingCode(vm.token!!, noahId).code
+            val dt = api.pair(code, "android", null).deviceToken
+            api.sendLocation(dt, lat = 9.0, lng = 1.0, battery = 80)
+
+            vm.startLive(intervalMs = 1000)
+            advanceTimeBy(50); runCurrent()
+
+            assertEquals(noahId, vm.ensureMapTargetChild())
+            assertEquals(noahId, vm.selectedId)
+            assertEquals(9.0, vm.location!!.lat, 1e-9)
+            vm.stopLive()
+        }
+
+    @Test
+    fun `selecting a map child updates selected state and current location`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val vm = viewModel(api)
+            vm.authenticate("parent@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+            vm.addChild("Mia"); advanceUntilIdle()
+            val miaId = vm.selectedId!!
+            vm.addChild("Noah"); advanceUntilIdle()
+            val noahId = vm.selectedId!!
+
+            for ((id, lat) in listOf(miaId to 1.0, noahId to 9.0)) {
+                val code = api.pairingCode(vm.token!!, id).code
+                val dt = api.pair(code, "android", null).deviceToken
+                api.sendLocation(dt, lat = lat, lng = 0.0, battery = 80)
+            }
+            vm.startLive(intervalMs = 1000)
+            advanceTimeBy(50); runCurrent()
+
+            vm.selectMapChild(miaId)
+            runCurrent()
+
+            assertEquals(miaId, vm.selectedId)
+            assertEquals(1.0, vm.location!!.lat, 1e-9)
+            vm.stopLive()
+        }
+
+    @Test
+    fun `loads all map zones keyed by child`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val vm = viewModel(api)
+        vm.authenticate("parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia"); advanceUntilIdle()
+        val miaId = vm.selectedId!!
+        vm.addChild("Noah"); advanceUntilIdle()
+        val noahId = vm.selectedId!!
+        api.createZone(vm.token!!, miaId, "School", 1.0, 2.0, 300)
+        api.createZone(vm.token!!, noahId, "Home", 3.0, 4.0, 150)
+
+        vm.loadMapZones()
+        advanceUntilIdle()
+
+        assertEquals(setOf(miaId, noahId), vm.mapZonesByChild.keys)
+        assertEquals("School", vm.mapZonesByChild[miaId]!!.single().name)
+        assertEquals("Home", vm.mapZonesByChild[noahId]!!.single().name)
+    }
+
+    @Test
     fun `chat round-trip and conversation unread counts`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         val vm = viewModel(api)
@@ -403,4 +481,33 @@ class ParentViewModelTest {
             assertEquals(34.8, vm.location!!.lng, 1e-4)
             assertNull("refresh should not surface an error after kid unpairs", vm.error)
         }
+
+    @Test
+    fun `background access help is shown only for stale paired devices`() {
+        val stalePaired = Device(
+            id = "device-1",
+            platform = "android",
+            lastSeenAt = "2026-07-25T10:00:00Z",
+            isOnline = false,
+        )
+
+        assertTrue(stalePaired.shouldShowBackgroundAccessHelp())
+        assertTrue(!stalePaired.copy(isOnline = true).shouldShowBackgroundAccessHelp())
+        assertTrue(!stalePaired.copy(revokedAt = "2026-07-25T10:05:00Z").shouldShowBackgroundAccessHelp())
+        assertTrue(!stalePaired.copy(lastSeenAt = null).shouldShowBackgroundAccessHelp())
+        assertTrue(!(null as Device?).shouldShowBackgroundAccessHelp())
+    }
+
+    @Test
+    fun `permission warning is shown only when reported required access is missing`() {
+        val device = Device(
+            id = "device-permissions",
+            platform = "android",
+            permissionStatus = PermissionStatus(g = "g", r = 31, m = 31),
+        )
+
+        assertTrue(!device.hasMissingPermissions())
+        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 15)).hasMissingPermissions())
+        assertTrue(device.copy(permissionStatus = null).hasMissingPermissions() == false)
+    }
 }

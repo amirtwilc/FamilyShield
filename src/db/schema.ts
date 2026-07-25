@@ -72,6 +72,8 @@ export const devices = pgTable('devices', {
   lastLocationAt: timestamp('last_location_at', { withTimezone: true }),
   appUsageAccessGranted: boolean('app_usage_access_granted'),
   appUsageAccessCheckedAt: timestamp('app_usage_access_checked_at', { withTimezone: true }),
+  permissionStatus: jsonb('permission_status').$type<{ g: 'g' | 'x'; r: number; m: number }>(),
+  permissionStatusCheckedAt: timestamp('permission_status_checked_at', { withTimezone: true }),
 }, (t) => ({ byChild: index('devices_child_idx').on(t.childId) }));
 
 export const pairingCodes = pgTable('pairing_codes', {

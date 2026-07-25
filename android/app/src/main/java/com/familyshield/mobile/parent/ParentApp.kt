@@ -1,6 +1,9 @@
 package com.familyshield.mobile.parent
 
+import android.Manifest
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +12,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +39,9 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
@@ -42,7 +49,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
@@ -82,12 +89,15 @@ import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.HistoryPoint
+import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.Zone
 import com.familyshield.mobile.ui.Avatar
+import com.familyshield.mobile.ui.FamilyMapMarker
 import com.familyshield.mobile.ui.GradientButton
 import com.familyshield.mobile.ui.MapMarker
+import com.familyshield.mobile.ui.MapPoint
 import com.familyshield.mobile.ui.OsmFamilyMap
-import com.familyshield.mobile.ui.OsmMap
+import com.familyshield.mobile.ui.OsmLiveFamilyMap
 import com.familyshield.mobile.ui.OsmMapZones
 import com.familyshield.mobile.ui.PulsingDot
 import com.familyshield.mobile.ui.childAvatarOptions
@@ -103,6 +113,7 @@ import com.familyshield.mobile.ui.theme.Navy
 import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -315,6 +326,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
 
     var addOpen by remember { mutableStateOf(false) }
     var showAddLimit by remember { mutableStateOf(false) }
+    var permissionsFor by remember { mutableStateOf<Child?>(null) }
     var rename by remember { mutableStateOf<Child?>(null) }
     var pendingDelete by remember { mutableStateOf<Child?>(null) }
     val activeCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
@@ -353,6 +365,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                         child = c,
                         pairingCode = vm.pairingCode.takeIf { c.id == vm.selectedId },
                         onEdit = { rename = c },
+                        onPermissions = { permissionsFor = c },
                         onGenerateCode = {
                             vm.select(c.id)
                             vm.generateCode()
@@ -458,6 +471,9 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
+    permissionsFor?.let { c ->
+        ChildPermissionsDialog(child = c, onDismiss = { permissionsFor = null })
+    }
 }
 
 @Composable
@@ -515,6 +531,7 @@ private fun ChildSettingRow(
     child: Child,
     pairingCode: String?,
     onEdit: () -> Unit,
+    onPermissions: () -> Unit,
     onGenerateCode: () -> Unit,
 ) {
     val device = child.primaryDevice()
@@ -538,9 +555,14 @@ private fun ChildSettingRow(
                     color = if (online) Green else if (unpaired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LastActivityText(device, null)
+                if (device.shouldShowBackgroundAccessHelp()) {
+                    OfflineBackgroundHelpText(compact = true)
+                }
+                PermissionAttentionText(device)
                 }
                 FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.cd_edit_child, child.displayName)) }
             }
+            PermissionActionButton(device, onPermissions)
             OutlinedButton(onClick = onGenerateCode, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.VpnKey, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -640,6 +662,7 @@ private fun DashboardTab(
     val scope = rememberCoroutineScope()
     var addOpen by remember { mutableStateOf(false) }
     var showAddLimit by remember { mutableStateOf(false) }
+    var permissionsFor by remember { mutableStateOf<Child?>(null) }
     val scopeId = vm.dashboardChildId
     val focused = vm.children.find { it.id == scopeId }
     val focusedDevice = focused?.primaryDevice()
@@ -689,6 +712,9 @@ private fun DashboardTab(
             },
         )
     }
+    permissionsFor?.let { child ->
+        ChildPermissionsDialog(child = child, onDismiss = { permissionsFor = null })
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         FamilyTopBar(vm, onSettings = onSettings)
@@ -728,6 +754,11 @@ private fun DashboardTab(
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         }
                         LastActivityText(device, focusedLocation)
+                        if (device.shouldShowBackgroundAccessHelp()) {
+                            OfflineBackgroundHelpText()
+                        }
+                        PermissionAttentionText(device)
+                        PermissionActionButton(device) { child?.let { permissionsFor = it } }
                     }
                     if (focused != null && focusedLocation != null) {
                         DirectionsActionButton(
@@ -739,8 +770,8 @@ private fun DashboardTab(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    if (canPairFocusedChild && focused != null) {
-                        val child = focused
+                    if (canPairFocusedChild) {
+                        val child = focused ?: return@Column
                         OutlinedButton(
                             onClick = {
                                 vm.select(child.id)
@@ -1205,64 +1236,192 @@ private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolea
 
 /* ----------------------------------- Map ----------------------------------- */
 
+private data class LocatedChild(val child: Child, val location: CurrentLocation)
+
 @Composable
 private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
-    val child = vm.selected
-    val loc = vm.location
-    val device = child?.primaryDevice()
-    val unpaired = device?.isUnpaired() == true
-    val online = device?.isConnected() == true
-    val inZone = loc != null && vm.zones.any { distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val locatedChildren = remember(vm.children, vm.allLocations) {
+        vm.children.mapNotNull { child -> vm.allLocations[child.id]?.let { LocatedChild(child, it) } }
+    }
+    val locatedIds = locatedChildren.joinToString(separator = "|") { it.child.id }
+    val allZones = remember(vm.mapZonesByChild) { vm.mapZonesByChild.values.flatten() }
+    var parentLocation by remember { mutableStateOf<MapPoint?>(null) }
+    var cameraTarget by remember { mutableStateOf<MapPoint?>(null) }
+    var cameraCommand by remember { mutableStateOf(0L) }
+    val pagerState = rememberPagerState(pageCount = { locatedChildren.size })
+
+    fun centerOn(point: MapPoint) {
+        cameraTarget = point
+        cameraCommand += 1
+    }
+
+    fun loadParentLocation() {
+        scope.launch { parentLocation = ParentLocation.currentOrLastKnown(context) }
+    }
+
+    val parentLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.any { it }) loadParentLocation()
+    }
+
+    LaunchedEffect(Unit) {
+        vm.loadMapZones()
+        if (ParentLocation.hasPermission(context)) {
+            parentLocation = ParentLocation.currentOrLastKnown(context)
+        } else {
+            parentLocationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+    LaunchedEffect(vm.children.map { it.id }.joinToString(separator = "|")) {
+        vm.loadMapZones()
+    }
+    LaunchedEffect(locatedIds) {
+        val targetId = vm.ensureMapTargetChild()
+        val page = locatedChildren.indexOfFirst { it.child.id == targetId }
+        if (page >= 0) {
+            pagerState.scrollToPage(page)
+            val loc = locatedChildren[page].location
+            centerOn(MapPoint(loc.lat, loc.lng))
+        }
+    }
+    LaunchedEffect(vm.selectedId, locatedIds) {
+        val page = locatedChildren.indexOfFirst { it.child.id == vm.selectedId }
+        if (page >= 0 && page != pagerState.currentPage && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(page)
+        }
+    }
+    LaunchedEffect(pagerState, locatedIds) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                locatedChildren.getOrNull(page)?.let { located ->
+                    if (vm.selectedId != located.child.id) vm.selectMapChild(located.child.id)
+                    centerOn(MapPoint(located.location.lat, located.location.lng))
+                }
+            }
+    }
+
+    val activePage = pagerState.currentPage.coerceIn(0, (locatedChildren.size - 1).coerceAtLeast(0))
+    val activeChildId = locatedChildren.getOrNull(activePage)?.child?.id ?: vm.selectedId
+    val childMarkers = remember(locatedChildren, activeChildId) {
+        locatedChildren.map { located ->
+            FamilyMapMarker(
+                id = located.child.id,
+                lat = located.location.lat,
+                lng = located.location.lng,
+                label = located.child.displayName,
+                selected = located.child.id == activeChildId,
+            )
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
-        if (loc != null) {
-            OsmMapZones(loc.lat, loc.lng, vm.zones, Modifier.fillMaxSize())
+        if (locatedChildren.isNotEmpty() || parentLocation != null || allZones.isNotEmpty()) {
+            OsmLiveFamilyMap(
+                childMarkers = childMarkers,
+                zones = allZones,
+                parentLocation = parentLocation,
+                cameraTarget = cameraTarget,
+                cameraCommand = cameraCommand,
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
                 EmptyCard(Icons.Filled.MyLocation, stringResource(R.string.map_empty_title), stringResource(R.string.map_empty_body))
             }
         }
-        // Floating status card
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp,
-            modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(16.dp).fillMaxWidth().widthIn(max = 560.dp)) {
-            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (child != null) Avatar(child.displayName, 40.dp, online = device?.isConnected() == true, avatar = child.avatar)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(
+        if (locatedChildren.isEmpty()) {
+            Box(Modifier.align(Alignment.Center).padding(16.dp).fillMaxWidth().widthIn(max = 560.dp)) {
+                EmptyCard(Icons.Filled.MyLocation, stringResource(R.string.map_empty_title), stringResource(R.string.map_empty_body))
+            }
+        } else {
+            Box(
+                Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(top = 16.dp).fillMaxWidth().widthIn(max = 592.dp),
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    pageSpacing = 12.dp,
+                ) { page ->
+                    val located = locatedChildren[page]
+                    MapChildInfoCard(
+                        located = located,
+                        zones = vm.mapZonesByChild[located.child.id].orEmpty(),
+                        snackbar = snackbar,
+                        onRecenter = { centerOn(MapPoint(located.location.lat, located.location.lng)) },
+                    )
+                }
+            }
+        }
+        parentLocation?.let { parent ->
+            FloatingActionButton(
+                onClick = { centerOn(parent) },
+                containerColor = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            ) {
+                Icon(Icons.Filled.MyLocation, stringResource(R.string.cd_recenter_parent), tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapChildInfoCard(
+    located: LocatedChild,
+    zones: List<Zone>,
+    snackbar: SnackbarHostState,
+    onRecenter: () -> Unit,
+) {
+    val child = located.child
+    val loc = located.location
+    val device = child.primaryDevice()
+    val unpaired = device?.isUnpaired() == true
+    val online = device?.isConnected() == true
+    val inZone = zones.any { distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Avatar(child.displayName, 40.dp, online = online, avatar = child.avatar)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(
                         when {
                             unpaired -> R.string.map_status_unpaired
                             !online -> R.string.map_status_offline
                             inZone -> R.string.map_status_safe
                             else -> R.string.map_status_moving
                         },
-                        child?.displayName ?: stringResource(R.string.label_child)),
-                        style = MaterialTheme.typography.titleMedium)
-                    if (unpaired && loc != null) {
-                        Text(stringResource(R.string.child_unpaired_last_location),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
-                    LastActivityText(device, loc)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (inZone) Chip(stringResource(R.string.chip_safe_zone), Green, dot = true)
-                        device?.batteryLevel?.let { Chip("$it%", batteryColor(it)) }
-                    }
-                    if (child != null && loc != null) {
-                        DirectionsActionButton(
-                            lat = loc.lat,
-                            lng = loc.lng,
-                            childName = child.displayName,
-                            lastKnown = !online,
-                            snackbar = snackbar,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                        child.displayName,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (unpaired) {
+                    Text(stringResource(R.string.child_unpaired_last_location),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
-                FilledTonalIconButton(onClick = { vm.refreshDetail() }) { Icon(Icons.Filled.Refresh, stringResource(R.string.cd_refresh)) }
+                LastActivityText(device, loc)
+                if (device.shouldShowBackgroundAccessHelp()) {
+                    OfflineBackgroundHelpText(compact = true)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (inZone) Chip(stringResource(R.string.chip_safe_zone), Green, dot = true)
+                    device?.batteryLevel?.let { Chip("$it%", batteryColor(it)) }
+                }
+                DirectionsActionButton(
+                    lat = loc.lat,
+                    lng = loc.lng,
+                    childName = child.displayName,
+                    lastKnown = !online,
+                    snackbar = snackbar,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-        }
-        FloatingActionButton(onClick = { vm.refreshDetail() }, containerColor = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-            Icon(Icons.Filled.MyLocation, stringResource(R.string.cd_locate), tint = Color.White)
+            IconButton(onClick = onRecenter) {
+                Icon(Icons.Filled.MyLocation, stringResource(R.string.cd_recenter_child, child.displayName))
+            }
         }
     }
 }
@@ -1591,6 +1750,134 @@ private fun Device.isConnected(): Boolean {
         java.time.Duration.between(OffsetDateTime.parse(last).toInstant(), java.time.Instant.now()).toMinutes() < 30
     } catch (e: Exception) {
         false
+    }
+}
+
+private const val P_FOREGROUND_LOCATION = 1
+private const val P_BACKGROUND_LOCATION = 2
+private const val P_NOTIFICATIONS = 4
+private const val P_BATTERY_UNRESTRICTED = 8
+private const val P_APP_USAGE = 16
+private const val P_PHONE_BACKGROUND = 32
+
+internal fun Device?.shouldShowBackgroundAccessHelp(): Boolean {
+    val device = this ?: return false
+    return device.revokedAt == null && device.lastSeenAt != null && !device.isConnected()
+}
+
+internal fun PermissionStatus?.hasMissingRequiredAccess(): Boolean =
+    this != null && (m and r) != r
+
+internal fun Device?.hasMissingPermissions(): Boolean =
+    this?.permissionStatus.hasMissingRequiredAccess()
+
+@Composable
+private fun PermissionAttentionText(device: Device?) {
+    if (!device.hasMissingPermissions()) return
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+        Text(
+            stringResource(R.string.parent_permissions_attention),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+@Composable
+private fun PermissionActionButton(device: Device?, onClick: () -> Unit) {
+    if (device == null || device.isUnpaired()) return
+    val missing = device.hasMissingPermissions()
+    val label = stringResource(R.string.parent_permissions_action)
+    if (missing) {
+        OutlinedButton(onClick = onClick, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Warning, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.width(8.dp))
+            Text(label)
+        }
+    } else {
+        TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label)
+        }
+    }
+}
+
+@Composable
+private fun ChildPermissionsDialog(child: Child, onDismiss: () -> Unit) {
+    val device = child.primaryDevice()
+    val status = device?.permissionStatus
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.parent_permissions_title, child.displayName)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    device == null -> Text(stringResource(R.string.parent_permissions_no_device), style = MaterialTheme.typography.bodyMedium)
+                    status == null -> Text(stringResource(R.string.parent_permissions_pending), style = MaterialTheme.typography.bodyMedium)
+                    status.hasMissingRequiredAccess() -> Text(
+                        stringResource(R.string.parent_permissions_attention),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    else -> Text(
+                        stringResource(R.string.parent_permissions_all_enabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Green,
+                    )
+                }
+                if (status != null) {
+                    ParentPermissionRows(status)
+                    device.permissionStatusCheckedAt?.let {
+                        Text(stringResource(R.string.parent_permissions_last_checked, ago(it)),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) } },
+    )
+}
+
+@Composable
+private fun ParentPermissionRows(status: PermissionStatus) {
+    ParentPermissionRow(Icons.Filled.LocationOn, stringResource(R.string.parent_permission_location), status, P_FOREGROUND_LOCATION)
+    ParentPermissionRow(Icons.Filled.LocationOn, stringResource(R.string.parent_permission_background_location), status, P_BACKGROUND_LOCATION)
+    ParentPermissionRow(Icons.Filled.Notifications, stringResource(R.string.parent_permission_notifications), status, P_NOTIFICATIONS)
+    ParentPermissionRow(Icons.Filled.BatteryFull, stringResource(R.string.parent_permission_battery), status, P_BATTERY_UNRESTRICTED)
+    ParentPermissionRow(Icons.Filled.Apps, stringResource(R.string.parent_permission_app_usage), status, P_APP_USAGE)
+    if ((status.r and P_PHONE_BACKGROUND) != 0) {
+        ParentPermissionRow(Icons.Filled.PhoneAndroid, stringResource(R.string.parent_permission_phone_background), status, P_PHONE_BACKGROUND)
+    }
+}
+
+@Composable
+private fun ParentPermissionRow(icon: ImageVector, label: String, status: PermissionStatus, bit: Int) {
+    if ((status.r and bit) == 0) return
+    val granted = (status.m and bit) != 0
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Icon(
+            if (granted) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+            null,
+            tint = if (granted) Green else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun OfflineBackgroundHelpText(compact: Boolean = false) {
+    val text = stringResource(if (compact) R.string.parent_background_hint_short else R.string.parent_background_hint)
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+        Text(
+            text,
+            style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

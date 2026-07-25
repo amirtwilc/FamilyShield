@@ -45,6 +45,10 @@
             android:name="isMonitoringTool"
             android:value="child_monitoring" />
 
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/firebase_default_notification_channel_id" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -60,6 +64,14 @@
             android:name=".kid.KidMonitoringService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <service
+            android:name=".push.FamilyShieldMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".kid.KidBootReceiver"

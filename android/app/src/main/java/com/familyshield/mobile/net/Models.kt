@@ -16,6 +16,15 @@ data class Device(
     val lastSeenAt: String? = null,
     val revokedAt: String? = null,
     val isOnline: Boolean? = null,
+    val permissionStatus: PermissionStatus? = null,
+    val permissionStatusCheckedAt: String? = null,
+)
+
+@Serializable
+data class PermissionStatus(
+    val g: String,
+    val r: Int,
+    val m: Int,
 )
 
 @Serializable
@@ -262,4 +271,5 @@ data class StatusBody(
     @SerialName("battery_level") val batteryLevel: Int? = null,
     @SerialName("is_charging") val isCharging: Boolean? = null,
     @SerialName("fcm_token") val fcmToken: String? = null,
+    @SerialName("p") val permissionStatus: PermissionStatus? = null,
 )

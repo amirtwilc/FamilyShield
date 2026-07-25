@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.familyshield.mobile.kid.KidApp
 import com.familyshield.mobile.net.PrefsTokenStore
 import com.familyshield.mobile.parent.ParentApp
+import com.familyshield.mobile.push.ensureChatPushNotificationChannel
 import com.familyshield.mobile.ui.theme.FamilyShieldTheme
 import org.osmdroid.config.Configuration
 
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         ) {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 4201)
         }
+        ensureChatPushNotificationChannel(this)
         Configuration.getInstance().userAgentValue = packageName
         setContent {
             FamilyShieldTheme {
