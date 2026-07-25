@@ -107,8 +107,17 @@ fun OsmMapZones(
                         fillPaint.style = Paint.Style.FILL
                         outlinePaint.color = AndroidColor.argb(160, 0x2E, 0x9E, 0x4F)
                         outlinePaint.strokeWidth = 4f
+                        setOnClickListener { _, _, _ -> true }
                     }
                     mv.overlays.add(circle)
+                    mv.overlays.add(Marker(mv).apply {
+                        position = GeoPoint(z.lat, z.lng)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        title = z.name
+                        setTextIcon(z.name)
+                        infoWindow = null
+                        setOnMarkerClickListener { _, _ -> true }
+                    })
                 }
             }
             val p = GeoPoint(lat, lng)

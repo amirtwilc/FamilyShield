@@ -7,7 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -93,6 +93,9 @@ import com.familyshield.mobile.ui.PulsingDot
 import com.familyshield.mobile.ui.childAvatarOptions
 import com.familyshield.mobile.ui.FullScreenFamilyMap
 import com.familyshield.mobile.ui.FullScreenMap
+import com.familyshield.mobile.ui.formatMessageDate
+import com.familyshield.mobile.ui.formatMessageTime
+import com.familyshield.mobile.ui.messageLocalDate
 import com.familyshield.mobile.ui.theme.BrandGradient
 import com.familyshield.mobile.ui.theme.Danger
 import com.familyshield.mobile.ui.theme.Green
@@ -281,7 +284,7 @@ private fun ParentShell(vm: ParentViewModel) {
                 Tab.Dashboard -> DashboardTab(vm, onTimeline = { tab = Tab.History }, onAlerts = { showAllAlerts = true }, onSettings = openSettings,
                     onAppUsage = { id -> appUsageFor = id }, snackbar = snackbar)
                 Tab.Chat -> ChatTab(vm, onSettings = openSettings)
-                Tab.Map -> MapTab(vm)
+                Tab.Map -> MapTab(vm, snackbar)
                 Tab.History -> HistoryTab(vm, onSettings = openSettings)
                 Tab.Zones -> ZonesTab(vm, onSettings = openSettings)
             }
@@ -644,7 +647,7 @@ private fun DashboardTab(
     val onlineCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
     val focusedOnline = focusedDevice?.isConnected() == true
     val focusedUnpaired = focusedDevice?.isUnpaired() == true
-    val canPairFocusedChild = focused != null && (focusedDevice == null || focusedUnpaired)
+    val canPairFocusedChild = focused != null && (focusedDevice == null || focusedUnpaired || !focusedOnline)
     val scopeActive = if (focused == null) onlineCount > 0 else focusedOnline
     val scopeStatusColor = when {
         scopeActive -> Green
@@ -725,6 +728,16 @@ private fun DashboardTab(
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         }
                         LastActivityText(device, focusedLocation)
+                    }
+                    if (focused != null && focusedLocation != null) {
+                        DirectionsActionButton(
+                            lat = focusedLocation.lat,
+                            lng = focusedLocation.lng,
+                            childName = focused.displayName,
+                            lastKnown = !focusedOnline,
+                            snackbar = snackbar,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     if (canPairFocusedChild && focused != null) {
                         val child = focused
@@ -1030,14 +1043,13 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Bo
     val loc = vm.location
     val zoneName = if (vm.chatChildId == vm.selectedId)
         vm.zones.firstOrNull { z -> loc != null && distanceM(loc.lat, loc.lng, z.lat, z.lng) <= z.radiusM }?.name else null
-    val requestMsg = stringResource(R.string.chat_request_location_msg)
     if (showBack) BackHandler { vm.closeChat() }
     // Only auto-scroll to the bottom when a NEWER message arrives (last id changes),
     // not when older history is prepended.
     LaunchedEffect(vm.chatMessages.lastOrNull()?.id) {
         if (vm.chatMessages.isNotEmpty()) listState.animateScrollToItem(vm.chatMessages.size - 1)
     }
-    Column(Modifier.fillMaxSize().imePadding()) {
+    Column(Modifier.fillMaxSize()) {
         // Header: avatar + online status + settings
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 8.dp, vertical = 8.dp),
@@ -1084,8 +1096,12 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Bo
                         else TextButton(onClick = { vm.loadOlder() }) { Text(stringResource(R.string.chat_load_earlier)) }
                     }
                 }
-                item { DateChip(stringResource(R.string.chat_today)) }
-                items(vm.chatMessages, key = { it.id }) { m -> MessageBubble(m.sender == "parent", m.body, m.createdAt, m.readAt != null) }
+                itemsIndexed(vm.chatMessages, key = { _, m -> m.id }) { index, m ->
+                    val currentDate = messageLocalDate(m.createdAt)
+                    val previousDate = vm.chatMessages.getOrNull(index - 1)?.createdAt?.let { messageLocalDate(it) }
+                    if (index == 0 || currentDate != previousDate) DateChip(chatDateLabel(m.createdAt))
+                    MessageBubble(m.sender == "parent", m.body, m.createdAt, m.readAt != null)
+                }
                 zoneName?.let { z -> item { SafeZoneSystemCard(z, name) } }
             }
         }
@@ -1096,10 +1112,21 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Bo
                 val q = stringResource(res); QuickReplyChip(q) { vm.sendChat(q) }
             }
         }
-        ChatInput(input, { input = it }, vm.sending, stringResource(R.string.chat_hint_name, name),
-            onRequestLocation = { vm.sendChat(requestMsg) }) {
+        ChatInput(input, { input = it }, vm.sending, stringResource(R.string.chat_hint_name, name)) {
             if (input.isNotBlank()) { vm.sendChat(input); input = "" }
         }
+    }
+}
+
+@Composable
+private fun chatDateLabel(createdAt: String): String {
+    val date = messageLocalDate(createdAt)
+    val today = LocalDate.now()
+    return when (date) {
+        today -> stringResource(R.string.chat_today)
+        today.minusDays(1) -> stringResource(R.string.chat_yesterday)
+        null -> formatMessageDate(createdAt)
+        else -> formatMessageDate(createdAt, locale = Locale.getDefault())
     }
 }
 
@@ -1117,15 +1144,20 @@ private fun DateChip(text: String) {
 private fun MessageBubble(mine: Boolean, body: String, createdAt: String, read: Boolean) {
     val bg = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
     val fg = if (mine) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val metaColor = MaterialTheme.colorScheme.onSurfaceVariant
     val shape = RoundedCornerShape(16.dp, 16.dp, if (mine) 4.dp else 16.dp, if (mine) 16.dp else 4.dp)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         Surface(color = bg, shape = shape, shadowElevation = if (mine) 3.dp else 1.dp, modifier = Modifier.widthIn(max = 300.dp)) {
             Text(body, color = fg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
-        Row(Modifier.padding(top = 3.dp, start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(timeOf(createdAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Row(
+            Modifier.padding(top = 4.dp, start = 6.dp, end = 6.dp).heightIn(min = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(formatMessageTime(createdAt), style = MaterialTheme.typography.labelMedium, color = metaColor)
             if (mine) Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(14.dp),
-                tint = if (read) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline)
+                tint = if (read) MaterialTheme.colorScheme.secondary else metaColor)
         }
     }
 }
@@ -1157,14 +1189,10 @@ private fun QuickReplyChip(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolean, placeholder: String, onRequestLocation: () -> Unit, onSend: () -> Unit) {
+private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolean, placeholder: String, onSend: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(8.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledIconButton(onClick = onRequestLocation, modifier = Modifier.size(48.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) {
-                Icon(Icons.Filled.MyLocation, stringResource(R.string.cd_request_location))
-            }
             OutlinedTextField(value, onChange, modifier = Modifier.weight(1f),
                 placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) }, shape = CircleShape, maxLines = 4)
             FilledIconButton(onClick = onSend, enabled = value.isNotBlank() && !sending, modifier = Modifier.size(48.dp),
@@ -1178,7 +1206,7 @@ private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolea
 /* ----------------------------------- Map ----------------------------------- */
 
 @Composable
-private fun MapTab(vm: ParentViewModel) {
+private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
     val child = vm.selected
     val loc = vm.location
     val device = child?.primaryDevice()
@@ -1217,6 +1245,16 @@ private fun MapTab(vm: ParentViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (inZone) Chip(stringResource(R.string.chip_safe_zone), Green, dot = true)
                         device?.batteryLevel?.let { Chip("$it%", batteryColor(it)) }
+                    }
+                    if (child != null && loc != null) {
+                        DirectionsActionButton(
+                            lat = loc.lat,
+                            lng = loc.lng,
+                            childName = child.displayName,
+                            lastKnown = !online,
+                            snackbar = snackbar,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
                 FilledTonalIconButton(onClick = { vm.refreshDetail() }) { Icon(Icons.Filled.Refresh, stringResource(R.string.cd_refresh)) }
@@ -1429,6 +1467,84 @@ private fun AddZoneDialog(vm: ParentViewModel, onDismiss: () -> Unit) {
 }
 
 /* ---------------------------------- Shared ---------------------------------- */
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DirectionsActionButton(
+    lat: Double,
+    lng: Double,
+    childName: String,
+    lastKnown: Boolean,
+    snackbar: SnackbarHostState,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val noAppMessage = stringResource(R.string.directions_no_app)
+    val destinationLabel = stringResource(
+        if (lastKnown) R.string.directions_sheet_last_known_title else R.string.directions_sheet_title,
+        childName,
+    )
+    val destination = remember(lat, lng, destinationLabel) {
+        DirectionDestination(lat, lng, destinationLabel)
+    }
+    var options by remember { mutableStateOf<List<DirectionOption>?>(null) }
+
+    OutlinedButton(
+        onClick = {
+            val available = externalDirectionOptions(context, destination)
+            if (available.isEmpty()) {
+                scope.launch { snackbar.showSnackbar(noAppMessage) }
+            } else {
+                options = available
+            }
+        },
+        shape = MaterialTheme.shapes.small,
+        modifier = modifier,
+    ) {
+        Icon(Icons.Filled.Map, null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(if (lastKnown) R.string.directions_last_known else R.string.directions))
+    }
+
+    options?.let { availableOptions ->
+        ModalBottomSheet(onDismissRequest = { options = null }) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(destinationLabel, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                availableOptions.forEach { option ->
+                    DirectionOptionRow(option) {
+                        options = null
+                        if (!openExternalDirections(context, option)) {
+                            scope.launch { snackbar.showSnackbar(noAppMessage) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectionOptionRow(option: DirectionOption, onClick: () -> Unit) {
+    val label = when (option.app) {
+        DirectionApp.GoogleMaps -> stringResource(R.string.directions_google_maps)
+        DirectionApp.Waze -> stringResource(R.string.directions_waze)
+        DirectionApp.Other -> stringResource(R.string.directions_other_map)
+    }
+    Surface(onClick = onClick, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Filled.Map, null, tint = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
 
 @Composable
 private fun Chip(text: String, color: Color, dot: Boolean = false) {

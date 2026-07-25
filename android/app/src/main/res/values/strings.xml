@@ -47,10 +47,9 @@
     <string name="chat_hint_name">Message %1$s…</string>
     <string name="cd_send">Send</string>
     <string name="chat_today">Today</string>
+    <string name="chat_yesterday">Yesterday</string>
     <string name="chat_load_earlier">Load earlier messages</string>
     <string name="chat_online">Online</string>
-    <string name="cd_request_location">Request location</string>
-    <string name="chat_request_location_msg">📍 Can you share your location?</string>
     <string name="qr_love">Love you!</string>
     <string name="qr_call_later">Call me later?</string>
     <string name="qr_stay_safe">Stay safe!</string>
@@ -69,6 +68,14 @@
     <string name="children_online">%1$d children online</string>
     <string name="child_online">%1$d child online</string>
     <string name="full_view">Full View</string>
+    <string name="directions">Directions</string>
+    <string name="directions_last_known">Directions to last known location</string>
+    <string name="directions_sheet_title">%1$s location</string>
+    <string name="directions_sheet_last_known_title">%1$s last known location</string>
+    <string name="directions_google_maps">Google Maps</string>
+    <string name="directions_waze">Waze</string>
+    <string name="directions_other_map">Other map app</string>
+    <string name="directions_no_app">No navigation app found.</string>
     <string name="top_places_today">Top Places Today</string>
     <string name="empty_places_title">No places yet</string>
     <string name="empty_places_body">Visited places appear here as your family moves around.</string>

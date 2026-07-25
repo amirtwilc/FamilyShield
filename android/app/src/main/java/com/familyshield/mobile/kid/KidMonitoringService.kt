@@ -73,12 +73,18 @@ class KidMonitoringService : Service() {
         val telemetry = AndroidTelemetry.snapshot(this)
         val appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(this)
         val usage = if (appUsageAccessGranted) AppUsageTelemetry.todayUsage(this) else emptyList()
+        val fcmToken = kidFcmTokenOrNull()
         val battery = telemetry.batteryLevel
         val loc = telemetry.location
+        val status = if (battery != null || fcmToken != null) {
+            StatusBody(battery, telemetry.isCharging, fcmToken)
+        } else {
+            null
+        }
         api.sendTelemetry(
             token,
             DeviceTelemetryBody(
-                status = battery?.let { StatusBody(it, telemetry.isCharging) },
+                status = status,
                 location = if (loc != null) LocationPoint(loc.latitude, loc.longitude, nowIso(), battery) else null,
                 appUsage = AppUsageTelemetryBody(appUsageAccessGranted, usage),
             ),

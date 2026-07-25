@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -54,12 +54,15 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -71,6 +74,9 @@ import com.familyshield.mobile.Locales
 import com.familyshield.mobile.R
 import com.familyshield.mobile.net.Monitor
 import com.familyshield.mobile.ui.OsmMap
+import com.familyshield.mobile.ui.formatMessageDate
+import com.familyshield.mobile.ui.formatMessageTime
+import com.familyshield.mobile.ui.messageLocalDate
 import com.familyshield.mobile.ui.theme.Green
 import com.familyshield.mobile.ui.theme.GreenTint
 import com.familyshield.mobile.ui.theme.Navy
@@ -79,6 +85,8 @@ import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
 import com.familyshield.mobile.ui.theme.SkyTint
 import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.util.Locale
 
 @Composable
 fun KidApp(
@@ -241,30 +249,32 @@ private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -
 
 @Composable
 private fun CodeBoxes(code: String, onChange: (String) -> Unit) {
-    BasicTextField(
-        value = code, onValueChange = onChange, singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-        textStyle = TextStyle(color = Color.Transparent),
-        decorationBox = {
-            // Weighted boxes so the 6-digit field fits any phone width (narrow → wide).
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                repeat(6) { i ->
-                    val ch = code.getOrNull(i)?.toString() ?: ""
-                    val active = i == code.length
-                    Box(
-                        Modifier.weight(1f).aspectRatio(0.8f).clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                            .border(if (active) 2.dp else 1.dp,
-                                if (active) SkyBright else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(ch, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        BasicTextField(
+            value = code, onValueChange = onChange, singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+            textStyle = TextStyle(color = Color.Transparent, textDirection = TextDirection.Ltr),
+            decorationBox = {
+                // Weighted boxes so the 6-digit field fits any phone width (narrow → wide).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    repeat(6) { i ->
+                        val ch = code.getOrNull(i)?.toString() ?: ""
+                        val active = i == code.length
+                        Box(
+                            Modifier.weight(1f).aspectRatio(0.8f).clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(if (active) 2.dp else 1.dp,
+                                    if (active) SkyBright else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(ch, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
-            }
-        },
-    )
+            },
+        )
+    }
 }
 
 @Composable
@@ -656,7 +666,12 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
             } else {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = listState,
                     verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
-                    items(vm.chatMessages, key = { it.id }) { m -> KidBubble(m.sender == "child", m.body, m.createdAt) }
+                    itemsIndexed(vm.chatMessages, key = { _, m -> m.id }) { index, m ->
+                        val currentDate = messageLocalDate(m.createdAt)
+                        val previousDate = vm.chatMessages.getOrNull(index - 1)?.createdAt?.let { messageLocalDate(it) }
+                        if (index == 0 || currentDate != previousDate) KidDateChip(kidChatDateLabel(m.createdAt))
+                        KidBubble(m.sender == "child", m.body, m.createdAt)
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -671,6 +686,28 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
 }
 
 @Composable
+private fun kidChatDateLabel(createdAt: String): String {
+    val date = messageLocalDate(createdAt)
+    val today = LocalDate.now()
+    return when (date) {
+        today -> stringResource(R.string.chat_today)
+        today.minusDays(1) -> stringResource(R.string.chat_yesterday)
+        null -> formatMessageDate(createdAt)
+        else -> formatMessageDate(createdAt, locale = Locale.getDefault())
+    }
+}
+
+@Composable
+private fun KidDateChip(text: String) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = CircleShape) {
+            Text(text, Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
 private fun KidBubble(mine: Boolean, body: String, createdAt: String) {
     val bg = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
     val fg = if (mine) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
@@ -679,7 +716,7 @@ private fun KidBubble(mine: Boolean, body: String, createdAt: String) {
         Surface(color = bg, shape = shape, shadowElevation = if (mine) 3.dp else 1.dp, modifier = Modifier.widthIn(max = 300.dp)) {
             Text(body, color = fg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
-        Text(kidTimeOf(createdAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline,
+        Text(formatMessageTime(createdAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(top = 3.dp, start = 4.dp, end = 4.dp))
     }
 }
@@ -691,10 +728,6 @@ private fun KidQuickReplyChip(text: String, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
     }
 }
-
-private fun kidTimeOf(iso: String): String = try {
-    java.time.OffsetDateTime.parse(iso).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
-} catch (e: Exception) { "" }
 
 @Composable
 private fun KidChatInput(value: String, onChange: (String) -> Unit, sending: Boolean, onSend: () -> Unit) {

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FamilyShield</string>
+    <string name="directions">ניווט</string>
+    <string name="directions_last_known">ניווט למיקום הידוע האחרון</string>
+    <string name="directions_sheet_title">המיקום של %1$s</string>
+    <string name="directions_sheet_last_known_title">המיקום הידוע האחרון של %1$s</string>
+    <string name="directions_google_maps">Google Maps</string>
+    <string name="directions_waze">Waze</string>
+    <string name="directions_other_map">אפליקציית מפות אחרת</string>
+    <string name="directions_no_app">לא נמצאה אפליקציית ניווט.</string>
 
     <!-- Generic actions / labels -->
     <string name="action_add">הוספה</string>
@@ -47,10 +55,9 @@
     <string name="chat_hint_name">הודעה ל%1$s…</string>
     <string name="cd_send">שליחה</string>
     <string name="chat_today">היום</string>
+    <string name="chat_yesterday">אתמול</string>
     <string name="chat_load_earlier">טען הודעות קודמות</string>
     <string name="chat_online">מחובר</string>
-    <string name="cd_request_location">בקשת מיקום</string>
-    <string name="chat_request_location_msg">📍 תוכל לשתף את המיקום שלך?</string>
     <string name="qr_love">אוהבים אותך!</string>
     <string name="qr_call_later">תתקשר אחר כך?</string>
     <string name="qr_stay_safe">תשמור על עצמך!</string>

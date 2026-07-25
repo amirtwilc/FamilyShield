@@ -161,9 +161,14 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
             if (it.items.isNotEmpty()) reportedAppUsage[childId] = it.items.filter { item -> item.minutes >= 5 }
         }
         body.status?.let { status ->
+            val current = deviceByChild[childId] ?: error("no device")
             deviceByChild[childId] = (deviceByChild[childId] ?: error("no device"))
-                .copy(batteryLevel = status.batteryLevel, isCharging = status.isCharging, lastSeenAt = now)
-            if (status.batteryLevel <= lowBatteryThreshold) {
+                .copy(
+                    batteryLevel = status.batteryLevel ?: current.batteryLevel,
+                    isCharging = status.isCharging ?: current.isCharging,
+                    lastSeenAt = now,
+                )
+            if ((status.batteryLevel ?: current.batteryLevel ?: 100) <= lowBatteryThreshold) {
                 alertsByChild.getOrPut(childId) { mutableListOf() }
                     .add(0, Alert("alert-${++seq}", "low_battery", now))
             }

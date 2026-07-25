@@ -6,6 +6,7 @@ import { ok } from '@/lib/http';
 import { sendMessageSchema } from '@/lib/schemas/messages';
 import { pageMessages } from '@/lib/messages';
 import { firstMonitorParentId } from '@/lib/monitoring';
+import { notifyParentMessageFromChild } from '@/lib/messages/notifications';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,8 @@ export async function POST(req: Request) {
   const r = await db.execute(sql`
     INSERT INTO messages (child_id, parent_id, sender, body) VALUES (${a.device.childId}, ${parentId}, 'child', ${p.data.body})
     RETURNING id, sender, body, created_at, read_at`);
+  const message = r.rows[0] as { id: string };
+  await notifyParentMessageFromChild(a.device.childId, parentId, message.id, p.data.body);
   await db.execute(sql`UPDATE devices SET last_seen_at = now() WHERE id = ${a.device.id}`);
   return ok(r.rows[0], 201);
 }

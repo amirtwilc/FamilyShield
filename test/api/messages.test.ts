@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedParent, seedChild, seedDevice } from '../helpers/factories';
 import { signAccess } from '@/lib/auth/jwt';
@@ -7,9 +7,12 @@ import { GET as kidList, POST as kidSend } from '@/app/api/device/messages/route
 import { GET as kidMonitorList, POST as kidMonitorSend } from '@/app/api/device/monitors/[parentId]/messages/route';
 import { GET as summary } from '@/app/api/messages/summary/route';
 import { db } from '@/db/client';
-import { childParentLinks } from '@/db/schema';
+import { childParentLinks, devices } from '@/db/schema';
+import { setSender, resetSender } from '@/lib/alerts/fcm';
+import { eq } from 'drizzle-orm';
 
 beforeAll(async () => { await resetDb(); });
+beforeEach(() => { resetSender(); });
 
 describe('parent ⇄ kid chat', () => {
   it('exchanges messages both ways and tracks read state', async () => {
@@ -119,5 +122,83 @@ describe('parent ⇄ kid chat', () => {
     expect((await p1View.json()).messages.map((m: any) => m.body)).toEqual(['p1']);
     const p2View = await parentList(new Request('http://t/', { headers: { authorization: `Bearer ${t2}` } }), ctx);
     expect((await p2View.json()).messages.map((m: any) => m.body)).toEqual(['p2', 'reply to p2']);
+  });
+
+  it('notifies the child device when a parent sends a chat message', async () => {
+    const pushes: Array<{ token: string; title: string; body: string; data?: Record<string, string> }> = [];
+    setSender({ async send(token, title, body, data) { pushes.push({ token, title, body, data }); return true; } });
+    const p = await seedParent('notify-parent-child@test.io');
+    const c = await seedChild(p.id, 'Mia');
+    const { device } = await seedDevice(c.id);
+    await db.update(devices).set({ fcmToken: 'kid-fcm-token' }).where(eq(devices.id, device.id));
+    const ptok = await signAccess(p.id);
+
+    const r = await parentSend(new Request('http://t/', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ptok}` },
+      body: JSON.stringify({ body: 'Please call me' }),
+    }), { params: Promise.resolve({ id: c.id }) });
+
+    const sent = await r.json();
+    expect(r.status).toBe(201);
+    expect(pushes).toEqual([expect.objectContaining({
+      token: 'kid-fcm-token',
+      title: 'New message from parent',
+      body: 'Please call me',
+      data: expect.objectContaining({
+        type: 'chat_message',
+        recipient: 'child',
+        childId: c.id,
+        parentId: p.id,
+        messageId: sent.id,
+      }),
+    })]);
+  });
+
+  it('notifies the parent when a child sends a chat message', async () => {
+    const pushes: Array<{ token: string; title: string; body: string; data?: Record<string, string> }> = [];
+    setSender({ async send(token, title, body, data) { pushes.push({ token, title, body, data }); return true; } });
+    const p = await seedParent('notify-child-parent@test.io');
+    const c = await seedChild(p.id, 'Liam');
+    const { token: dtok } = await seedDevice(c.id);
+
+    const r = await kidSend(new Request('http://t/', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${dtok}` },
+      body: JSON.stringify({ body: 'I am on the bus' }),
+    }));
+
+    const sent = await r.json();
+    expect(r.status).toBe(201);
+    expect(pushes).toEqual([expect.objectContaining({
+      token: p.fcmToken,
+      title: 'New message from Liam',
+      body: 'I am on the bus',
+      data: expect.objectContaining({
+        type: 'chat_message',
+        recipient: 'parent',
+        childId: c.id,
+        parentId: p.id,
+        messageId: sent.id,
+      }),
+    })]);
+  });
+
+  it('still stores the message if push delivery fails', async () => {
+    setSender({ async send() { throw new Error('fcm down'); } });
+    const p = await seedParent('notify-fail@test.io');
+    const c = await seedChild(p.id);
+    const { device } = await seedDevice(c.id);
+    await db.update(devices).set({ fcmToken: 'kid-fcm-token' }).where(eq(devices.id, device.id));
+    const ptok = await signAccess(p.id);
+
+    const r = await parentSend(new Request('http://t/', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ptok}` },
+      body: JSON.stringify({ body: 'Still send this' }),
+    }), { params: Promise.resolve({ id: c.id }) });
+
+    expect(r.status).toBe(201);
+    expect((await r.json()).body).toBe('Still send this');
   });
 });

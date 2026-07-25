@@ -259,6 +259,7 @@ data class LocationBatch(val points: List<LocationPoint>)
 
 @Serializable
 data class StatusBody(
-    @SerialName("battery_level") val batteryLevel: Int,
-    @SerialName("is_charging") val isCharging: Boolean,
+    @SerialName("battery_level") val batteryLevel: Int? = null,
+    @SerialName("is_charging") val isCharging: Boolean? = null,
+    @SerialName("fcm_token") val fcmToken: String? = null,
 )
