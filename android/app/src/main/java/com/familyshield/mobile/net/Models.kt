@@ -32,6 +32,7 @@ data class Child(
     val id: String,
     val displayName: String,
     val avatar: String = "fox",
+    val phoneNumber: String? = null,
     val devices: List<Device> = emptyList(),
 )
 
@@ -254,7 +255,7 @@ data class GoogleLoginBody(val idToken: String)
 data class PushTokenBody(@SerialName("fcm_token") val fcmToken: String)
 
 @Serializable
-data class CreateChildBody(val displayName: String, val avatar: String? = null)
+data class CreateChildBody(val displayName: String, val avatar: String? = null, val phoneNumber: String? = null)
 
 @Serializable
 data class PairBody(val code: String, val platform: String, val model: String? = null)

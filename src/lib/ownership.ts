@@ -13,6 +13,7 @@ export async function assertChildOwned(parentId: string, childId: string) {
     parentId: children.parentId,
     displayName: childParentLinks.displayName,
     avatar: children.avatar,
+    phoneNumber: children.phoneNumber,
     createdAt: children.createdAt,
   }).from(children)
     .innerJoin(childParentLinks, eq(childParentLinks.childId, children.id))

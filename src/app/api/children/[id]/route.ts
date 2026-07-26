@@ -26,9 +26,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const p = await parseBody(req, createChildSchema); if ('response' in p) return p.response;
   await db.update(childParentLinks).set({ displayName: p.data.displayName })
     .where(and(eq(childParentLinks.childId, id), eq(childParentLinks.parentId, a.parentId)));
-  const childUpdates = p.data.avatar
-    ? { displayName: p.data.displayName, avatar: p.data.avatar }
-    : { displayName: p.data.displayName };
+  const childUpdates = {
+    displayName: p.data.displayName,
+    ...(p.data.avatar ? { avatar: p.data.avatar } : {}),
+    ...(p.data.phoneNumber !== undefined ? { phoneNumber: p.data.phoneNumber } : {}),
+  };
   const [row] = await db.update(children).set(childUpdates)
     .where(eq(children.id, id)).returning();
   return ok({ ...row, displayName: p.data.displayName });

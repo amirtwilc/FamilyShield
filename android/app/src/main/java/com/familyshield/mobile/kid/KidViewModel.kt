@@ -15,6 +15,7 @@ import com.familyshield.mobile.net.Message
 import com.familyshield.mobile.net.Monitor
 import com.familyshield.mobile.net.PrefsTokenStore
 import com.familyshield.mobile.net.TokenStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -137,12 +138,15 @@ class KidViewModel(
 
     fun startChat(parentId: String? = null) {
         val t = deviceToken ?: return
+        if (chatParentId == parentId && chatJob?.isActive == true) return
         chatJob?.cancel()
         chatParentId = parentId
         chatJob = viewModelScope.launch(dispatcher) {
             try {
                 chatMessages = if (parentId == null) api.deviceMessages(t).messages
                 else api.monitorMessages(t, parentId).messages
+            } catch (_: CancellationException) {
+                return@launch
             } catch (_: Exception) {}
             while (isActive) {
                 delay(3000)
@@ -153,6 +157,8 @@ class KidViewModel(
                     val have = chatMessages.mapTo(HashSet()) { it.id }
                     val fresh = delta.filter { it.id !in have }
                     if (fresh.isNotEmpty()) chatMessages = chatMessages + fresh
+                } catch (_: CancellationException) {
+                    return@launch
                 } catch (_: Exception) {}
             }
         }

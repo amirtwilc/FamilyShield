@@ -1,6 +1,9 @@
 package com.familyshield.mobile.parent
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -114,10 +117,13 @@ import com.familyshield.mobile.ui.theme.Green
 import com.familyshield.mobile.ui.theme.Navy
 import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.cos
@@ -252,8 +258,10 @@ private fun ParentShell(
     )
     val openSettings = { showSettings = true }
     // Stop chat polling whenever the Chat tab isn't the one on screen.
-    LaunchedEffect(tab, showSettings, appUsageFor, showAllAlerts) {
-        if (tab != Tab.Chat || showSettings || appUsageFor != null || showAllAlerts) vm.closeChat()
+    LaunchedEffect(tab, showSettings, appUsageFor, showAllAlerts, chatDestination?.key) {
+        if (chatDestination == null && (tab != Tab.Chat || showSettings || appUsageFor != null || showAllAlerts)) {
+            vm.closeChat()
+        }
     }
     LaunchedEffect(chatDestination?.key, vm.token) {
         val destination = chatDestination ?: return@LaunchedEffect
@@ -437,8 +445,8 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                 addOpen = false
                 showAddLimit = false
             },
-            onAdd = { name ->
-                vm.addChild(name)
+            onAdd = { name, phoneNumber ->
+                vm.addChild(name, phoneNumber)
                 addOpen = false
                 showAddLimit = false
             },
@@ -447,10 +455,19 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     rename?.let { c ->
         var name by remember { mutableStateOf(c.displayName) }
         var avatar by remember { mutableStateOf(c.avatar) }
+        var phoneNumber by remember { mutableStateOf(c.phoneNumber.orEmpty()) }
         AlertDialog(onDismissRequest = { rename = null }, title = { Text(stringResource(R.string.edit_profile_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.field_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        phoneNumber,
+                        { phoneNumber = it },
+                        label = { Text(stringResource(R.string.field_phone_number_optional)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text(stringResource(R.string.child_avatar), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         Modifier.fillMaxWidth(),
@@ -473,7 +490,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                     }
                 }
             },
-            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.select(c.id); vm.updateChild(name.trim(), avatar); rename = null }) { Text(stringResource(R.string.action_save)) } },
+            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.select(c.id); vm.updateChild(name.trim(), avatar, phoneNumber); rename = null }) { Text(stringResource(R.string.action_save)) } },
             dismissButton = { TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel)) } })
     }
     pendingDelete?.let { c ->
@@ -499,9 +516,10 @@ private fun AddChildDialog(
     childrenCount: Int,
     showInitialLimit: Boolean,
     onDismiss: () -> Unit,
-    onAdd: (String) -> Unit,
+    onAdd: (String, String?) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
     val childLimitMsg = stringResource(R.string.child_limit_reached)
     var localError by remember(showInitialLimit, childrenCount) {
         mutableStateOf(if (showInitialLimit || childrenCount >= 5) childLimitMsg else null)
@@ -523,6 +541,14 @@ private fun AddChildDialog(
                     modifier = Modifier.fillMaxWidth(),
                     isError = localError != null,
                 )
+                OutlinedTextField(
+                    phoneNumber,
+                    { phoneNumber = it },
+                    label = { Text(stringResource(R.string.field_phone_number_optional)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 localError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
@@ -535,7 +561,7 @@ private fun AddChildDialog(
                     if (childrenCount >= 5) {
                         localError = childLimitMsg
                     } else {
-                        onAdd(name.trim())
+                        onAdd(name.trim(), phoneNumber.trim().takeIf { it.isNotEmpty() })
                     }
                 },
             ) { Text(stringResource(R.string.action_add)) }
@@ -676,11 +702,20 @@ private fun DashboardTab(
     onAppUsage: (String) -> Unit,
     snackbar: SnackbarHostState,
 ) {
-    LaunchedEffect(Unit) { vm.loadFamilyOverview() }
+    var todayKey by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(todayKey) { vm.loadFamilyOverview() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(millisUntilNextLocalMidnight())
+            todayKey = LocalDate.now()
+        }
+    }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addOpen by remember { mutableStateOf(false) }
     var showAddLimit by remember { mutableStateOf(false) }
     var permissionsFor by remember { mutableStateOf<Child?>(null) }
+    var phonePromptFor by remember { mutableStateOf<Child?>(null) }
     val scopeId = vm.dashboardChildId
     val focused = vm.children.find { it.id == scopeId }
     val focusedDevice = focused?.primaryDevice()
@@ -706,8 +741,8 @@ private fun DashboardTab(
         focusedUnpaired -> stringResource(R.string.child_unpaired)
         else -> stringResource(R.string.child_offline)
     }
-    val ringMsg = stringResource(R.string.snack_ring, focused?.displayName ?: stringResource(R.string.label_device))
     val emergencyMsg = stringResource(R.string.snack_emergency)
+    val noDialerMsg = stringResource(R.string.ring_no_phone_app)
 
     val markers = remember(vm.allLocations, vm.children, scopeId) {
         val src = if (scopeId == null) vm.children else vm.children.filter { it.id == scopeId }
@@ -723,8 +758,8 @@ private fun DashboardTab(
                 addOpen = false
                 showAddLimit = false
             },
-            onAdd = { name ->
-                vm.addChild(name)
+            onAdd = { name, phoneNumber ->
+                vm.addChild(name, phoneNumber)
                 addOpen = false
                 showAddLimit = false
             },
@@ -732,6 +767,41 @@ private fun DashboardTab(
     }
     permissionsFor?.let { child ->
         ChildPermissionsDialog(child = child, onDismiss = { permissionsFor = null })
+    }
+    phonePromptFor?.let { child ->
+        var phoneNumber by remember(child.id) { mutableStateOf(child.phoneNumber.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { phonePromptFor = null },
+            title = { Text(stringResource(R.string.ring_phone_prompt_title, child.displayName)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.ring_phone_prompt_body), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(
+                        phoneNumber,
+                        { phoneNumber = it },
+                        label = { Text(stringResource(R.string.field_phone_number)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = phoneNumber.isNotBlank(),
+                    onClick = {
+                        val number = phoneNumber.trim()
+                        vm.select(child.id)
+                        vm.updateChild(child.displayName, child.avatar, number)
+                        phonePromptFor = null
+                        if (!openDialer(context, number)) {
+                            scope.launch { snackbar.showSnackbar(noDialerMsg) }
+                        }
+                    },
+                ) { Text(stringResource(R.string.ring_call_action)) }
+            },
+            dismissButton = { TextButton(onClick = { phonePromptFor = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -870,9 +940,18 @@ private fun DashboardTab(
 
             // Quick actions
             Row(Modifier.padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickAction(Modifier.weight(1f), Icons.Filled.NotificationsActive, stringResource(R.string.action_ring_device),
-                    MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.primary) {
-                    scope.launch { snackbar.showSnackbar(ringMsg) }
+                if (focused != null) {
+                    QuickAction(Modifier.weight(1f), Icons.Filled.PhoneAndroid, stringResource(R.string.action_ring_device),
+                        MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.primary) {
+                        val phone = focused.phoneNumber?.trim().orEmpty()
+                        if (phone.isNotEmpty()) {
+                            if (!openDialer(context, phone)) {
+                                scope.launch { snackbar.showSnackbar(noDialerMsg) }
+                            }
+                        } else {
+                            phonePromptFor = focused
+                        }
+                    }
                 }
                 QuickAction(Modifier.weight(1f), Icons.Filled.History, stringResource(R.string.action_timeline),
                     MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.primary, onClick = onTimeline)
@@ -1586,14 +1665,6 @@ private fun ZonesTab(vm: ParentViewModel, onSettings: () -> Unit) {
                     }
                 }
 
-                // Notification strategy
-                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.notif_strategy_title), style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Text(stringResource(R.string.notif_strategy_body),
-                            style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
-                    }
-                }
                 Spacer(Modifier.height(72.dp))
             }
         }
@@ -2058,6 +2129,20 @@ private fun timeOf(iso: String): String = try {
 private fun dateTimeOf(iso: String): String = try {
     OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("MMM d, h:mm a"))
 } catch (e: Exception) { timeOf(iso) }
+
+private fun millisUntilNextLocalMidnight(): Long {
+    val now = ZonedDateTime.now()
+    val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+    return Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1000L)
+}
+
+private fun openDialer(context: Context, phoneNumber: String): Boolean {
+    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(phoneNumber)}"))
+    return runCatching {
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
+}
 
 private fun ago(iso: String): String = try {
     val mins = java.time.Duration.between(OffsetDateTime.parse(iso).toInstant(), java.time.Instant.now()).toMinutes()

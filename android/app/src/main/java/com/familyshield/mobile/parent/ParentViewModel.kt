@@ -9,12 +9,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.familyshield.mobile.net.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
 
 /** A place a child visited today (from detected stops). */
 data class TopPlace(val childId: String, val childName: String, val lat: Double, val lng: Double, val arriveAt: String, val departAt: String)
@@ -123,6 +127,7 @@ class ParentViewModel(
 
     /** Open a child's thread (newest page) and poll for new messages (marking read). */
     fun openChat(childId: String) {
+        if (chatChildId == childId && chatJob?.isActive == true) return
         chatChildId = childId
         chatMessages = emptyList()
         chatCursor = null
@@ -133,6 +138,8 @@ class ParentViewModel(
                 val resp = authed { api.messages(it, childId, markRead = true) }
                 chatMessages = resp.messages
                 chatCursor = resp.nextCursor
+            } catch (_: CancellationException) {
+                return@launch
             } catch (e: Exception) { error = e.message }
             while (isActive) {
                 delay(3000)
@@ -142,6 +149,8 @@ class ParentViewModel(
                     val have = chatMessages.mapTo(HashSet()) { m -> m.id }
                     val fresh = delta.filter { m -> m.id !in have }
                     if (fresh.isNotEmpty()) chatMessages = chatMessages + fresh
+                } catch (_: CancellationException) {
+                    return@launch
                 } catch (_: Exception) { /* quiet during polling */ }
             }
         }
@@ -221,11 +230,11 @@ class ParentViewModel(
         }
     }
 
-    fun updateChild(name: String, avatar: String? = null) {
+    fun updateChild(name: String, avatar: String? = null, phoneNumber: String? = selected?.phoneNumber) {
         val id = selectedId ?: return
         if (token == null || name.isBlank()) return
         viewModelScope.launch(dispatcher) {
-            try { authed { api.updateChild(it, id, name.trim(), avatar) }; refreshChildren() }
+            try { authed { api.updateChild(it, id, name.trim(), avatar, phoneNumber?.trim()?.takeIf { number -> number.isNotEmpty() }) }; refreshChildren() }
             catch (e: Exception) { error = e.message }
         }
     }
@@ -325,7 +334,7 @@ class ParentViewModel(
         }
     }
 
-    fun addChild(name: String) {
+    fun addChild(name: String, phoneNumber: String? = null) {
         if (token == null) return
         if (children.size >= 5) {
             error = "Your free tier allows up to 5 monitored children."
@@ -333,7 +342,7 @@ class ParentViewModel(
         }
         viewModelScope.launch(dispatcher) {
             try {
-                val c = authed { api.createChild(it, name) }
+                val c = authed { api.createChild(it, name, phoneNumber = phoneNumber?.trim()?.takeIf { number -> number.isNotEmpty() }) }
                 refreshChildren()
                 select(c.id)
             } catch (e: Exception) { error = e.message }
@@ -407,7 +416,7 @@ class ParentViewModel(
                 val alerts = ArrayList<FamilyAlert>()
                 for (c in kids) {
                     val r = authed { api.routes(it, c.id) }
-                    r.stops.forEach { s -> places.add(TopPlace(c.id, c.displayName, s.lat, s.lng, s.arriveAt, s.departAt)) }
+                    r.stops.filter { s -> isToday(s.arriveAt) }.forEach { s -> places.add(TopPlace(c.id, c.displayName, s.lat, s.lng, s.arriveAt, s.departAt)) }
                     authed { api.alerts(it, c.id) }.take(3).forEach { a -> alerts.add(FamilyAlert(c.id, c.displayName, a)) }
                 }
                 topPlaces = places.sortedByDescending { it.arriveAt }.take(6)
@@ -546,6 +555,10 @@ class ParentViewModel(
     }
 
     private fun today() = java.time.LocalDate.now().toString()
+
+    private fun isToday(iso: String): Boolean = runCatching {
+        OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate() == LocalDate.now()
+    }.getOrDefault(false)
 
     /** Total path length (km) across the day's location points. */
     private fun haversineKm(points: List<HistoryPoint>): Double {

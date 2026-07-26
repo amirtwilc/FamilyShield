@@ -79,6 +79,23 @@ describe('children api', () => {
     expect((await created.json()).avatar).toBe('fox');
   });
 
+  it('stores, lists, edits, and clears an optional child phone number', async () => {
+    const p = await seedParent('phone-number@test.io'); const tok = await signAccess(p.id);
+    const created = await createChild(auth(tok, { displayName: 'Mia', phoneNumber: '  +1 555 0100  ' }));
+    expect(created.status).toBe(201);
+    const child = await created.json();
+    expect(child.phoneNumber).toBe('+1 555 0100');
+
+    const listed = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
+    expect((await listed.json()).children[0].phoneNumber).toBe('+1 555 0100');
+
+    const updated = await renameChild(auth(tok, { displayName: 'Mia', phoneNumber: '+1 555 0101' }), { params: Promise.resolve({ id: child.id }) });
+    expect((await updated.json()).phoneNumber).toBe('+1 555 0101');
+
+    const cleared = await renameChild(auth(tok, { displayName: 'Mia', phoneNumber: '' }), { params: Promise.resolve({ id: child.id }) });
+    expect((await cleared.json()).phoneNumber).toBeNull();
+  });
+
   it('assigns unused avatars first and allows editing the avatar', async () => {
     const p = await seedParent('avatars@test.io'); const tok = await signAccess(p.id);
     const made = [];

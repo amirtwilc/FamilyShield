@@ -12,6 +12,7 @@ const checks = [
   ['subscription_tiers', "SELECT to_regclass('public.subscription_tiers') AS ok"],
   ['free_tier', "SELECT code AS ok FROM subscription_tiers WHERE code = 'free' AND location_retention_days = 2 AND max_children = 5"],
   ['parent_tier_code', "SELECT column_name AS ok FROM information_schema.columns WHERE table_name = 'parents' AND column_name = 'tier_code'"],
+  ['child_phone_number', "SELECT column_name AS ok FROM information_schema.columns WHERE table_name = 'children' AND column_name = 'phone_number'"],
   ['child_parent_links', "SELECT to_regclass('public.child_parent_links') AS ok"],
   ['message_parent_id', "SELECT column_name AS ok FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'parent_id'"],
   ['locations_partitioned', "SELECT relkind AS ok FROM pg_class WHERE relname = 'locations' AND relkind = 'p'"],

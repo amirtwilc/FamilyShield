@@ -14,6 +14,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     val parentPushTokens = mutableMapOf<String, String>()       // parent email -> FCM token
     private val childName = linkedMapOf<String, String>()        // childId -> name
     private val childAvatar = mutableMapOf<String, String>()     // childId -> avatar key
+    private val childPhone = mutableMapOf<String, String?>()      // childId -> optional phone number
     private val childParents = mutableMapOf<String, MutableMap<String, String>>() // childId -> parent email -> display name
     private val deviceByChild = mutableMapOf<String, Device>()   // childId -> its device
     private val locations = mutableMapOf<String, CurrentLocation>()
@@ -64,24 +65,26 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         val parent = parentEmail(token)
         return childName.mapNotNull { (id, fallbackName) ->
             val name = childParents[id]?.get(parent) ?: return@mapNotNull null
-            Child(id, name, childAvatar[id] ?: "fox", deviceByChild[id]?.let { listOf(it) } ?: emptyList())
+            Child(id, name, childAvatar[id] ?: "fox", childPhone[id], deviceByChild[id]?.let { listOf(it) } ?: emptyList())
         }
     }
 
-    override suspend fun createChild(token: String, name: String, avatar: String?): Child {
+    override suspend fun createChild(token: String, name: String, avatar: String?, phoneNumber: String?): Child {
         if (listChildren(token).size >= 5) throw ApiException(403, "Your free tier allows up to 5 monitored children")
         val id = "child-${++seq}"
         childName[id] = name
         childAvatar[id] = avatar ?: avatarKeys.firstOrNull { it !in childAvatar.values } ?: avatarKeys.first()
+        childPhone[id] = phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
         childParents.getOrPut(id) { linkedMapOf() }[parentEmail(token)] = name
-        return Child(id, name, childAvatar[id] ?: "fox", emptyList())
+        return Child(id, name, childAvatar[id] ?: "fox", childPhone[id], emptyList())
     }
 
-    override suspend fun updateChild(token: String, childId: String, name: String, avatar: String?): Child {
+    override suspend fun updateChild(token: String, childId: String, name: String, avatar: String?, phoneNumber: String?): Child {
         childParents.getOrPut(childId) { linkedMapOf() }[parentEmail(token)] = name
         childName[childId] = name
         avatar?.let { childAvatar[childId] = it }
-        return Child(childId, name, childAvatar[childId] ?: "fox", deviceByChild[childId]?.let { listOf(it) } ?: emptyList())
+        childPhone[childId] = phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
+        return Child(childId, name, childAvatar[childId] ?: "fox", childPhone[childId], deviceByChild[childId]?.let { listOf(it) } ?: emptyList())
     }
 
     override suspend fun deleteChild(token: String, childId: String) {
@@ -90,6 +93,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
             childParents.remove(childId)
             childName.remove(childId)
             childAvatar.remove(childId)
+            childPhone.remove(childId)
             deviceByChild.remove(childId)
             locations.remove(childId)
             alertsByChild.remove(childId)

@@ -24,6 +24,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ParentViewModelTest {
@@ -164,8 +165,9 @@ class ParentViewModelTest {
     @Test
     fun `family overview collects top places tagged per child`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
+        val today = LocalDate.now()
         api.routesResult = RoutesResponse(
-            stops = listOf(Stop(32.0, 34.0, "2026-06-20T08:00:00Z", "2026-06-20T15:00:00Z", dwellMin = 420.0)),
+            stops = listOf(Stop(32.0, 34.0, "${today}T08:00:00Z", "${today}T15:00:00Z", dwellMin = 420.0)),
         )
         val vm = viewModel(api)
         vm.authenticate("parent@x.com", "pw123456", register = true)
@@ -182,6 +184,30 @@ class ParentViewModelTest {
         assertTrue("both children represented",
             vm.topPlaces.map { it.childName }.toSet() == setOf("Mia", "Noah"))
         assertEquals(32.0, vm.topPlaces[0].lat, 1e-9)
+    }
+
+    @Test
+    fun `family overview excludes places from previous days`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+        api.routesResult = RoutesResponse(
+            stops = listOf(
+                Stop(31.0, 34.0, "${yesterday}T18:00:00Z", "${yesterday}T19:00:00Z", dwellMin = 60.0),
+                Stop(32.0, 35.0, "${today}T08:00:00Z", "${today}T09:00:00Z", dwellMin = 60.0),
+            ),
+        )
+        val vm = viewModel(api)
+        vm.authenticate("today-places@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia")
+        advanceUntilIdle()
+
+        vm.loadFamilyOverview()
+        advanceUntilIdle()
+
+        assertEquals(1, vm.topPlaces.size)
+        assertEquals(32.0, vm.topPlaces.single().lat, 1e-9)
     }
 
     @Test
@@ -312,6 +338,28 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `opening the already active chat does not restart or surface cancellation`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val vm = viewModel(api)
+        vm.authenticate("parent-repeat-chat@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia")
+        advanceUntilIdle()
+        val id = vm.selectedId!!
+
+        vm.openChat(id)
+        runCurrent()
+        vm.sendChat("Still here")
+        runCurrent()
+        vm.openChat(id)
+        runCurrent()
+
+        assertNull(vm.error)
+        assertEquals(listOf("Still here"), vm.chatMessages.map { it.body })
+        vm.closeChat()
+    }
+
+    @Test
     fun `loads app usage summary for a child`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         api.appUsageResult = AppUsageSummary(
@@ -342,6 +390,25 @@ class ParentViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Mia Cohen", vm.children.first().displayName)
+    }
+
+    @Test
+    fun `child phone number can be added edited and cleared`() = runTest(mainRule.dispatcher) {
+        val vm = viewModel(FakeApiClient())
+        vm.authenticate("phone-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+
+        vm.addChild("Mia", "+1 555 0100")
+        advanceUntilIdle()
+        assertEquals("+1 555 0100", vm.children.first().phoneNumber)
+
+        vm.updateChild("Mia", phoneNumber = "+1 555 0101")
+        advanceUntilIdle()
+        assertEquals("+1 555 0101", vm.children.first().phoneNumber)
+
+        vm.updateChild("Mia", phoneNumber = "")
+        advanceUntilIdle()
+        assertNull(vm.children.first().phoneNumber)
     }
 
     @Test

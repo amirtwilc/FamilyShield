@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     .where(eq(childParentLinks.parentId, a.parentId));
   const avatar = p.data.avatar ?? nextAvailableAvatar(existing.map((c) => c.avatar), p.data.displayName);
   const [row] = await db.insert(children)
-    .values({ parentId: a.parentId, displayName: p.data.displayName, avatar }).returning();
+    .values({ parentId: a.parentId, displayName: p.data.displayName, avatar, phoneNumber: p.data.phoneNumber ?? null }).returning();
   await db.insert(childParentLinks).values({
     childId: row.id, parentId: a.parentId, displayName: p.data.displayName, role: 'owner',
   });
@@ -37,6 +37,7 @@ export async function GET(req: Request) {
     parentId: children.parentId,
     displayName: childParentLinks.displayName,
     avatar: children.avatar,
+    phoneNumber: children.phoneNumber,
     createdAt: children.createdAt,
   }).from(childParentLinks)
     .innerJoin(children, eq(childParentLinks.childId, children.id))

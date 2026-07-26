@@ -6,7 +6,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,8 +27,8 @@ interface ApiClient {
     suspend fun refreshTokens(refreshToken: String): Tokens
     suspend fun registerParentPushToken(token: String, fcmToken: String)
     suspend fun listChildren(token: String): List<Child>
-    suspend fun createChild(token: String, name: String, avatar: String? = null): Child
-    suspend fun updateChild(token: String, childId: String, name: String, avatar: String? = null): Child
+    suspend fun createChild(token: String, name: String, avatar: String? = null, phoneNumber: String? = null): Child
+    suspend fun updateChild(token: String, childId: String, name: String, avatar: String? = null, phoneNumber: String? = null): Child
     suspend fun deleteChild(token: String, childId: String)
     suspend fun pairingCode(token: String, childId: String): PairingCode
     suspend fun currentLocation(token: String, childId: String): CurrentLocation?
@@ -120,13 +123,20 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     override suspend fun listChildren(token: String): List<Child> =
         json.decodeFromString<ChildrenResponse>(requestRaw("GET", "/api/children", token = token)).children
 
-    override suspend fun createChild(token: String, name: String, avatar: String?): Child =
-        json.decodeFromString(requestRaw("POST", "/api/children",
-            json.encodeToString(CreateChildBody(name, avatar)), token))
+    private fun childProfileBody(name: String, avatar: String?, phoneNumber: String?): String =
+        buildJsonObject {
+            put("displayName", name)
+            avatar?.let { put("avatar", it) }
+            if (phoneNumber == null) put("phoneNumber", JsonNull) else put("phoneNumber", phoneNumber)
+        }.toString()
 
-    override suspend fun updateChild(token: String, childId: String, name: String, avatar: String?): Child =
+    override suspend fun createChild(token: String, name: String, avatar: String?, phoneNumber: String?): Child =
+        json.decodeFromString(requestRaw("POST", "/api/children",
+            childProfileBody(name, avatar, phoneNumber), token))
+
+    override suspend fun updateChild(token: String, childId: String, name: String, avatar: String?, phoneNumber: String?): Child =
         json.decodeFromString(requestRaw("PATCH", "/api/children/$childId",
-            json.encodeToString(CreateChildBody(name, avatar)), token))
+            childProfileBody(name, avatar, phoneNumber), token))
 
     override suspend fun deleteChild(token: String, childId: String) {
         requestRaw("DELETE", "/api/children/$childId", token = token)

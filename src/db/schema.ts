@@ -46,6 +46,7 @@ export const children = pgTable('children', {
   parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
   avatar: text('avatar').notNull().default('fox'),
+  phoneNumber: text('phone_number'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({ byParent: index('children_parent_idx').on(t.parentId) }));
 

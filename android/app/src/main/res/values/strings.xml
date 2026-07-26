@@ -12,6 +12,8 @@
     <string name="field_email">Email</string>
     <string name="field_password">Password</string>
     <string name="field_name">Name</string>
+    <string name="field_phone_number">Phone number</string>
+    <string name="field_phone_number_optional">Phone number (optional)</string>
     <string name="label_child">Child</string>
     <string name="label_device">device</string>
     <string name="label_your_child">your child</string>
@@ -90,6 +92,10 @@
     <string name="action_ring_device">Ring Device</string>
     <string name="action_timeline">Timeline</string>
     <string name="action_emergency">Emergency</string>
+    <string name="ring_phone_prompt_title">Call %1$s</string>
+    <string name="ring_phone_prompt_body">Enter the child phone number to open the calling app.</string>
+    <string name="ring_call_action">Open call</string>
+    <string name="ring_no_phone_app">No phone calling app found.</string>
     <string name="snack_ring">Ring request sent to %1$s</string>
     <string name="snack_emergency">Emergency mode activated</string>
 
