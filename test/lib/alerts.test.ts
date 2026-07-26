@@ -5,11 +5,22 @@ import { db } from '@/db/client';
 import { devices, alerts } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { fireLowBatteryIfNeeded } from '@/lib/alerts/engine';
-import { setSender, resetSender } from '@/lib/alerts/fcm';
+import { setSender, resetSender, type PushOptions } from '@/lib/alerts/fcm';
 
 let sent = 0;
+let pushes: Array<{ data?: Record<string, string>; options?: PushOptions }> = [];
 beforeAll(async () => { await resetDb(); });
-beforeEach(() => { sent = 0; setSender({ async send() { sent++; return true; } }); });
+beforeEach(() => {
+  sent = 0;
+  pushes = [];
+  setSender({
+    async send(_token, _title, _body, data, options) {
+      sent++;
+      pushes.push({ data, options });
+      return true;
+    },
+  });
+});
 
 describe('low-battery alert', () => {
   it('fires once below threshold then debounces', async () => {
@@ -23,6 +34,8 @@ describe('low-battery alert', () => {
     const rows = await db.select().from(alerts).where(eq(alerts.childId, c.id));
     expect(rows).toHaveLength(1);
     expect(sent).toBe(1);
+    expect(pushes[0].data).toEqual(expect.objectContaining({ type: 'low_battery', childId: c.id, batteryLevel: '10' }));
+    expect(pushes[0].options?.includeNotification).toBe(false);
     resetSender();
   });
 });

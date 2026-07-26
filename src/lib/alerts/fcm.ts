@@ -3,6 +3,7 @@ export interface PushSender {
 }
 
 export type PushOptions = {
+  includeNotification?: boolean;
   android?: {
     priority?: 'normal' | 'high';
     ttlMs?: number;
@@ -56,18 +57,19 @@ class FirebaseSender implements PushSender {
     if (!admin.apps.length) {
       admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     }
+    const includeNotification = options?.includeNotification ?? true;
     const android = options?.android ? {
       ...(options.android.priority ? { priority: options.android.priority } : {}),
       ...(options.android.ttlMs ? { ttl: options.android.ttlMs } : {}),
-      notification: {
+      ...(includeNotification ? { notification: {
         ...(options.android.channelId ? { channelId: options.android.channelId } : {}),
         ...(options.android.notificationPriority ? { priority: options.android.notificationPriority } : {}),
         ...(options.android.tag ? { tag: options.android.tag } : {}),
-      },
+      } } : {}),
     } : undefined;
     await admin.messaging().send({
       token: fcmToken,
-      notification: { title, body },
+      ...(includeNotification ? { notification: { title, body } } : {}),
       data,
       android,
     });

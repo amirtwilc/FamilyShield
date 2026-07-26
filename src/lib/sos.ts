@@ -8,6 +8,7 @@ import { getSender, type PushOptions } from '@/lib/alerts/fcm';
 export const URGENT_PUSH_CHANNEL_ID = 'familyshield_urgent';
 
 const URGENT_PUSH_OPTIONS: PushOptions = {
+  includeNotification: false,
   android: {
     priority: 'high',
     ttlMs: 60 * 60 * 1000,
@@ -170,6 +171,7 @@ async function notifySosStarted(device: Device, eventId: string): Promise<void> 
       childId: device.childId,
       parentId: parent.parentId,
       eventId,
+      childName: name,
       priority: 'urgent',
     }, URGENT_PUSH_OPTIONS)) {
       await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
@@ -193,7 +195,8 @@ async function notifySosEnded(device: Device, eventId: string): Promise<void> {
       childId: device.childId,
       parentId: parent.parentId,
       eventId,
-    })) {
+      childName: name,
+    }, URGENT_PUSH_OPTIONS)) {
       await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
     }
   }
@@ -209,6 +212,7 @@ async function notifyChildSosAcknowledged(childId: string, parentId: string, eve
       childId,
       parentId,
       eventId,
+      parentName: parent?.email ?? '',
       priority: 'urgent',
     }, URGENT_PUSH_OPTIONS) || delivered;
   }
@@ -418,6 +422,7 @@ export async function sendUrgentAlertToChild(childId: string, parentId: string, 
       childId,
       parentId,
       messageId: message.id,
+      body,
       priority: 'urgent',
     }, URGENT_PUSH_OPTIONS) || delivered;
   }

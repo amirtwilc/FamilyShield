@@ -22,6 +22,15 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
             )
             return
         }
+        if (isSafetyAlertPushData(data)) {
+            showSafetyAlertPushNotification(
+                this,
+                message.notification?.title,
+                message.notification?.body,
+                data,
+            )
+            return
+        }
         if (data["type"] != CHAT_PUSH_TYPE) return
         showChatPushNotification(
             this,

@@ -128,7 +128,6 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -2366,7 +2365,7 @@ private fun rememberPlaceName(lat: Double?, lng: Double?): String {
 }
 
 private fun timeOf(iso: String): String = try {
-    OffsetDateTime.parse(iso).toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a"))
+    formatMessageTime(iso)
 } catch (e: Exception) { "" }
 
 private fun timeRangeOf(startIso: String, endIso: String): String {
@@ -2376,7 +2375,7 @@ private fun timeRangeOf(startIso: String, endIso: String): String {
 }
 
 private fun dateTimeOf(iso: String): String = try {
-    OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("MMM d, h:mm a"))
+    "${formatMessageDate(iso)}, ${timeOf(iso)}"
 } catch (e: Exception) { timeOf(iso) }
 
 @Composable

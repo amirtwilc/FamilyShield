@@ -1,9 +1,17 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { db } from '../../db/client';
 import { devices, childParentLinks, parents, alerts, safeZoneStates } from '../../db/schema';
-import { getSender } from './fcm';
+import { getSender, type PushOptions } from './fcm';
 
 type Device = typeof devices.$inferSelect;
+
+const LOCALIZED_ALERT_PUSH_OPTIONS: PushOptions = {
+  includeNotification: false,
+  android: {
+    priority: 'high',
+    ttlMs: 60 * 60 * 1000,
+  },
+};
 
 async function parentFcmsFor(childId: string): Promise<string[]> {
   // parent.fcmToken added in Task 11; until then this returns null safely.
@@ -13,17 +21,17 @@ async function parentFcmsFor(childId: string): Promise<string[]> {
   return rows.map((r) => r.token).filter((t): t is string => Boolean(t));
 }
 
-async function sendToParents(childId: string, title: string, body: string, data: Record<string, string>) {
+async function sendToParents(childId: string, title: string, body: string, data: Record<string, string>, options?: PushOptions) {
   let sent = false;
   for (const fcm of await parentFcmsFor(childId)) {
-    sent = await getSender().send(fcm, title, body, data) || sent;
+    sent = await getSender().send(fcm, title, body, data, options) || sent;
   }
   return sent;
 }
 
-async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>) {
+async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>, options?: PushOptions) {
   const [parent] = await db.select({ token: parents.fcmToken }).from(parents).where(eq(parents.id, parentId));
-  return parent?.token ? getSender().send(parent.token, title, body, data) : false;
+  return parent?.token ? getSender().send(parent.token, title, body, data, options) : false;
 }
 
 type ZoneTransitionInput = {
@@ -64,7 +72,7 @@ async function fireSafeZoneAlert(
     childId: device.childId,
     zoneId: row.id,
     zoneName: row.name,
-  })) {
+  }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
     await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
   }
 }
@@ -138,7 +146,11 @@ export async function fireLowBatteryIfNeeded(device: Device): Promise<void> {
     payload: { batteryLevel: device.batteryLevel },
   }).returning();
 
-  if (await sendToParents(device.childId, 'Low battery', `Battery at ${device.batteryLevel}%`, { type: 'low_battery' })) {
+  if (await sendToParents(device.childId, 'Low battery', `Battery at ${device.batteryLevel}%`, {
+    type: 'low_battery',
+    childId: device.childId,
+    batteryLevel: String(device.batteryLevel),
+  }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
     await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, row.id));
   }
 }
@@ -150,7 +162,10 @@ export async function fireChildUnpaired(device: Device): Promise<void> {
     type: 'child_unpaired',
     payload: {},
   }).returning();
-  if (await sendToParents(device.childId, 'Child device unpaired', 'The child deliberately unpaired this device', { type: 'child_unpaired' })) {
+  if (await sendToParents(device.childId, 'Child device unpaired', 'The child deliberately unpaired this device', {
+    type: 'child_unpaired',
+    childId: device.childId,
+  }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
     await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
   }
 }
@@ -159,7 +174,7 @@ export async function fireParentRemovedByChild(parentId: string, device: Device)
   await sendToParent(parentId, 'Child device unpaired', 'The child removed this parent from the device', {
     type: 'child_unpaired',
     childId: device.childId,
-  });
+  }, LOCALIZED_ALERT_PUSH_OPTIONS);
 }
 
 export async function fireOfflineSweep(): Promise<{ fired: number }> {
@@ -183,7 +198,10 @@ export async function fireOfflineSweep(): Promise<{ fired: number }> {
     const [a] = await db.insert(alerts).values({
       childId: row.child_id, deviceId: row.device_id, type: 'offline', payload: {},
     }).returning();
-    if (await sendToParents(row.child_id, 'Device offline', 'Child device is offline', { type: 'offline' })) {
+    if (await sendToParents(row.child_id, 'Device offline', 'Child device is offline', {
+      type: 'offline',
+      childId: row.child_id,
+    }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
       await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
     }
     fired++;

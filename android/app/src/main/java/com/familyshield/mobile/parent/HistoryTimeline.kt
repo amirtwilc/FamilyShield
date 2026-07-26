@@ -54,7 +54,7 @@ fun groupHistoryStays(
             pointCount = group.size,
             zoneName = zoneName,
         )
-    }
+    }.asReversed()
 }
 
 private fun distanceMeters(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {

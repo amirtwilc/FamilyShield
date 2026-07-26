@@ -6,7 +6,7 @@ import { GET as parentCurrentSos } from '@/app/api/children/[id]/sos/current/rou
 import { POST as urgentAlert } from '@/app/api/children/[id]/urgent-alert/route';
 import { db } from '@/db/client';
 import { alerts, childParentLinks, devices, messages, parents } from '@/db/schema';
-import { setSender, resetSender } from '@/lib/alerts/fcm';
+import { setSender, resetSender, type PushOptions } from '@/lib/alerts/fcm';
 import { signAccess } from '@/lib/auth/jwt';
 import { resetDb } from '../helpers/db';
 import { seedChild, seedDevice, seedParent } from '../helpers/factories';
@@ -25,11 +25,11 @@ const parentGet = (token: string) => new Request('http://t/', { headers: { autho
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('kid SOS and urgent alerts', () => {
-  const pushes: Array<{ token: string; title: string; body: string; data?: Record<string, string> }> = [];
+  const pushes: Array<{ token: string; title: string; body: string; data?: Record<string, string>; options?: PushOptions }> = [];
   beforeAll(async () => { await resetDb(); });
   beforeEach(() => {
     pushes.length = 0;
-    setSender({ async send(token, title, body, data) { pushes.push({ token, title, body, data }); return true; } });
+    setSender({ async send(token, title, body, data, options) { pushes.push({ token, title, body, data, options }); return true; } });
   });
   afterEach(() => {
     resetSender();
@@ -57,7 +57,8 @@ describe('kid SOS and urgent alerts', () => {
     expect(state.highRateIntervalSeconds).toBe(60);
     expect(pushes).toHaveLength(2);
     expect(pushes.map((p) => p.token).sort()).toEqual([p1.fcmToken, p2.fcmToken].sort());
-    expect(pushes[0].data).toEqual(expect.objectContaining({ type: 'kid_sos_started', priority: 'urgent', childId: c.id }));
+    expect(pushes[0].data).toEqual(expect.objectContaining({ type: 'kid_sos_started', priority: 'urgent', childId: c.id, childName: 'Mia' }));
+    expect(pushes[0].options?.includeNotification).toBe(false);
 
     const again = await startSos(postDevice(deviceToken, { timezone: 'Asia/Jerusalem', local_day: '2026-07-26' }));
     expect(again.status).toBe(201);
@@ -112,7 +113,8 @@ describe('kid SOS and urgent alerts', () => {
     expect((await r.json()).message.priority).toBe('urgent');
     expect(pushes).toEqual([expect.objectContaining({
       token: 'kid-fcm',
-      data: expect.objectContaining({ type: 'urgent_alert', priority: 'urgent', childId: c.id }),
+      data: expect.objectContaining({ type: 'urgent_alert', priority: 'urgent', childId: c.id, body: 'Please call me now' }),
+      options: expect.objectContaining({ includeNotification: false }),
     })]);
 
     const rows = await db.select().from(messages).where(eq(messages.childId, c.id));

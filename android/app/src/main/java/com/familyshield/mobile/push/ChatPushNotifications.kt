@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
+import com.familyshield.mobile.Locales
 import com.familyshield.mobile.MainActivity
 import com.familyshield.mobile.R
 import kotlin.math.abs
@@ -35,14 +36,15 @@ data class ChatPushDestination(
 fun ensureChatPushNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val app = context.applicationContext
+    val localized = Locales.wrap(app)
     val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     manager.createNotificationChannel(
         NotificationChannel(
             CHAT_PUSH_CHANNEL_ID,
-            app.getString(R.string.notification_channel_chat_name),
+            localized.getString(R.string.notification_channel_chat_name),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = app.getString(R.string.notification_channel_chat_description)
+            description = localized.getString(R.string.notification_channel_chat_description)
         },
     )
 }
@@ -85,6 +87,7 @@ fun showChatPushNotification(
     ) return
 
     ensureChatPushNotificationChannel(app)
+    val localized = Locales.wrap(app)
 
     val contentIntent = PendingIntent.getActivity(
         app,
@@ -97,7 +100,7 @@ fun showChatPushNotification(
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
     val notificationTitle = title?.takeIf { it.isNotBlank() }
-        ?: app.getString(R.string.notification_chat_fallback_title)
+        ?: localized.getString(R.string.notification_chat_fallback_title)
     val notificationBody = body?.takeIf { it.isNotBlank() }.orEmpty()
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Notification.Builder(app, CHAT_PUSH_CHANNEL_ID)

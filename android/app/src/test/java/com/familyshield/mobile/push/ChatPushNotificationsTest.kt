@@ -47,6 +47,13 @@ class ChatPushNotificationsTest {
     }
 
     @Test
+    fun `recognizes safety alert push data`() {
+        assertEquals(true, isSafetyAlertPushData(mapOf("type" to "low_battery", "childId" to "child-1")))
+        assertEquals(true, isSafetyAlertPushData(mapOf("type" to "safe_zone_exit", "zoneName" to "School")))
+        assertEquals(false, isSafetyAlertPushData(mapOf("type" to "chat_message")))
+    }
+
+    @Test
     fun `notification id is stable for the same message`() {
         val data = mapOf("messageId" to "msg-1", "childId" to "child-1")
 
@@ -70,6 +77,18 @@ class ChatPushNotificationsTest {
         assertNotEquals(
             urgentPushNotificationId(mapOf("eventId" to "sos-1")),
             urgentPushNotificationId(mapOf("eventId" to "sos-2")),
+        )
+    }
+
+    @Test
+    fun `safety alert notification id is stable and varies by zone`() {
+        assertEquals(
+            safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-1")),
+            safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-1")),
+        )
+        assertNotEquals(
+            safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-1")),
+            safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-2")),
         )
     }
 }

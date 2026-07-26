@@ -38,6 +38,9 @@ class HistoryTimelineTest {
         )
 
         assertEquals(3, stays.size)
+        assertEquals("2026-07-26T10:00:00Z", stays[0].startAt)
+        assertEquals("2026-07-26T09:00:00Z", stays[1].startAt)
+        assertEquals("2026-07-26T08:00:00Z", stays[2].startAt)
         assertNull(stays[0].zoneName)
         assertNull(stays[1].zoneName)
         assertNull(stays[2].zoneName)
