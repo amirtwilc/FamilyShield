@@ -1,4 +1,4 @@
-import { and, eq, lt, or, desc } from 'drizzle-orm';
+import { and, eq, lt, or, desc, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { alerts } from '@/db/schema';
 import { requireParent } from '@/lib/auth/parent';
@@ -19,6 +19,7 @@ export async function GET(req: Request, { params }: Ctx) {
 
   const rows = await db.select().from(alerts).where(and(
     eq(alerts.childId, id),
+    or(eq(alerts.parentId, a.parentId), isNull(alerts.parentId)),
     cur ? or(
       lt(alerts.createdAt, new Date(cur.recordedAt)),
       and(eq(alerts.createdAt, new Date(cur.recordedAt)), lt(alerts.id, cur.id)),

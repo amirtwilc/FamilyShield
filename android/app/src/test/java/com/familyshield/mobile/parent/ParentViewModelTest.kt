@@ -267,7 +267,7 @@ class ParentViewModelTest {
         }
 
     @Test
-    fun `loads all map zones keyed by child`() = runTest(mainRule.dispatcher) {
+    fun `loads shared map zones for every child`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         val vm = viewModel(api)
         vm.authenticate("parent@x.com", "pw123456", register = true)
@@ -276,15 +276,15 @@ class ParentViewModelTest {
         val miaId = vm.selectedId!!
         vm.addChild("Noah"); advanceUntilIdle()
         val noahId = vm.selectedId!!
-        api.createZone(vm.token!!, miaId, "School", 1.0, 2.0, 300)
-        api.createZone(vm.token!!, noahId, "Home", 3.0, 4.0, 150)
+        api.createZone(vm.token!!, miaId, "School", 1.0, 2.0, 300, active = true)
+        api.createZone(vm.token!!, noahId, "Home", 3.0, 4.0, 150, active = true)
 
         vm.loadMapZones()
         advanceUntilIdle()
 
         assertEquals(setOf(miaId, noahId), vm.mapZonesByChild.keys)
-        assertEquals("School", vm.mapZonesByChild[miaId]!!.single().name)
-        assertEquals("Home", vm.mapZonesByChild[noahId]!!.single().name)
+        assertEquals(listOf("Home", "School"), vm.mapZonesByChild[miaId]!!.map { it.name })
+        assertEquals(listOf("Home", "School"), vm.mapZonesByChild[noahId]!!.map { it.name })
     }
 
     @Test
@@ -412,6 +412,26 @@ class ParentViewModelTest {
         vm.removeZone(vm.zones[0].id)
         advanceUntilIdle()
         assertTrue("zone should be removed", vm.zones.isEmpty())
+    }
+
+    @Test
+    fun `edits a safe zone name radius and active state`() = runTest(mainRule.dispatcher) {
+        val vm = viewModel(FakeApiClient())
+        vm.authenticate("parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia")
+        advanceUntilIdle()
+
+        vm.addZone("School", 32.0, 34.0, 300)
+        advanceUntilIdle()
+        val zoneId = vm.zones.single().id
+
+        vm.updateZone(zoneId, "School gate", 500, active = false)
+        advanceUntilIdle()
+
+        assertEquals("School gate", vm.zones.single().name)
+        assertEquals(500, vm.zones.single().radiusM)
+        assertTrue("zone should be inactive", !vm.zones.single().active)
     }
 
     @Test

@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import { devices } from '@/db/schema';
 import { ensureLocationPartition } from '@/db/partitions';
 import { requireDevice } from '@/lib/auth/device';
-import { fireLowBatteryIfNeeded } from '@/lib/alerts/engine';
+import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
 import { ok } from '@/lib/http';
 import { parseBody } from '@/lib/validate';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
@@ -43,6 +43,9 @@ export async function POST(req: Request) {
               ${pt.speed ?? null}, ${pt.accuracy ?? null}, ${pt.battery_level ?? null}, ${pt.recorded_at})
       ON CONFLICT (device_id, recorded_at) DO NOTHING`);
     locationInserted = r.rowCount ?? 0;
+    if (locationInserted > 0) {
+      await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+    }
     await db.execute(sql`
       UPDATE devices SET
         last_location = ST_SetSRID(ST_MakePoint(${pt.lng}, ${pt.lat}), 4326),

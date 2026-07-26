@@ -455,8 +455,7 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val loaded = authed { api.listZones(it, id) }
-                zones = loaded
-                mapZonesByChild = mapZonesByChild + (id to loaded)
+                applySharedZones(loaded)
             } catch (e: Exception) { error = e.message }
         }
     }
@@ -466,25 +465,37 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val kids = if (children.isNotEmpty()) children else authed { api.listChildren(it) }.also { children = it }
-                val loaded = LinkedHashMap<String, List<Zone>>()
-                for (c in kids) loaded[c.id] = authed { api.listZones(it, c.id) }
-                mapZonesByChild = loaded
-                selectedId?.let { id -> zones = loaded[id] ?: emptyList() }
+                val anchor = selectedId ?: kids.firstOrNull()?.id ?: return@launch
+                val loaded = authed { api.listZones(it, anchor) }
+                applySharedZones(loaded)
             } catch (e: Exception) { error = e.message }
         }
     }
 
     fun addZone(name: String, lat: Double, lng: Double, radiusM: Int) {
         val id = selectedId ?: return
+        addZone(name, id, lat, lng, radiusM)
+    }
+
+    fun addZone(name: String, centerChildId: String, lat: Double, lng: Double, radiusM: Int) {
         if (token == null) return
         viewModelScope.launch(dispatcher) {
-            try { authed { api.createZone(it, id, name, lat, lng, radiusM) }; loadZones() }
+            try { authed { api.createZone(it, centerChildId, name, lat, lng, radiusM) }; loadZones() }
+            catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun updateZone(zoneId: String, name: String, radiusM: Int, active: Boolean) {
+        val id = selectedId ?: children.firstOrNull()?.id ?: return
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try { authed { api.updateZone(it, id, zoneId, name.trim(), radiusM, active) }; loadZones() }
             catch (e: Exception) { error = e.message }
         }
     }
 
     fun removeZone(zoneId: String) {
-        val id = selectedId ?: return
+        val id = selectedId ?: children.firstOrNull()?.id ?: return
         if (token == null) return
         viewModelScope.launch(dispatcher) {
             try { authed { api.deleteZone(it, id, zoneId) }; loadZones() }
@@ -549,6 +560,11 @@ class ParentViewModel(
             sum += 6371.0 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
         }
         return sum
+    }
+
+    private fun applySharedZones(loaded: List<Zone>) {
+        zones = loaded
+        mapZonesByChild = children.associate { it.id to loaded }
     }
 
     companion object {

@@ -10,7 +10,13 @@ export const point = customType<{ data: { lat: number; lng: number }; driverData
   toDriver(v) { return `SRID=4326;POINT(${v.lng} ${v.lat})`; },
 });
 
-export const alertType = pgEnum('alert_type', ['low_battery', 'offline', 'child_unpaired']);
+export const alertType = pgEnum('alert_type', [
+  'low_battery',
+  'offline',
+  'child_unpaired',
+  'safe_zone_enter',
+  'safe_zone_exit',
+]);
 
 export const subscriptionTiers = pgTable('subscription_tiers', {
   code: text('code').primaryKey(),
@@ -105,19 +111,34 @@ export const locations = pgTable('locations', {
 
 export const safeZones = pgTable('safe_zones', {
   id: uuid('id').primaryKey().defaultRandom(),
-  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  sourceChildId: uuid('source_child_id').references(() => children.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   center: point('center').notNull(),
   radiusM: integer('radius_m').notNull(),
+  active: boolean('active').default(true).notNull(),
   notifyOnEnter: boolean('notify_on_enter').default(true).notNull(),
   notifyOnExit: boolean('notify_on_exit').default(true).notNull(),
   dwellMinutes: integer('dwell_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => ({ byParentTime: index('safe_zones_parent_time_idx').on(t.parentId, t.createdAt) }));
+
+export const safeZoneStates = pgTable('safe_zone_states', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  zoneId: uuid('zone_id').notNull().references(() => safeZones.id, { onDelete: 'cascade' }),
+  isInside: boolean('is_inside').notNull(),
+  lastTransitionAt: timestamp('last_transition_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  uniqChildZone: uniqueIndex('safe_zone_states_child_zone_idx').on(t.parentId, t.childId, t.zoneId),
+}));
 
 export const alerts = pgTable('alerts', {
   id: uuid('id').primaryKey().defaultRandom(),
   childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references(() => parents.id, { onDelete: 'cascade' }),
   deviceId: uuid('device_id'),
   type: alertType('type').notNull(),
   payload: jsonb('payload').default(sql`'{}'::jsonb`).notNull(),

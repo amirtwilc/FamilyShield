@@ -62,6 +62,7 @@ data class Zone(
     val lat: Double = 0.0,
     val lng: Double = 0.0,
     @SerialName("radius_m") val radiusM: Int,
+    val active: Boolean = true,
     @SerialName("notify_on_enter") val notifyOnEnter: Boolean = true,
     @SerialName("notify_on_exit") val notifyOnExit: Boolean = true,
 )
@@ -70,7 +71,10 @@ data class Zone(
 data class ZonesResponse(val zones: List<Zone>)
 
 @Serializable
-data class CreateZoneBody(val name: String, val lat: Double, val lng: Double, val radiusM: Int)
+data class CreateZoneBody(val name: String, val lat: Double, val lng: Double, val radiusM: Int, val active: Boolean = true)
+
+@Serializable
+data class UpdateZoneBody(val name: String? = null, val radiusM: Int? = null, val active: Boolean? = null)
 
 @Serializable
 data class HistoryPoint(

@@ -109,19 +109,40 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun alerts(token: String, childId: String): List<Alert> =
         alertsByChild[childId]?.toList() ?: emptyList()
 
-    private val zonesByChild = mutableMapOf<String, MutableList<Zone>>()
+    private val zonesByParent = mutableMapOf<String, MutableList<Zone>>()
+    private val zoneState = mutableMapOf<String, Boolean>()
 
     override suspend fun listZones(token: String, childId: String): List<Zone> =
-        zonesByChild[childId]?.toList() ?: emptyList()
+        zonesByParent[parentEmail(token)]?.toList() ?: emptyList()
 
-    override suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int): Zone {
-        val z = Zone("zone-${++seq}", name, lat, lng, radiusM)
-        zonesByChild.getOrPut(childId) { mutableListOf() }.add(z)
+    override suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int, active: Boolean): Zone {
+        val z = Zone("zone-${++seq}", name, lat, lng, radiusM, active)
+        zonesByParent.getOrPut(parentEmail(token)) { mutableListOf() }.add(0, z)
         return z
     }
 
+    override suspend fun updateZone(
+        token: String,
+        childId: String,
+        zoneId: String,
+        name: String?,
+        radiusM: Int?,
+        active: Boolean?,
+    ): Zone {
+        val zones = zonesByParent[parentEmail(token)] ?: throw ApiException(404, "Zone not found")
+        val index = zones.indexOfFirst { it.id == zoneId }
+        if (index < 0) throw ApiException(404, "Zone not found")
+        val updated = zones[index].copy(
+            name = name ?: zones[index].name,
+            radiusM = radiusM ?: zones[index].radiusM,
+            active = active ?: zones[index].active,
+        )
+        zones[index] = updated
+        return updated
+    }
+
     override suspend fun deleteZone(token: String, childId: String, zoneId: String) {
-        zonesByChild[childId]?.removeAll { it.id == zoneId }
+        zonesByParent[parentEmail(token)]?.removeAll { it.id == zoneId }
     }
 
     override suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint> =
@@ -178,6 +199,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         }
         body.location?.let { location ->
             locations[childId] = CurrentLocation(location.lat, location.lng, location.recordedAt)
+            fireSafeZoneAlerts(childId, location.lat, location.lng)
         }
         return DeviceTelemetryResult(
             ok = true,
@@ -325,6 +347,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         locations[childId] = CurrentLocation(lat, lng, now)
         deviceByChild[childId] = (deviceByChild[childId] ?: error("no device"))
             .copy(batteryLevel = battery, lastSeenAt = now)
+        fireSafeZoneAlerts(childId, lat, lng)
         if (battery <= lowBatteryThreshold) {
             alertsByChild.getOrPut(childId) { mutableListOf() }
                 .add(0, Alert("alert-${++seq}", "low_battery", now))
@@ -343,5 +366,34 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
                 lastSeenAt = now,
             )
         permissionStatus?.let { appUsageAccessByChild[childId] = (it.m and 16) != 0 }
+    }
+
+    private fun fireSafeZoneAlerts(childId: String, lat: Double, lng: Double) {
+        childParents[childId].orEmpty().keys.forEach { parent ->
+            zonesByParent[parent].orEmpty().filter { it.active }.forEach { zone ->
+                val inside = distanceM(lat, lng, zone.lat, zone.lng) <= zone.radiusM
+                val key = "$parent:$childId:${zone.id}"
+                val previous = zoneState[key]
+                zoneState[key] = inside
+                val type = when {
+                    previous == null && inside -> "safe_zone_enter"
+                    previous == true && !inside -> "safe_zone_exit"
+                    previous == false && inside -> "safe_zone_enter"
+                    else -> null
+                }
+                if (type != null) {
+                    alertsByChild.getOrPut(childId) { mutableListOf() }.add(0, Alert("alert-${++seq}", type, now))
+                }
+            }
+        }
+    }
+
+    private fun distanceM(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
+        val dLat = Math.toRadians(bLat - aLat)
+        val dLng = Math.toRadians(bLng - aLng)
+        val h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(aLat)) * Math.cos(Math.toRadians(bLat)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        return 6_371_000.0 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
     }
 }

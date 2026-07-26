@@ -7,7 +7,7 @@ import { statusSchema } from '@/lib/schemas/status';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
 import { reportUsageSchema } from '@/lib/schemas/appusage';
 import { createChildSchema } from '@/lib/schemas/children';
-import { createZoneSchema } from '@/lib/schemas/zones';
+import { createZoneSchema, updateZoneSchema } from '@/lib/schemas/zones';
 import { sendMessageSchema } from '@/lib/schemas/messages';
 import { pushTokenSchema, historyQuery } from '@/lib/schemas/parent';
 import { z } from './registry';
@@ -87,6 +87,8 @@ export function buildOpenApiDocument() {
     request: { body: json(createZoneSchema) }, responses: { 201: { description: 'Zone' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/zones', security: [{ parentJwt: [] }],
     responses: { 200: { description: 'Safe zones' }, 404: { description: 'Child not found' } } });
+  registry.registerPath({ method: 'patch', path: '/api/children/{id}/zones/{zoneId}', security: [{ parentJwt: [] }],
+    request: { body: json(updateZoneSchema) }, responses: { 200: { description: 'Zone updated' }, 404: { description: 'Child or zone not found' } } });
   registry.registerPath({ method: 'delete', path: '/api/children/{id}/zones/{zoneId}', security: [{ parentJwt: [] }],
     responses: { 200: { description: 'Zone deleted' }, 404: { description: 'Child or zone not found' } } });
   registry.registerPath({ method: 'delete', path: '/api/devices/{id}', security: [{ parentJwt: [] }],

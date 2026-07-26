@@ -31,7 +31,8 @@ interface ApiClient {
     suspend fun currentLocation(token: String, childId: String): CurrentLocation?
     suspend fun alerts(token: String, childId: String): List<Alert>
     suspend fun listZones(token: String, childId: String): List<Zone>
-    suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int): Zone
+    suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int, active: Boolean = true): Zone
+    suspend fun updateZone(token: String, childId: String, zoneId: String, name: String? = null, radiusM: Int? = null, active: Boolean? = null): Zone
     suspend fun deleteZone(token: String, childId: String, zoneId: String)
     suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint>
     suspend fun routes(token: String, childId: String): RoutesResponse
@@ -145,9 +146,13 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         json.decodeFromString<ZonesResponse>(
             requestRaw("GET", "/api/children/$childId/zones", token = token)).zones
 
-    override suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int): Zone =
+    override suspend fun createZone(token: String, childId: String, name: String, lat: Double, lng: Double, radiusM: Int, active: Boolean): Zone =
         json.decodeFromString(requestRaw("POST", "/api/children/$childId/zones",
-            json.encodeToString(CreateZoneBody(name, lat, lng, radiusM)), token))
+            json.encodeToString(CreateZoneBody(name, lat, lng, radiusM, active)), token))
+
+    override suspend fun updateZone(token: String, childId: String, zoneId: String, name: String?, radiusM: Int?, active: Boolean?): Zone =
+        json.decodeFromString(requestRaw("PATCH", "/api/children/$childId/zones/$zoneId",
+            json.encodeToString(UpdateZoneBody(name, radiusM, active)), token))
 
     override suspend fun deleteZone(token: String, childId: String, zoneId: String) {
         requestRaw("DELETE", "/api/children/$childId/zones/$zoneId", token = token)

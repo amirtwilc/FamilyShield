@@ -76,6 +76,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.familyshield.mobile.Locales
 import com.familyshield.mobile.R
 import com.familyshield.mobile.net.Monitor
+import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.ui.OsmMap
 import com.familyshield.mobile.ui.formatMessageDate
 import com.familyshield.mobile.ui.formatMessageTime
@@ -94,6 +95,8 @@ import java.util.Locale
 @Composable
 fun KidApp(
     onBack: () -> Unit,
+    chatDestination: ChatPushDestination? = null,
+    onChatDestinationConsumed: (ChatPushDestination) -> Unit = {},
     onKidPaired: () -> Unit,
     onKidUnpaired: () -> Unit,
     vm: KidViewModel = viewModel(factory = KidViewModel.factory(LocalContext.current)),
@@ -101,6 +104,7 @@ fun KidApp(
     val context = LocalContext.current
     var hadDeviceToken by remember { mutableStateOf(vm.deviceToken != null) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val backgroundLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         requestKidNotificationPermission(context, notificationLauncher)
@@ -126,12 +130,23 @@ fun KidApp(
             onKidUnpaired()
         }
     }
+    LaunchedEffect(chatDestination?.key, vm.deviceToken, vm.monitors) {
+        if (vm.deviceToken == null) return@LaunchedEffect
+        val destination = chatDestination ?: return@LaunchedEffect
+        val monitor = vm.monitors.firstOrNull { it.parentId == destination.parentId }
+        if (monitor == null) {
+            vm.refreshMonitoring()
+        } else {
+            settingsOpen = false
+            chatMonitor = monitor
+            onChatDestinationConsumed(destination)
+        }
+    }
     if (settingsOpen) {
         KidSettingsScreen(onBack = { settingsOpen = false })
     } else if (vm.deviceToken == null) {
         ConnectScreen(vm, onBack, onSettings = { settingsOpen = true })
     } else {
-        var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
         if (chatMonitor != null) KidChatScreen(vm, monitor = chatMonitor!!, onBack = { chatMonitor = null })
         else DeviceDashboard(vm, onSettings = { settingsOpen = true }, onChat = { chatMonitor = it })
     }

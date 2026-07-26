@@ -14,6 +14,7 @@
     <string name="action_add">הוספה</string>
     <string name="action_cancel">ביטול</string>
     <string name="action_ok">אישור</string>
+    <string name="action_yes">כן</string>
     <string name="action_save">שמירה</string>
     <string name="action_logout">התנתקות</string>
     <string name="field_email">אימייל</string>
@@ -98,9 +99,13 @@
     <string name="alert_low_battery">סוללה חלשה</string>
     <string name="alert_offline">לא מקוון</string>
     <string name="alert_child_unpaired">הילד ניתק את המכשיר</string>
+    <string name="alert_safe_zone_enter">כניסה לאזור בטוח</string>
+    <string name="alert_safe_zone_exit">יציאה מאזור בטוח</string>
     <string name="alert_generic">התראה</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">הסוללה עומדת להתרוקן</string>
+    <string name="alert_safe_zone_enter_body">הילד נכנס לאזור בטוח פעיל</string>
+    <string name="alert_safe_zone_exit_body">הילד יצא מאזור בטוח פעיל</string>
     <string name="alert_status_body">עדכון מצב המכשיר</string>
 
     <!-- Map -->
@@ -132,18 +137,27 @@
 
     <!-- Zones -->
     <string name="zones_title">אזורים בטוחים והתראות</string>
-    <string name="zones_subtitle">ניהול התראות אוטומטיות כש%1$s נכנס או יוצא מאזור.</string>
+    <string name="zones_subtitle">ניהול התראות אוטומטיות כשהילדים נכנסים או יוצאים מאזור.</string>
     <string name="empty_zones_title">אין אזורים בטוחים עדיין</string>
     <string name="empty_zones_body">הוסיפו אזור כדי לקבל התראות כשהילד מגיע או עוזב.</string>
     <string name="notif_strategy_title">אסטרטגיית התראות</string>
     <string name="notif_strategy_body">אתם מקבלים התראות פוש לכל האזורים הפעילים. התראות בטיחות קריטיות עוקפות את מצב \"נא לא להפריע\".</string>
     <string name="cd_add_zone">הוספת אזור</string>
     <string name="chip_active">פעיל</string>
+    <string name="chip_inactive">לא פעיל</string>
     <string name="zone_radius">רדיוס %1$d מ\'</string>
+    <string name="cd_edit_zone">עריכת אזור</string>
     <string name="cd_delete_zone">מחיקת אזור</string>
     <string name="new_zone_title">אזור בטוח חדש</string>
+    <string name="edit_zone_title">עריכת אזור בטוח</string>
     <string name="zone_name_label">שם (לדוגמה: בית ספר)</string>
     <string name="zone_radius_label">רדיוס: %1$d מ\'</string>
+    <string name="zone_center_child_label">ממורכז סביב מיקום ילד</string>
+    <string name="zone_active_label">פעיל</string>
+    <string name="zone_delete_confirm_title">האם אתם בטוחים?</string>
+    <string name="zone_delete_confirm_body">להסיר את %1$s מהאזורים הבטוחים?</string>
+    <string name="cd_decrease_radius">הקטנת רדיוס</string>
+    <string name="cd_increase_radius">הגדלת רדיוס</string>
     <string name="zone_center_yes">ממורכז על מיקומו הנוכחי של הילד.</string>
     <string name="zone_center_no">אין מיקום נוכחי — חברו מכשיר תחילה.</string>
 

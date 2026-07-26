@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.os.Build
 import com.familyshield.mobile.MainActivity
 import com.familyshield.mobile.R
@@ -15,6 +16,21 @@ import kotlin.math.abs
 
 const val CHAT_PUSH_TYPE = "chat_message"
 const val CHAT_PUSH_CHANNEL_ID = "familyshield_chat"
+private const val ACTION_OPEN_CHAT = "com.familyshield.mobile.push.OPEN_CHAT"
+private const val KEY_TYPE = "type"
+private const val KEY_RECIPIENT = "recipient"
+private const val KEY_CHILD_ID = "childId"
+private const val KEY_PARENT_ID = "parentId"
+private const val KEY_MESSAGE_ID = "messageId"
+
+data class ChatPushDestination(
+    val recipient: String,
+    val childId: String,
+    val parentId: String,
+    val messageId: String? = null,
+) {
+    val key: String get() = listOf(recipient, childId, parentId, messageId.orEmpty()).joinToString(":")
+}
 
 fun ensureChatPushNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -36,6 +52,27 @@ fun chatPushNotificationId(data: Map<String, String>): Int {
     return 4300 + abs(key.hashCode() % 100_000)
 }
 
+fun chatPushDestinationFromData(data: Map<String, String>): ChatPushDestination? {
+    if (data[KEY_TYPE] != CHAT_PUSH_TYPE) return null
+    val recipient = data[KEY_RECIPIENT]?.takeIf { it == "parent" || it == "child" } ?: return null
+    val childId = data[KEY_CHILD_ID]?.takeIf { it.isNotBlank() } ?: return null
+    val parentId = data[KEY_PARENT_ID]?.takeIf { it.isNotBlank() } ?: return null
+    return ChatPushDestination(
+        recipient = recipient,
+        childId = childId,
+        parentId = parentId,
+        messageId = data[KEY_MESSAGE_ID]?.takeIf { it.isNotBlank() },
+    )
+}
+
+fun chatPushDestinationFromIntent(intent: Intent?): ChatPushDestination? {
+    val extras = intent?.extras ?: return null
+    return chatPushDestinationFromData(extras.toStringMap())
+}
+
+private fun Bundle.toStringMap(): Map<String, String> =
+    keySet().mapNotNull { key -> getString(key)?.let { key to it } }.toMap()
+
 fun showChatPushNotification(
     context: Context,
     title: String?,
@@ -51,9 +88,11 @@ fun showChatPushNotification(
 
     val contentIntent = PendingIntent.getActivity(
         app,
-        0,
+        chatPushNotificationId(data),
         Intent(app, MainActivity::class.java).apply {
+            action = ACTION_OPEN_CHAT
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            data.forEach { (key, value) -> putExtra(key, value) }
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )

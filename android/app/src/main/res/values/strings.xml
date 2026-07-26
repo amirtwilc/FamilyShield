@@ -6,6 +6,7 @@
     <string name="action_add">Add</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_ok">OK</string>
+    <string name="action_yes">Yes</string>
     <string name="action_save">Save</string>
     <string name="action_logout">Log out</string>
     <string name="field_email">Email</string>
@@ -96,10 +97,14 @@
     <string name="alert_low_battery">Low battery</string>
     <string name="alert_offline">Offline</string>
     <string name="alert_child_unpaired">Child unpaired device</string>
+    <string name="alert_safe_zone_enter">Entered safe zone</string>
+    <string name="alert_safe_zone_exit">Left safe zone</string>
     <string name="alert_generic">Alert</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">Battery is running low</string>
     <string name="alert_offline_body">Child device is offline. FamilyShield may have been closed or blocked in the background.</string>
+    <string name="alert_safe_zone_enter_body">Child entered an active safe zone</string>
+    <string name="alert_safe_zone_exit_body">Child left an active safe zone</string>
     <string name="alert_status_body">Device status update</string>
 
     <!-- Map -->
@@ -130,18 +135,27 @@
 
     <!-- Zones -->
     <string name="zones_title">Safe Zones &amp; Alerts</string>
-    <string name="zones_subtitle">Manage automated notifications when %1$s enters or leaves an area.</string>
+    <string name="zones_subtitle">Manage automated notifications when children enter or leave an area.</string>
     <string name="empty_zones_title">No safe zones yet</string>
     <string name="empty_zones_body">Add a zone to get alerts when your child arrives or leaves.</string>
     <string name="notif_strategy_title">Notification Strategy</string>
     <string name="notif_strategy_body">You\'re receiving push alerts for all active zones. Critical safety alerts bypass Do Not Disturb.</string>
     <string name="cd_add_zone">Add zone</string>
     <string name="chip_active">Active</string>
+    <string name="chip_inactive">Inactive</string>
     <string name="zone_radius">%1$dm radius</string>
+    <string name="cd_edit_zone">Edit zone</string>
     <string name="cd_delete_zone">Delete zone</string>
     <string name="new_zone_title">New safe zone</string>
+    <string name="edit_zone_title">Edit safe zone</string>
     <string name="zone_name_label">Name (e.g. School)</string>
     <string name="zone_radius_label">Radius: %1$d m</string>
+    <string name="zone_center_child_label">Centered around child location</string>
+    <string name="zone_active_label">Active</string>
+    <string name="zone_delete_confirm_title">Are you sure?</string>
+    <string name="zone_delete_confirm_body">Remove %1$s from safe zones?</string>
+    <string name="cd_decrease_radius">Decrease radius</string>
+    <string name="cd_increase_radius">Increase radius</string>
     <string name="zone_center_yes">Centered on the child\'s current location.</string>
     <string name="zone_center_no">No current location — pair a device first.</string>
 

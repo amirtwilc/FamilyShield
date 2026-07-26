@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
@@ -91,6 +92,7 @@ import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.HistoryPoint
 import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.Zone
+import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.ui.Avatar
 import com.familyshield.mobile.ui.FamilyMapMarker
 import com.familyshield.mobile.ui.GradientButton
@@ -119,13 +121,16 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.cos
+import kotlin.math.roundToInt
 
 @Composable
 fun ParentApp(
     onKidDevice: () -> Unit,
+    chatDestination: ChatPushDestination? = null,
+    onChatDestinationConsumed: (ChatPushDestination) -> Unit = {},
     vm: ParentViewModel = viewModel(factory = ParentViewModel.factory(LocalContext.current)),
 ) {
-    if (vm.token == null) LoginScreen(vm, onKidDevice) else ParentShell(vm)
+    if (vm.token == null) LoginScreen(vm, onKidDevice) else ParentShell(vm, chatDestination, onChatDestinationConsumed)
 }
 
 /* ----------------------------------- Login ----------------------------------- */
@@ -214,7 +219,11 @@ private enum class Tab(@androidx.annotation.StringRes val labelRes: Int, val ico
 }
 
 @Composable
-private fun ParentShell(vm: ParentViewModel) {
+private fun ParentShell(
+    vm: ParentViewModel,
+    chatDestination: ChatPushDestination?,
+    onChatDestinationConsumed: (ChatPushDestination) -> Unit,
+) {
     LaunchedEffect(Unit) { vm.refreshChildren() }
     // Real-time location tracking while the parent app is open.
     DisposableEffect(Unit) {
@@ -245,6 +254,15 @@ private fun ParentShell(vm: ParentViewModel) {
     // Stop chat polling whenever the Chat tab isn't the one on screen.
     LaunchedEffect(tab, showSettings, appUsageFor, showAllAlerts) {
         if (tab != Tab.Chat || showSettings || appUsageFor != null || showAllAlerts) vm.closeChat()
+    }
+    LaunchedEffect(chatDestination?.key, vm.token) {
+        val destination = chatDestination ?: return@LaunchedEffect
+        showSettings = false
+        appUsageFor = null
+        showAllAlerts = false
+        tab = Tab.Chat
+        vm.openChat(destination.childId)
+        onChatDestinationConsumed(destination)
     }
 
     if (showSettings) {
@@ -964,6 +982,7 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
     val (icon, tintBg, tintFg) = when (a.type) {
         "low_battery" -> Triple(Icons.Filled.BatteryFull, Orange.copy(alpha = 0.15f), Orange)
         "offline" -> Triple(Icons.Filled.Warning, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.secondary)
+        "safe_zone_enter", "safe_zone_exit" -> Triple(Icons.Filled.Place, Green.copy(alpha = 0.15f), Green)
         else -> Triple(Icons.Filled.NotificationsActive, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.tertiary)
     }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
@@ -977,6 +996,8 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
                 Text(stringResource(when {
                     low -> R.string.alert_battery_body
                     a.type == "offline" -> R.string.alert_offline_body
+                    a.type == "safe_zone_enter" -> R.string.alert_safe_zone_enter_body
+                    a.type == "safe_zone_exit" -> R.string.alert_safe_zone_exit_body
                     else -> R.string.alert_status_body
                 }),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -991,6 +1012,8 @@ private fun alertTypeLabel(type: String): String = when (type) {
     "low_battery" -> stringResource(R.string.alert_low_battery)
     "offline" -> stringResource(R.string.alert_offline)
     "child_unpaired" -> stringResource(R.string.alert_child_unpaired)
+    "safe_zone_enter" -> stringResource(R.string.alert_safe_zone_enter)
+    "safe_zone_exit" -> stringResource(R.string.alert_safe_zone_exit)
     else -> stringResource(R.string.alert_generic)
 }
 
@@ -1246,7 +1269,7 @@ private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
         vm.children.mapNotNull { child -> vm.allLocations[child.id]?.let { LocatedChild(child, it) } }
     }
     val locatedIds = locatedChildren.joinToString(separator = "|") { it.child.id }
-    val allZones = remember(vm.mapZonesByChild) { vm.mapZonesByChild.values.flatten() }
+    val allZones = remember(vm.mapZonesByChild) { vm.mapZonesByChild.values.flatten().distinctBy { it.id } }
     var parentLocation by remember { mutableStateOf<MapPoint?>(null) }
     var cameraTarget by remember { mutableStateOf<MapPoint?>(null) }
     var cameraCommand by remember { mutableStateOf(0L) }
@@ -1381,7 +1404,7 @@ private fun MapChildInfoCard(
     val device = child.primaryDevice()
     val unpaired = device?.isUnpaired() == true
     val online = device?.isConnected() == true
-    val inZone = zones.any { distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
+    val inZone = zones.any { it.active && distanceM(loc.lat, loc.lng, it.lat, it.lng) <= it.radiusM }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Avatar(child.displayName, 40.dp, online = online, avatar = child.avatar)
@@ -1541,18 +1564,26 @@ private fun TimelineEntry(p: HistoryPoint) {
 @Composable
 private fun ZonesTab(vm: ParentViewModel, onSettings: () -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Zone?>(null) }
+    var pendingDelete by remember { mutableStateOf<Zone?>(null) }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             ParentTopBar(vm, onSettings)
             Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.zones_title), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.zones_subtitle, vm.selected?.displayName ?: stringResource(R.string.label_your_child)),
+                Text(stringResource(R.string.zones_subtitle),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 if (vm.zones.isEmpty()) {
                     EmptyCard(Icons.Filled.Place, stringResource(R.string.empty_zones_title), stringResource(R.string.empty_zones_body))
                 } else {
-                    vm.zones.forEach { z -> ZoneCard(z) { vm.removeZone(z.id) } }
+                    vm.zones.forEach { z ->
+                        ZoneCard(
+                            z = z,
+                            onEdit = { editing = z },
+                            onDelete = { pendingDelete = z },
+                        )
+                    }
                 }
 
                 // Notification strategy
@@ -1572,10 +1603,34 @@ private fun ZonesTab(vm: ParentViewModel, onSettings: () -> Unit) {
         }
     }
     if (showAdd) AddZoneDialog(vm, onDismiss = { showAdd = false })
+    editing?.let { zone ->
+        EditZoneDialog(
+            zone = zone,
+            onDismiss = { editing = null },
+            onSave = { name, radius, active ->
+                vm.updateZone(zone.id, name, radius, active)
+                editing = null
+            },
+        )
+    }
+    pendingDelete?.let { zone ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.zone_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.zone_delete_confirm_body, zone.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.removeZone(zone.id)
+                    pendingDelete = null
+                }) { Text(stringResource(R.string.action_yes)) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
 }
 
 @Composable
-private fun ZoneCard(z: Zone, onDelete: () -> Unit) {
+private fun ZoneCard(z: Zone, onEdit: () -> Unit, onDelete: () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1584,10 +1639,15 @@ private fun ZoneCard(z: Zone, onDelete: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text(z.name, style = MaterialTheme.typography.titleMedium)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Chip(stringResource(R.string.chip_active), Green, dot = true)
+                        Chip(
+                            stringResource(if (z.active) R.string.chip_active else R.string.chip_inactive),
+                            if (z.active) Green else MaterialTheme.colorScheme.onSurfaceVariant,
+                            dot = z.active,
+                        )
                         Text(stringResource(R.string.zone_radius, z.radiusM), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.cd_edit_zone), tint = MaterialTheme.colorScheme.secondary) }
                 IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, stringResource(R.string.cd_delete_zone), tint = MaterialTheme.colorScheme.error) }
             }
             if (z.lat != 0.0 || z.lng != 0.0) {
@@ -1597,33 +1657,121 @@ private fun ZoneCard(z: Zone, onDelete: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddZoneDialog(vm: ParentViewModel, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
-    var radius by remember { mutableStateOf(300f) }
-    val loc = vm.location
+    var radius by remember { mutableStateOf(50) }
+    val locatedChildren = remember(vm.children, vm.allLocations, vm.selectedId, vm.location) {
+        vm.children.mapNotNull { child ->
+            val loc = if (child.id == vm.selectedId) vm.location ?: vm.allLocations[child.id] else vm.allLocations[child.id]
+            loc?.let { child to it }
+        }
+    }
+    var expanded by remember { mutableStateOf(false) }
+    var selectedChildId by remember(locatedChildren, vm.selectedId) {
+        mutableStateOf(
+            locatedChildren.firstOrNull { it.first.id == vm.selectedId }?.first?.id
+                ?: locatedChildren.firstOrNull()?.first?.id,
+        )
+    }
+    val selected = locatedChildren.firstOrNull { it.first.id == selectedChildId }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.new_zone_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.zone_name_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text(stringResource(R.string.zone_radius_label, radius.toInt()), style = MaterialTheme.typography.bodyMedium)
-                Slider(value = radius, onValueChange = { radius = it }, valueRange = 50f..2000f)
-                Text(
-                    stringResource(if (loc != null) R.string.zone_center_yes else R.string.zone_center_no),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                ZoneRadiusPicker(radius, onRadiusChange = { radius = it })
+                if (locatedChildren.isEmpty()) {
+                    Text(stringResource(R.string.zone_center_no),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                        OutlinedTextField(
+                            value = selected?.first?.displayName.orEmpty(),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(stringResource(R.string.zone_center_child_label)) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            locatedChildren.forEach { (child, _) ->
+                                DropdownMenuItem(
+                                    text = { Text(child.displayName) },
+                                    onClick = {
+                                        selectedChildId = child.id
+                                        expanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = name.isNotBlank() && loc != null, onClick = {
-                loc?.let { vm.addZone(name.trim(), it.lat, it.lng, radius.toInt()) }; onDismiss()
+            TextButton(enabled = name.isNotBlank() && selected != null, onClick = {
+                selected?.let { (child, loc) -> vm.addZone(name.trim(), child.id, loc.lat, loc.lng, radius) }
+                onDismiss()
             }) { Text(stringResource(R.string.action_add)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
+
+@Composable
+private fun EditZoneDialog(zone: Zone, onDismiss: () -> Unit, onSave: (String, Int, Boolean) -> Unit) {
+    var name by remember(zone.id) { mutableStateOf(zone.name) }
+    var radius by remember(zone.id) { mutableStateOf(zone.radiusM.coerceIn(50, 2000).roundToZoneStep()) }
+    var active by remember(zone.id) { mutableStateOf(zone.active) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.edit_zone_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.zone_name_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                ZoneRadiusPicker(radius, onRadiusChange = { radius = it })
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(stringResource(R.string.zone_active_label), style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = active, onCheckedChange = { active = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), radius, active) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+@Composable
+private fun ZoneRadiusPicker(radius: Int, onRadiusChange: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.zone_radius_label, radius), style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconButton(onClick = { onRadiusChange((radius - 10).coerceAtLeast(50)) }, enabled = radius > 50) {
+                Icon(Icons.Filled.Remove, stringResource(R.string.cd_decrease_radius))
+            }
+            Slider(
+                value = radius.toFloat(),
+                onValueChange = { onRadiusChange(it.roundToInt().roundToZoneStep()) },
+                valueRange = 50f..2000f,
+                steps = 194,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { onRadiusChange((radius + 10).coerceAtMost(2000)) }, enabled = radius < 2000) {
+                Icon(Icons.Filled.Add, stringResource(R.string.cd_increase_radius))
+            }
+        }
+    }
+}
+
+private fun Int.roundToZoneStep(): Int =
+    ((this / 10.0).roundToInt() * 10).coerceIn(50, 2000)
 
 /* ---------------------------------- Shared ---------------------------------- */
 

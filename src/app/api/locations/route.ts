@@ -6,7 +6,7 @@ import { requireDevice } from '@/lib/auth/device';
 import { parseBody } from '@/lib/validate';
 import { ok } from '@/lib/http';
 import { ensureLocationPartition } from '@/db/partitions';
-import { fireLowBatteryIfNeeded } from '@/lib/alerts/engine';
+import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
 import { locationBatch } from '@/lib/schemas/locations';
 
 export const runtime = 'nodejs';
@@ -28,6 +28,9 @@ export async function POST(req: Request) {
               ${pt.speed ?? null}, ${pt.accuracy ?? null}, ${pt.battery_level ?? null}, ${pt.recorded_at})
       ON CONFLICT (device_id, recorded_at) DO NOTHING`);
     inserted += r.rowCount ?? 0;
+    if ((r.rowCount ?? 0) > 0) {
+      await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+    }
   }
 
   // denormalize latest point

@@ -1,6 +1,6 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { db } from '../../db/client';
-import { devices, childParentLinks, parents, alerts } from '../../db/schema';
+import { devices, childParentLinks, parents, alerts, safeZoneStates } from '../../db/schema';
 import { getSender } from './fcm';
 
 type Device = typeof devices.$inferSelect;
@@ -24,6 +24,102 @@ async function sendToParents(childId: string, title: string, body: string, data:
 async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>) {
   const [parent] = await db.select({ token: parents.fcmToken }).from(parents).where(eq(parents.id, parentId));
   return parent?.token ? getSender().send(parent.token, title, body, data) : false;
+}
+
+type ZoneTransitionInput = {
+  device: Device;
+  lat: number;
+  lng: number;
+  recordedAt: string;
+};
+
+type ZoneProbeRow = {
+  id: string;
+  parent_id: string;
+  name: string;
+  radius_m: number;
+  notify_on_enter: boolean;
+  notify_on_exit: boolean;
+  is_inside: boolean;
+};
+
+async function fireSafeZoneAlert(
+  device: Device,
+  row: ZoneProbeRow,
+  type: 'safe_zone_enter' | 'safe_zone_exit',
+  lat: number,
+  lng: number,
+) {
+  const verb = type === 'safe_zone_enter' ? 'entered' : 'left';
+  const [a] = await db.insert(alerts).values({
+    childId: device.childId,
+    parentId: row.parent_id,
+    deviceId: device.id,
+    type,
+    payload: { zoneId: row.id, zoneName: row.name, radiusM: row.radius_m, lat, lng },
+  }).returning();
+
+  if (await sendToParent(row.parent_id, `Safe zone ${verb}`, `Child ${verb} ${row.name}`, {
+    type,
+    childId: device.childId,
+    zoneId: row.id,
+    zoneName: row.name,
+  })) {
+    await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
+  }
+}
+
+export async function fireSafeZoneTransitions({ device, lat, lng, recordedAt }: ZoneTransitionInput): Promise<void> {
+  const probe = await db.execute(sql`
+    SELECT z.id, z.parent_id, z.name, z.radius_m, z.notify_on_enter, z.notify_on_exit,
+      ST_DWithin(
+        z.center::geography,
+        ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
+        z.radius_m
+      ) AS is_inside
+    FROM safe_zones z
+    INNER JOIN child_parent_links l ON l.parent_id = z.parent_id AND l.child_id = ${device.childId}
+    WHERE z.active = true`);
+
+  const transitionAt = new Date(recordedAt);
+  for (const row of probe.rows as ZoneProbeRow[]) {
+    const [state] = await db.select().from(safeZoneStates).where(and(
+      eq(safeZoneStates.parentId, row.parent_id),
+      eq(safeZoneStates.childId, device.childId),
+      eq(safeZoneStates.zoneId, row.id),
+    ));
+
+    if (!state) {
+      await db.insert(safeZoneStates).values({
+        parentId: row.parent_id,
+        childId: device.childId,
+        zoneId: row.id,
+        isInside: row.is_inside,
+        lastTransitionAt: row.is_inside ? transitionAt : null,
+      });
+      if (row.is_inside && row.notify_on_enter) {
+        await fireSafeZoneAlert(device, row, 'safe_zone_enter', lat, lng);
+      }
+      continue;
+    }
+
+    if (state.isInside === row.is_inside) {
+      await db.update(safeZoneStates).set({ updatedAt: new Date() }).where(eq(safeZoneStates.id, state.id));
+      continue;
+    }
+
+    await db.update(safeZoneStates).set({
+      isInside: row.is_inside,
+      lastTransitionAt: transitionAt,
+      updatedAt: new Date(),
+    }).where(eq(safeZoneStates.id, state.id));
+
+    if (row.is_inside && row.notify_on_enter) {
+      await fireSafeZoneAlert(device, row, 'safe_zone_enter', lat, lng);
+    } else if (!row.is_inside && row.notify_on_exit) {
+      await fireSafeZoneAlert(device, row, 'safe_zone_exit', lat, lng);
+    }
+  }
 }
 
 export async function fireLowBatteryIfNeeded(device: Device): Promise<void> {

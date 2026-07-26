@@ -3,9 +3,12 @@ import { resetDb } from '../helpers/db';
 import { seedParent, seedChild, seedDevice } from '../helpers/factories';
 import { setSender } from '@/lib/alerts/fcm';
 import { db } from '@/db/client';
-import { devices, locations } from '@/db/schema';
+import { childParentLinks, devices, locations } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { signAccess } from '@/lib/auth/jwt';
 import { POST as upload } from '@/app/api/locations/route';
+import { POST as createZone } from '@/app/api/children/[id]/zones/route';
+import { GET as listAlerts } from '@/app/api/children/[id]/alerts/route';
 
 beforeAll(async () => { await resetDb(); });
 beforeEach(() => setSender({ async send() { return true; } }));
@@ -37,5 +40,54 @@ describe('locations ingestion', () => {
   it('rejects unauthenticated', async () => {
     const r = await upload(new Request('http://t/', { method: 'POST', body: '{}' }));
     expect(r.status).toBe(401);
+  });
+
+  it('fires parent-scoped safe-zone enter and exit alerts without duplicate replay alerts', async () => {
+    const p = await seedParent(); const otherParent = await seedParent();
+    const c = await seedChild(p.id);
+    await db.insert(childParentLinks).values({
+      childId: c.id,
+      parentId: otherParent.id,
+      displayName: c.displayName,
+      role: 'caregiver',
+    });
+    const { token } = await seedDevice(c.id);
+    const ptok = await signAccess(p.id);
+    const otherTok = await signAccess(otherParent.id);
+    const ctx = { params: Promise.resolve({ id: c.id }) };
+
+    await createZone(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${ptok}` },
+      body: JSON.stringify({ name: 'School', lat: 32.0, lng: 34.0, radiusM: 500 }),
+    }), ctx);
+
+    const at = (min: number) => `2026-06-19T08:${String(min).padStart(2, '0')}:00Z`;
+    await upload(post(token, { points: [{ lat: 32.01, lng: 34.0, recorded_at: at(0) }] }));
+    await upload(post(token, { points: [{ lat: 32.001, lng: 34.0, recorded_at: at(5) }] }));
+    await upload(post(token, { points: [{ lat: 32.001, lng: 34.0, recorded_at: at(5) }] }));
+    await upload(post(token, { points: [{ lat: 32.01, lng: 34.0, recorded_at: at(10) }] }));
+
+    const parentAlerts = await listAlerts(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
+    expect((await parentAlerts.json()).alerts.map((a: any) => a.type)).toEqual(['safe_zone_exit', 'safe_zone_enter']);
+
+    const linkedParentAlerts = await listAlerts(new Request('http://t/', { headers: { authorization: `Bearer ${otherTok}` } }), ctx);
+    expect((await linkedParentAlerts.json()).alerts).toHaveLength(0);
+  });
+
+  it('does not fire alerts for inactive zones', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const { token } = await seedDevice(c.id);
+    const ptok = await signAccess(p.id);
+    const ctx = { params: Promise.resolve({ id: c.id }) };
+
+    await createZone(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${ptok}` },
+      body: JSON.stringify({ name: 'Paused', lat: 32.0, lng: 34.0, radiusM: 500, active: false }),
+    }), ctx);
+
+    await upload(post(token, { points: [{ lat: 32.001, lng: 34.0, recorded_at: '2026-06-19T09:00:00Z' }] }));
+
+    const parentAlerts = await listAlerts(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
+    expect((await parentAlerts.json()).alerts).toHaveLength(0);
   });
 });
