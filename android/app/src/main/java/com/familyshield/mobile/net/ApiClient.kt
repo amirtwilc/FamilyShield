@@ -43,6 +43,9 @@ interface ApiClient {
     suspend fun messages(token: String, childId: String, after: String? = null, before: String? = null, markRead: Boolean = false): MessagesResponse
     suspend fun conversationsSummary(token: String): List<ConversationSummary>
     suspend fun sendMessage(token: String, childId: String, body: String): Message
+    suspend fun sendUrgentAlert(token: String, childId: String, body: String): UrgentAlertResult
+    suspend fun currentSos(token: String, childId: String): SosState
+    suspend fun acknowledgeSos(token: String, childId: String, eventId: String): SosAckResult
     suspend fun pair(code: String, platform: String, model: String?): PairResult
     suspend fun addParent(token: String, code: String, platform: String, model: String?): MonitoringInfo
     suspend fun monitoring(token: String): MonitoringInfo
@@ -53,6 +56,10 @@ interface ApiClient {
     suspend fun sendStatus(token: String, battery: Int, charging: Boolean, permissionStatus: PermissionStatus? = null)
     suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult
     suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult
+    suspend fun startSos(token: String, timezone: String, localDay: String, location: LocationPoint? = null): SosState
+    suspend fun sendSosLocation(token: String, timezone: String, localDay: String, location: LocationPoint): SosLocationResult
+    suspend fun endSos(token: String, reason: String = "child_ended"): SosState
+    suspend fun sosState(token: String, localDay: String? = null): SosState
     suspend fun deviceMessages(token: String, after: String? = null): MessagesResponse
     suspend fun sendDeviceMessage(token: String, body: String): Message
 }
@@ -195,6 +202,16 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         json.decodeFromString(requestRaw("POST", "/api/children/$childId/messages",
             json.encodeToString(SendMessageBody(body)), token))
 
+    override suspend fun sendUrgentAlert(token: String, childId: String, body: String): UrgentAlertResult =
+        json.decodeFromString(requestRaw("POST", "/api/children/$childId/urgent-alert",
+            json.encodeToString(SendMessageBody(body)), token))
+
+    override suspend fun currentSos(token: String, childId: String): SosState =
+        json.decodeFromString(requestRaw("GET", "/api/children/$childId/sos/current", token = token))
+
+    override suspend fun acknowledgeSos(token: String, childId: String, eventId: String): SosAckResult =
+        json.decodeFromString(requestRaw("POST", "/api/children/$childId/sos/$eventId/ack", token = token))
+
     // ---- Kid device ----
     override suspend fun pair(code: String, platform: String, model: String?): PairResult =
         json.decodeFromString(requestRaw("POST", "/api/pair",
@@ -237,6 +254,24 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     override suspend fun sendTelemetry(token: String, body: DeviceTelemetryBody): DeviceTelemetryResult =
         json.decodeFromString(requestRaw("POST", "/api/device/telemetry",
             json.encodeToString(body), token))
+
+    override suspend fun startSos(token: String, timezone: String, localDay: String, location: LocationPoint?): SosState =
+        json.decodeFromString(requestRaw("POST", "/api/device/sos/start",
+            json.encodeToString(SosStartBody(timezone, localDay, location)), token))
+
+    override suspend fun sendSosLocation(token: String, timezone: String, localDay: String, location: LocationPoint): SosLocationResult =
+        json.decodeFromString(requestRaw("POST", "/api/device/sos/location",
+            json.encodeToString(SosLocationBody(timezone, localDay, location)), token))
+
+    override suspend fun endSos(token: String, reason: String): SosState =
+        json.decodeFromString(requestRaw("POST", "/api/device/sos/end",
+            json.encodeToString(SosEndBody(reason)), token))
+
+    override suspend fun sosState(token: String, localDay: String?): SosState {
+        val path = "/api/device/sos/state" +
+            if (localDay != null) "?local_day=" + java.net.URLEncoder.encode(localDay, "UTF-8") else ""
+        return json.decodeFromString(requestRaw("GET", path, token = token))
+    }
 
     override suspend fun deviceMessages(token: String, after: String?): MessagesResponse {
         val path = "/api/device/messages" + if (after != null) "?after=" + java.net.URLEncoder.encode(after, "UTF-8") else ""

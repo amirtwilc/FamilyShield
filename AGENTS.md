@@ -28,6 +28,10 @@ It is a Kotlin + Jetpack Compose app with two modes:
 
 The Android app talks to the backend REST API.
 
+## Localization
+
+When adding or changing Android UI text in `android/app/src/main/res/values/strings.xml`, add or update the matching Hebrew translations in `android/app/src/main/res/values-iw/strings.xml` in the same change.
+
 ## Backend
 
 The backend lives in the Next.js app under `src/app/api/`.

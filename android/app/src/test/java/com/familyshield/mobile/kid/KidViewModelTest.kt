@@ -182,6 +182,8 @@ class KidViewModelTest {
                 notificationsEnabled = true,
                 batteryUnrestricted = true,
                 appUsageGranted = true,
+                urgentNotificationsEnabled = true,
+                urgentDndBypassAllowed = true,
                 manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
                 manufacturerAccessConfirmed = true,
             ).ready,
@@ -194,6 +196,8 @@ class KidViewModelTest {
                 notificationsEnabled = false,
                 batteryUnrestricted = true,
                 appUsageGranted = true,
+                urgentNotificationsEnabled = true,
+                urgentDndBypassAllowed = true,
                 manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
                 manufacturerAccessConfirmed = true,
             ).ready,
@@ -206,6 +210,8 @@ class KidViewModelTest {
                 notificationsEnabled = true,
                 batteryUnrestricted = true,
                 appUsageGranted = true,
+                urgentNotificationsEnabled = true,
+                urgentDndBypassAllowed = true,
                 manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
                 manufacturerAccessConfirmed = false,
             ).ready,
@@ -218,6 +224,22 @@ class KidViewModelTest {
                 notificationsEnabled = true,
                 batteryUnrestricted = true,
                 appUsageGranted = false,
+                urgentNotificationsEnabled = true,
+                urgentDndBypassAllowed = true,
+                manufacturerGuide = ManufacturerBackgroundGuide.Generic,
+                manufacturerAccessConfirmed = false,
+            ).ready,
+        )
+        assertEquals(
+            false,
+            BackgroundMonitoringStatus(
+                foregroundLocationGranted = true,
+                backgroundLocationGranted = true,
+                notificationsEnabled = true,
+                batteryUnrestricted = true,
+                appUsageGranted = true,
+                urgentNotificationsEnabled = false,
+                urgentDndBypassAllowed = true,
                 manufacturerGuide = ManufacturerBackgroundGuide.Generic,
                 manufacturerAccessConfirmed = false,
             ).ready,
@@ -232,12 +254,14 @@ class KidViewModelTest {
             notificationsEnabled = true,
             batteryUnrestricted = true,
             appUsageGranted = false,
+            urgentNotificationsEnabled = true,
+            urgentDndBypassAllowed = true,
             manufacturerGuide = ManufacturerBackgroundGuide.Generic,
             manufacturerAccessConfirmed = false,
         ).toPermissionStatus()
         assertEquals("g", generic.g)
-        assertEquals(15, generic.r)
-        assertEquals(15, generic.m)
+        assertEquals(207, generic.r)
+        assertEquals(207, generic.m)
 
         val xiaomi = BackgroundMonitoringStatus(
             foregroundLocationGranted = true,
@@ -245,12 +269,14 @@ class KidViewModelTest {
             notificationsEnabled = true,
             batteryUnrestricted = true,
             appUsageGranted = true,
+            urgentNotificationsEnabled = true,
+            urgentDndBypassAllowed = true,
             manufacturerGuide = ManufacturerBackgroundGuide.Xiaomi,
             manufacturerAccessConfirmed = false,
         ).toPermissionStatus()
         assertEquals("x", xiaomi.g)
-        assertEquals(47, xiaomi.r)
-        assertEquals(31, xiaomi.m)
+        assertEquals(239, xiaomi.r)
+        assertEquals(223, xiaomi.m)
     }
 
     @Test

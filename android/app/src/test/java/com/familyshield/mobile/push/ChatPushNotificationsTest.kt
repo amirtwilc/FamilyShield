@@ -40,6 +40,13 @@ class ChatPushNotificationsTest {
     }
 
     @Test
+    fun `recognizes urgent push data`() {
+        assertEquals(true, isUrgentPushData(mapOf("type" to "kid_sos_started", "childId" to "child-1")))
+        assertEquals(true, isUrgentPushData(mapOf("type" to "urgent_alert", "priority" to "urgent")))
+        assertEquals(false, isUrgentPushData(mapOf("type" to "chat_message")))
+    }
+
+    @Test
     fun `notification id is stable for the same message`() {
         val data = mapOf("messageId" to "msg-1", "childId" to "child-1")
 
@@ -51,6 +58,18 @@ class ChatPushNotificationsTest {
         assertNotEquals(
             chatPushNotificationId(mapOf("messageId" to "msg-1")),
             chatPushNotificationId(mapOf("messageId" to "msg-2")),
+        )
+    }
+
+    @Test
+    fun `urgent notification id is stable and varies by event`() {
+        assertEquals(
+            urgentPushNotificationId(mapOf("eventId" to "sos-1", "childId" to "child-1")),
+            urgentPushNotificationId(mapOf("eventId" to "sos-1", "childId" to "child-1")),
+        )
+        assertNotEquals(
+            urgentPushNotificationId(mapOf("eventId" to "sos-1")),
+            urgentPushNotificationId(mapOf("eventId" to "sos-2")),
         )
     }
 }

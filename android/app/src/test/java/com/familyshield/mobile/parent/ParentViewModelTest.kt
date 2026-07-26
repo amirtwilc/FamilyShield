@@ -11,6 +11,7 @@ import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.UsageDay
 import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.Geo
+import com.familyshield.mobile.net.LocationPoint
 import com.familyshield.mobile.net.RoutesResponse
 import com.familyshield.mobile.net.Stop
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -412,6 +413,49 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `urgent alert is stored as an urgent child message`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val vm = viewModel(api)
+        vm.authenticate("urgent-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia")
+        advanceUntilIdle()
+        val childId = vm.children.first().id
+
+        vm.sendUrgentAlert(childId, "Please call me now")
+        advanceUntilIdle()
+
+        val messages = api.messages(vm.token!!, childId).messages
+        assertEquals("urgent", messages.last().priority)
+        assertEquals("Please call me now", messages.last().body)
+    }
+
+    @Test
+    fun `family overview exposes active child SOS state`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val vm = viewModel(api)
+        vm.authenticate("sos-parent@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Noa")
+        advanceUntilIdle()
+        val childId = vm.children.first().id
+        val code = api.pairingCode(vm.token!!, childId).code
+        val pair = api.pair(code, "android", "Pixel")
+        api.startSos(
+            pair.deviceToken,
+            "Asia/Jerusalem",
+            LocalDate.now().toString(),
+            LocationPoint(32.1, 34.8, "2026-07-26T09:00:00Z", 82),
+        )
+
+        vm.loadFamilyOverview()
+        advanceUntilIdle()
+
+        assertTrue(vm.sosByChild[childId]?.active == true)
+        assertEquals(60, vm.sosByChild[childId]?.highRateIntervalSeconds)
+    }
+
+    @Test
     fun `free tier child limit surfaces an error before creating sixth child`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
         vm.authenticate("limit-parent@x.com", "pw123456", register = true)
@@ -590,12 +634,13 @@ class ParentViewModelTest {
         val device = Device(
             id = "device-permissions",
             platform = "android",
-            permissionStatus = PermissionStatus(g = "g", r = 31, m = 31),
+            permissionStatus = PermissionStatus(g = "g", r = 223, m = 223),
         )
 
         assertTrue(!device.hasMissingPermissions())
-        assertTrue(!device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 15)).hasMissingPermissions())
-        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 31, m = 23)).hasMissingPermissions())
+        assertTrue(!device.copy(permissionStatus = PermissionStatus(g = "g", r = 223, m = 207)).hasMissingPermissions())
+        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 207, m = 79)).hasMissingPermissions())
+        assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 207, m = 79)).permissionStatus.hasMissingUrgentAccess())
         assertTrue(device.copy(permissionStatus = null).hasMissingPermissions() == false)
     }
 }

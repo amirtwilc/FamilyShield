@@ -21,6 +21,8 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     private val alertsByChild = mutableMapOf<String, MutableList<Alert>>()
     private val codeToChild = mutableMapOf<String, String>()     // pairing code -> childId
     private val deviceTokenToChild = mutableMapOf<String, String>()
+    private val sosByChild = mutableMapOf<String, SosState>()
+    private val sosUsageByChildDay = mutableMapOf<String, Int>()
     private var seq = 0
     private val now get() = "2026-06-20T00:00:0${seq % 10}Z"
     private val avatarKeys = listOf(
@@ -97,6 +99,8 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
             deviceByChild.remove(childId)
             locations.remove(childId)
             alertsByChild.remove(childId)
+            sosByChild.remove(childId)
+            sosUsageByChildDay.keys.removeIf { it.startsWith("$childId:") }
             deviceTokenToChild.entries.removeIf { it.value == childId }
         }
     }
@@ -212,6 +216,87 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         )
     }
 
+    override suspend fun startSos(token: String, timezone: String, localDay: String, location: LocationPoint?): SosState {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        val existing = sosByChild[childId]
+        if (existing?.active == true) return existing
+        location?.let {
+            locations[childId] = CurrentLocation(it.lat, it.lng, it.recordedAt)
+        }
+        val event = SosEvent(
+            id = "sos-${++seq}",
+            childId = childId,
+            status = "active",
+            startedAt = now,
+            timezone = timezone,
+            localDay = localDay,
+            lastLocation = location?.let { SosLocation(it.lat, it.lng) },
+            lastLocationAt = location?.recordedAt,
+            lastBatteryLevel = location?.batteryLevel,
+        )
+        val state = sosStateFor(childId, localDay, event)
+        sosByChild[childId] = state
+        alertsByChild.getOrPut(childId) { mutableListOf() }.add(0, Alert("alert-${++seq}", "kid_sos_started", now))
+        return state
+    }
+
+    override suspend fun sendSosLocation(token: String, timezone: String, localDay: String, location: LocationPoint): SosLocationResult {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        val event = sosByChild[childId]?.event
+            ?: return SosLocationResult(active = false, accepted = false, reason = "no_active_sos")
+        val key = "$childId:$localDay"
+        val used = sosUsageByChildDay[key] ?: 0
+        if (used >= 3600) {
+            return SosLocationResult(active = true, accepted = false, reason = "quota_exhausted", state = sosStateFor(childId, localDay, event))
+        }
+        val charged = minOf(60, 3600 - used)
+        sosUsageByChildDay[key] = used + charged
+        locations[childId] = CurrentLocation(location.lat, location.lng, location.recordedAt)
+        val updatedEvent = event.copy(
+            timezone = timezone,
+            localDay = localDay,
+            lastLocation = SosLocation(location.lat, location.lng),
+            lastLocationAt = location.recordedAt,
+            lastBatteryLevel = location.batteryLevel,
+        )
+        val state = sosStateFor(childId, localDay, updatedEvent)
+        sosByChild[childId] = state
+        return SosLocationResult(active = true, accepted = true, chargedSeconds = charged, state = state)
+    }
+
+    override suspend fun endSos(token: String, reason: String): SosState {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        val event = sosByChild[childId]?.event
+        if (event != null) {
+            sosByChild[childId] = SosState(
+                active = false,
+                dailyUsedSeconds = sosUsageByChildDay["$childId:${event.localDay}"] ?: 0,
+            )
+            alertsByChild.getOrPut(childId) { mutableListOf() }.add(0, Alert("alert-${++seq}", "kid_sos_ended", now))
+        }
+        return sosByChild[childId] ?: SosState()
+    }
+
+    override suspend fun sosState(token: String, localDay: String?): SosState {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        val state = sosByChild[childId] ?: return SosState()
+        val day = localDay ?: state.event?.localDay
+        val used = day?.let { sosUsageByChildDay["$childId:$it"] } ?: 0
+        return state.copy(dailyUsedSeconds = used, remainingSeconds = (3600 - used).coerceAtLeast(0))
+    }
+
+    private fun sosStateFor(childId: String, localDay: String, event: SosEvent): SosState {
+        val used = sosUsageByChildDay["$childId:$localDay"] ?: 0
+        return SosState(
+            active = true,
+            event = event,
+            dailyUsedSeconds = used,
+            dailyLimitSeconds = 3600,
+            highRateIntervalSeconds = 60,
+            remainingSeconds = (3600 - used).coerceAtLeast(0),
+        )
+    }
+
     // ---- Chat ----
     private val messagesByChild = mutableMapOf<String, MutableList<Message>>()
     private val monitorMessagesByChild = mutableMapOf<String, MutableMap<String, MutableList<Message>>>()
@@ -258,6 +343,21 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         messagesByChild.getOrPut(childId) { mutableListOf() }.add(m)
         return m
     }
+
+    override suspend fun sendUrgentAlert(token: String, childId: String, body: String): UrgentAlertResult {
+        val parent = parentEmail(token)
+        val m = Message("msg-${++seq}", "parent", body, now, priority = "urgent")
+        monitorMessagesByChild.getOrPut(childId) { mutableMapOf() }.getOrPut(parent) { mutableListOf() }.add(m)
+        messagesByChild.getOrPut(childId) { mutableListOf() }.add(m)
+        alertsByChild.getOrPut(childId) { mutableListOf() }.add(0, Alert("alert-${++seq}", "urgent_alert", now))
+        return UrgentAlertResult(m, delivered = true)
+    }
+
+    override suspend fun currentSos(token: String, childId: String): SosState =
+        sosByChild[childId] ?: SosState()
+
+    override suspend fun acknowledgeSos(token: String, childId: String, eventId: String): SosAckResult =
+        SosAckResult(ok = true, delivered = true)
 
     override suspend fun deviceMessages(token: String, after: String?): MessagesResponse {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")

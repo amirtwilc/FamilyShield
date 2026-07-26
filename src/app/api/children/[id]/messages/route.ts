@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const p = await parseBody(req, sendMessageSchema); if ('response' in p) return p.response;
   const r = await db.execute(sql`
     INSERT INTO messages (child_id, parent_id, sender, body) VALUES (${id}, ${a.parentId}, 'parent', ${p.data.body})
-    RETURNING id, sender, body, created_at, read_at`);
+    RETURNING id, sender, body, priority, created_at, read_at`);
   const message = r.rows[0] as { id: string };
   await notifyChildMessageFromParent(id, a.parentId, message.id, p.data.body);
   return ok(r.rows[0], 201);

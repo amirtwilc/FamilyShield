@@ -10,6 +10,8 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import com.familyshield.mobile.net.PermissionStatus
+import com.familyshield.mobile.push.hasUrgentDndBypass
+import com.familyshield.mobile.push.hasUrgentNotificationsEnabled
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
@@ -19,6 +21,8 @@ const val PERMISSION_NOTIFICATIONS = 4
 const val PERMISSION_BATTERY_UNRESTRICTED = 8
 const val PERMISSION_APP_USAGE = 16
 const val PERMISSION_MANUFACTURER_BACKGROUND = 32
+const val PERMISSION_URGENT_NOTIFICATIONS = 64
+const val PERMISSION_DND_BYPASS = 128
 
 private const val PREFS_BACKGROUND_ACCESS = "familyshield_background_access"
 private const val KEY_MANUFACTURER_ACCESS_CONFIRMED = "manufacturer_access_confirmed"
@@ -36,6 +40,8 @@ data class BackgroundMonitoringStatus(
     val notificationsEnabled: Boolean,
     val batteryUnrestricted: Boolean,
     val appUsageGranted: Boolean,
+    val urgentNotificationsEnabled: Boolean,
+    val urgentDndBypassAllowed: Boolean,
     val manufacturerGuide: ManufacturerBackgroundGuide,
     val manufacturerAccessConfirmed: Boolean,
 ) {
@@ -43,6 +49,8 @@ data class BackgroundMonitoringStatus(
         get() = foregroundLocationGranted &&
             backgroundLocationGranted &&
             notificationsEnabled &&
+            urgentNotificationsEnabled &&
+            urgentDndBypassAllowed &&
             batteryUnrestricted &&
             (!manufacturerGuide.requiresManualConfirmation || manufacturerAccessConfirmed)
 
@@ -51,6 +59,8 @@ data class BackgroundMonitoringStatus(
             PERMISSION_BACKGROUND_LOCATION or
             PERMISSION_NOTIFICATIONS or
             PERMISSION_BATTERY_UNRESTRICTED or
+            PERMISSION_URGENT_NOTIFICATIONS or
+            PERMISSION_DND_BYPASS or
             (if (manufacturerGuide.requiresManualConfirmation) PERMISSION_MANUFACTURER_BACKGROUND else 0)
 
     val grantedMask: Int
@@ -60,6 +70,8 @@ data class BackgroundMonitoringStatus(
                 (if (notificationsEnabled) PERMISSION_NOTIFICATIONS else 0) or
                 (if (batteryUnrestricted) PERMISSION_BATTERY_UNRESTRICTED else 0) or
                 (if (appUsageGranted) PERMISSION_APP_USAGE else 0) or
+                (if (urgentNotificationsEnabled) PERMISSION_URGENT_NOTIFICATIONS else 0) or
+                (if (urgentDndBypassAllowed) PERMISSION_DND_BYPASS else 0) or
                 (if (manufacturerGuide.requiresManualConfirmation && manufacturerAccessConfirmed) PERMISSION_MANUFACTURER_BACKGROUND else 0)
 
     fun toPermissionStatus(): PermissionStatus =
@@ -79,6 +91,8 @@ fun backgroundMonitoringStatus(context: Context): BackgroundMonitoringStatus {
         notificationsEnabled = hasKidNotificationPermission(app),
         batteryUnrestricted = isIgnoringBatteryOptimizations(app),
         appUsageGranted = AppUsageTelemetry.hasUsageAccess(app),
+        urgentNotificationsEnabled = hasUrgentNotificationsEnabled(app),
+        urgentDndBypassAllowed = hasUrgentDndBypass(app),
         manufacturerGuide = guide,
         manufacturerAccessConfirmed = isManufacturerBackgroundAccessConfirmed(app),
     )

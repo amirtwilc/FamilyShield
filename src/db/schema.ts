@@ -16,6 +16,9 @@ export const alertType = pgEnum('alert_type', [
   'child_unpaired',
   'safe_zone_enter',
   'safe_zone_exit',
+  'kid_sos_started',
+  'kid_sos_ended',
+  'urgent_alert',
 ]);
 
 export const subscriptionTiers = pgTable('subscription_tiers', {
@@ -155,6 +158,7 @@ export const messages = pgTable('messages', {
   parentId: uuid('parent_id').references(() => parents.id, { onDelete: 'cascade' }),
   sender: text('sender').notNull(),
   body: text('body').notNull(),
+  priority: text('priority').notNull().default('normal'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   readAt: timestamp('read_at', { withTimezone: true }),
   // Plus a partial index messages_unread_idx (child_id) WHERE read_at IS NULL,
@@ -162,6 +166,47 @@ export const messages = pgTable('messages', {
 }, (t) => ({
   byChildTime: index('messages_child_time_id_idx').on(t.childId, t.createdAt, t.id),
   byParentChildTime: index('messages_parent_child_time_id_idx').on(t.parentId, t.childId, t.createdAt, t.id),
+}));
+
+export const sosEvents = pgTable('sos_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  deviceId: uuid('device_id').notNull().references(() => devices.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('active'),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  endedReason: text('ended_reason'),
+  timezone: text('timezone').notNull().default('UTC'),
+  localDay: date('local_day').notNull(),
+  lastLocation: point('last_location'),
+  lastLocationAt: timestamp('last_location_at', { withTimezone: true }),
+  lastBatteryLevel: integer('last_battery_level'),
+  highRateLimitSeconds: integer('high_rate_limit_seconds').notNull(),
+  highRateIntervalSeconds: integer('high_rate_interval_seconds').notNull(),
+}, (t) => ({
+  byChildStatus: index('sos_events_child_status_idx').on(t.childId, t.status),
+  byChildStarted: index('sos_events_child_started_idx').on(t.childId, t.startedAt),
+}));
+
+export const sosDailyUsage = pgTable('sos_daily_usage', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  day: date('day').notNull(),
+  timezone: text('timezone').notNull(),
+  usedSeconds: integer('used_seconds').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  uniqChildDay: uniqueIndex('sos_daily_usage_child_day_idx').on(t.childId, t.day),
+}));
+
+export const sosEventReceipts = pgTable('sos_event_receipts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sosEventId: uuid('sos_event_id').notNull().references(() => sosEvents.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  uniqReceipt: uniqueIndex('sos_event_receipts_event_parent_idx').on(t.sosEventId, t.parentId),
 }));
 
 // Per-app screen-time minutes for a child on a given calendar day. One row per

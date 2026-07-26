@@ -13,6 +13,15 @@ import kotlinx.coroutines.runBlocking
 class FamilyShieldMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        if (isUrgentPushData(data)) {
+            showUrgentPushNotification(
+                this,
+                message.notification?.title,
+                message.notification?.body,
+                data,
+            )
+            return
+        }
         if (data["type"] != CHAT_PUSH_TYPE) return
         showChatPushNotification(
             this,

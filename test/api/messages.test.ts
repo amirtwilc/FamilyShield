@@ -91,6 +91,7 @@ describe('parent ⇄ kid chat', () => {
     expect(conv).toHaveLength(2);
     const a = conv.find((x: any) => x.childId === c1.id);
     expect(a.last.body).toBe('yo');
+    expect(a.last.priority).toBe('normal');
     expect(a.unread).toBe(1);
     const b = conv.find((x: any) => x.childId === c2.id);
     expect(b.last).toBeNull();

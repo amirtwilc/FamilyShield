@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const r = await db.execute(sql`
     INSERT INTO messages (child_id, parent_id, sender, body)
     VALUES (${a.device.childId}, ${parentId}, 'child', ${p.data.body})
-    RETURNING id, sender, body, created_at, read_at`);
+    RETURNING id, sender, body, priority, created_at, read_at`);
   const message = r.rows[0] as { id: string };
   await notifyParentMessageFromChild(a.device.childId, parentId, message.id, p.data.body);
   await db.execute(sql`UPDATE devices SET last_seen_at = now() WHERE id = ${a.device.id}`);

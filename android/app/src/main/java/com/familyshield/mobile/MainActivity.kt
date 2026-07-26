@@ -28,6 +28,7 @@ import com.familyshield.mobile.parent.ParentApp
 import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.push.chatPushDestinationFromIntent
 import com.familyshield.mobile.push.ensureChatPushNotificationChannel
+import com.familyshield.mobile.push.ensureUrgentPushNotificationChannel
 import com.familyshield.mobile.ui.theme.FamilyShieldTheme
 import org.osmdroid.config.Configuration
 
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 4201)
         }
         ensureChatPushNotificationChannel(this)
+        ensureUrgentPushNotificationChannel(this)
         Configuration.getInstance().userAgentValue = packageName
         setContent {
             FamilyShieldTheme {

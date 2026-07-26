@@ -1,6 +1,16 @@
 export interface PushSender {
-  send(fcmToken: string, title: string, body: string, data?: Record<string, string>): Promise<boolean>;
+  send(fcmToken: string, title: string, body: string, data?: Record<string, string>, options?: PushOptions): Promise<boolean>;
 }
+
+export type PushOptions = {
+  android?: {
+    priority?: 'normal' | 'high';
+    ttlMs?: number;
+    channelId?: string;
+    notificationPriority?: 'default' | 'high' | 'max';
+    tag?: string;
+  };
+};
 
 let override: PushSender | null = null;
 export function setSender(s: PushSender) { override = s; }
@@ -36,7 +46,7 @@ function serviceAccountFromEnv(): Record<string, unknown> | null {
 }
 
 class FirebaseSender implements PushSender {
-  async send(fcmToken: string, title: string, body: string, data?: Record<string, string>) {
+  async send(fcmToken: string, title: string, body: string, data?: Record<string, string>, options?: PushOptions) {
     const serviceAccount = serviceAccountFromEnv();
     if (!serviceAccount) {
       console.warn('[push] FCM_SERVICE_ACCOUNT_JSON is not set; skipping push send');
@@ -46,7 +56,21 @@ class FirebaseSender implements PushSender {
     if (!admin.apps.length) {
       admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     }
-    await admin.messaging().send({ token: fcmToken, notification: { title, body }, data });
+    const android = options?.android ? {
+      ...(options.android.priority ? { priority: options.android.priority } : {}),
+      ...(options.android.ttlMs ? { ttl: options.android.ttlMs } : {}),
+      notification: {
+        ...(options.android.channelId ? { channelId: options.android.channelId } : {}),
+        ...(options.android.notificationPriority ? { priority: options.android.notificationPriority } : {}),
+        ...(options.android.tag ? { tag: options.android.tag } : {}),
+      },
+    } : undefined;
+    await admin.messaging().send({
+      token: fcmToken,
+      notification: { title, body },
+      data,
+      android,
+    });
     return true;
   }
 }

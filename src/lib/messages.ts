@@ -15,7 +15,7 @@ export async function pageMessages(childId: string, url: URL, parentId?: string)
   const after = afterRaw && !Number.isNaN(Date.parse(afterRaw)) ? afterRaw : null;
   if (after) {
     const r = await db.execute(sql`
-      SELECT id, sender, body, created_at, read_at FROM messages
+      SELECT id, sender, body, priority, created_at, read_at FROM messages
       WHERE child_id = ${childId}
         ${parentId ? sql`AND parent_id = ${parentId}` : sql``}
         AND created_at > ${after}
@@ -26,7 +26,7 @@ export async function pageMessages(childId: string, url: URL, parentId?: string)
   const beforeRaw = url.searchParams.get('before');
   const before = beforeRaw ? decodeCursor(beforeRaw) : null;
   const r = await db.execute(sql`
-    SELECT id, sender, body, created_at, read_at FROM messages
+    SELECT id, sender, body, priority, created_at, read_at FROM messages
     WHERE child_id = ${childId}
       ${parentId ? sql`AND parent_id = ${parentId}` : sql``}
       ${before ? sql`AND (created_at, id) < (${before.recordedAt}, ${before.id})` : sql``}

@@ -92,10 +92,14 @@ import com.familyshield.mobile.net.Alert
 import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
-import com.familyshield.mobile.net.HistoryPoint
 import com.familyshield.mobile.net.PermissionStatus
+import com.familyshield.mobile.net.SosState
 import com.familyshield.mobile.net.Zone
 import com.familyshield.mobile.push.ChatPushDestination
+import com.familyshield.mobile.push.hasUrgentDndBypass
+import com.familyshield.mobile.push.hasUrgentNotificationsEnabled
+import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
+import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.ui.Avatar
 import com.familyshield.mobile.ui.FamilyMapMarker
 import com.familyshield.mobile.ui.GradientButton
@@ -426,6 +430,8 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                         stringResource(if (vm.alertsEnabled) R.string.alerts_on else R.string.alerts_off), MaterialTheme.colorScheme.tertiary) { vm.updateAlertsEnabled(!vm.alertsEnabled) }
                 }
 
+                UrgentAlertsPermissionCard()
+
                 // Language
                 LanguageCard()
 
@@ -508,6 +514,38 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     }
     permissionsFor?.let { c ->
         ChildPermissionsDialog(child = c, onDismiss = { permissionsFor = null })
+    }
+}
+
+@Composable
+private fun UrgentAlertsPermissionCard() {
+    val context = LocalContext.current
+    val urgentEnabled = hasUrgentNotificationsEnabled(context)
+    val dndBypass = hasUrgentDndBypass(context)
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.NotificationsActive, null, tint = MaterialTheme.colorScheme.secondary)
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.parent_urgent_permissions_title), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.parent_urgent_permissions_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            ParentPermissionRow(Icons.Filled.NotificationsActive, stringResource(R.string.parent_permission_urgent_notifications), urgentEnabled, required = true)
+            ParentPermissionRow(Icons.Filled.Warning, stringResource(R.string.parent_permission_dnd_bypass), dndBypass, required = true)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { openUrgentNotificationSettings(context) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.parent_urgent_notifications_action))
+                }
+                OutlinedButton(onClick = { openNotificationPolicyAccessSettings(context) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.parent_dnd_bypass_action))
+                }
+            }
+        }
     }
 }
 
@@ -716,6 +754,7 @@ private fun DashboardTab(
     var showAddLimit by remember { mutableStateOf(false) }
     var permissionsFor by remember { mutableStateOf<Child?>(null) }
     var phonePromptFor by remember { mutableStateOf<Child?>(null) }
+    var alertPromptFor by remember { mutableStateOf<Child?>(null) }
     val scopeId = vm.dashboardChildId
     val focused = vm.children.find { it.id == scopeId }
     val focusedDevice = focused?.primaryDevice()
@@ -741,7 +780,6 @@ private fun DashboardTab(
         focusedUnpaired -> stringResource(R.string.child_unpaired)
         else -> stringResource(R.string.child_offline)
     }
-    val emergencyMsg = stringResource(R.string.snack_emergency)
     val noDialerMsg = stringResource(R.string.ring_no_phone_app)
 
     val markers = remember(vm.allLocations, vm.children, scopeId) {
@@ -801,6 +839,60 @@ private fun DashboardTab(
                 ) { Text(stringResource(R.string.ring_call_action)) }
             },
             dismissButton = { TextButton(onClick = { phonePromptFor = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+    alertPromptFor?.let { child ->
+        val presets = listOf(
+            stringResource(R.string.parent_alert_preset_call),
+            stringResource(R.string.parent_alert_preset_answer),
+            stringResource(R.string.parent_alert_preset_safe),
+        )
+        var body by remember(child.id) { mutableStateOf(presets.first()) }
+        val urgentMissing = child.primaryDevice()?.permissionStatus.hasMissingUrgentAccess()
+        val alertSent = stringResource(R.string.parent_alert_sent)
+        AlertDialog(
+            onDismissRequest = { alertPromptFor = null },
+            title = { Text(stringResource(R.string.parent_alert_title, child.displayName)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.parent_alert_body), style = MaterialTheme.typography.bodyMedium)
+                    if (urgentMissing) {
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                            Text(
+                                stringResource(R.string.parent_alert_child_permission_warning),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                    presets.forEach { preset ->
+                        FilterChip(
+                            selected = body == preset,
+                            onClick = { body = preset },
+                            label = { Text(preset) },
+                        )
+                    }
+                    OutlinedTextField(
+                        body,
+                        { body = it },
+                        label = { Text(stringResource(R.string.parent_alert_message_label)) },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = body.isNotBlank() && !vm.urgentSending,
+                    onClick = {
+                        vm.sendUrgentAlert(child.id, body.trim())
+                        alertPromptFor = null
+                        scope.launch { snackbar.showSnackbar(alertSent) }
+                    },
+                ) { Text(stringResource(R.string.parent_alert_send_action)) }
+            },
+            dismissButton = { TextButton(onClick = { alertPromptFor = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 
@@ -895,6 +987,23 @@ private fun DashboardTab(
                 }
             }
 
+            val activeSosCards = vm.children.mapNotNull { child ->
+                val state = vm.sosByChild[child.id]?.takeIf { it.active } ?: return@mapNotNull null
+                if (scopeId == null || scopeId == child.id) child to state else null
+            }
+            if (activeSosCards.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    activeSosCards.forEach { (child, state) ->
+                        ActiveSosCard(
+                            child = child,
+                            state = state,
+                            snackbar = snackbar,
+                            onAcknowledge = { eventId -> vm.acknowledgeSos(child.id, eventId) },
+                        )
+                    }
+                }
+            }
+
             // Screen Time entry -> App Usage
             val usageChild = focused?.id ?: vm.children.firstOrNull()?.id
             if (usageChild != null) {
@@ -955,9 +1064,96 @@ private fun DashboardTab(
                 }
                 QuickAction(Modifier.weight(1f), Icons.Filled.History, stringResource(R.string.action_timeline),
                     MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.primary, onClick = onTimeline)
-                QuickAction(Modifier.weight(1f), Icons.Filled.Warning, stringResource(R.string.action_emergency),
-                    MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error) {
-                    scope.launch { snackbar.showSnackbar(emergencyMsg) }
+                if (focused != null) {
+                    QuickAction(Modifier.weight(1f), Icons.Filled.Warning, stringResource(R.string.action_alert),
+                        MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error) {
+                        alertPromptFor = focused
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveSosCard(
+    child: Child,
+    state: SosState,
+    snackbar: SnackbarHostState,
+    onAcknowledge: (String) -> Unit,
+) {
+    val event = state.event ?: return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val remainingMinutes = ((state.remainingSeconds + 59) / 60).coerceAtLeast(0)
+    val noDialerMsg = stringResource(R.string.ring_no_phone_app)
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error)
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.parent_sos_active_title, child.displayName),
+                        style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.parent_sos_started, ago(event.startedAt)),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+            Text(
+                stringResource(R.string.parent_sos_remaining, remainingMinutes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            event.lastLocationAt?.let {
+                Text(
+                    stringResource(R.string.parent_sos_location_age, ago(it)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            event.lastBatteryLevel?.let {
+                Text(
+                    stringResource(R.string.parent_sos_battery, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            event.lastLocation?.let { loc ->
+                DirectionsActionButton(
+                    lat = loc.lat,
+                    lng = loc.lng,
+                    childName = child.displayName,
+                    lastKnown = false,
+                    snackbar = snackbar,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                child.phoneNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { phone ->
+                    OutlinedButton(
+                        onClick = {
+                            if (!openDialer(context, phone)) {
+                                scope.launch { snackbar.showSnackbar(noDialerMsg) }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.PhoneAndroid, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.parent_sos_call_action))
+                    }
+                }
+                Button(
+                    onClick = { onAcknowledge(event.id) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.parent_sos_ack_action), fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1062,6 +1258,8 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
         "low_battery" -> Triple(Icons.Filled.BatteryFull, Orange.copy(alpha = 0.15f), Orange)
         "offline" -> Triple(Icons.Filled.Warning, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.secondary)
         "safe_zone_enter", "safe_zone_exit" -> Triple(Icons.Filled.Place, Green.copy(alpha = 0.15f), Green)
+        "kid_sos_started", "urgent_alert" -> Triple(Icons.Filled.Warning, MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error)
+        "kid_sos_ended" -> Triple(Icons.Filled.CheckCircle, Green.copy(alpha = 0.15f), Green)
         else -> Triple(Icons.Filled.NotificationsActive, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.tertiary)
     }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
@@ -1077,6 +1275,9 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
                     a.type == "offline" -> R.string.alert_offline_body
                     a.type == "safe_zone_enter" -> R.string.alert_safe_zone_enter_body
                     a.type == "safe_zone_exit" -> R.string.alert_safe_zone_exit_body
+                    a.type == "kid_sos_started" -> R.string.alert_kid_sos_started_body
+                    a.type == "kid_sos_ended" -> R.string.alert_kid_sos_ended_body
+                    a.type == "urgent_alert" -> R.string.alert_urgent_body
                     else -> R.string.alert_status_body
                 }),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1093,6 +1294,9 @@ private fun alertTypeLabel(type: String): String = when (type) {
     "child_unpaired" -> stringResource(R.string.alert_child_unpaired)
     "safe_zone_enter" -> stringResource(R.string.alert_safe_zone_enter)
     "safe_zone_exit" -> stringResource(R.string.alert_safe_zone_exit)
+    "kid_sos_started" -> stringResource(R.string.alert_kid_sos_started)
+    "kid_sos_ended" -> stringResource(R.string.alert_kid_sos_ended)
+    "urgent_alert" -> stringResource(R.string.alert_urgent)
     else -> stringResource(R.string.alert_generic)
 }
 
@@ -1545,6 +1749,18 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
         ) {
             Text(stringResource(R.string.history_title), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
 
+            if (vm.children.size > 1) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = CircleShape) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        vm.children.forEach { child ->
+                            ChildHistorySegment(child, selected = child.id == vm.selectedId) {
+                                vm.select(child.id, selected.toString())
+                            }
+                        }
+                    }
+                }
+            }
+
             // Frequent / recurring routes: departure -> return points.
             Text(stringResource(R.string.frequent_routes), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             if (vm.frequentRoutes.isEmpty()) {
@@ -1577,9 +1793,25 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
             if (vm.history.isEmpty()) {
                 EmptyCard(Icons.Filled.History, stringResource(R.string.empty_history_title), stringResource(R.string.empty_history_body))
             } else {
-                vm.history.forEach { p -> TimelineEntry(p) }
+                val stays = remember(vm.history, vm.zones) { groupHistoryStays(vm.history, vm.zones) }
+                stays.forEach { stay -> TimelineEntry(stay) }
             }
             Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun ChildHistorySegment(child: Child, selected: Boolean, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = CircleShape, color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Avatar(child.displayName, 24.dp, online = child.primaryDevice()?.isConnected() == true, avatar = child.avatar)
+            Text(child.displayName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1622,14 +1854,17 @@ private fun RouteEndpoint(icon: ImageVector, tint: Color, place: String) {
 }
 
 @Composable
-private fun TimelineEntry(p: HistoryPoint) {
+private fun TimelineEntry(stay: HistoryStay) {
     var showMap by remember { mutableStateOf(false) }
-    if (showMap) FullScreenMap(p.lat, p.lng, timeOf(p.recordedAt)) { showMap = false }
+    val placeName = rememberGeocodedPlaceName(stay.lat, stay.lng, enabled = stay.zoneName == null)
+    val title = stay.zoneName ?: placeName
+    val timeRange = timeRangeOf(stay.startAt, stay.endAt)
+    if (showMap) FullScreenMap(stay.lat, stay.lng, title ?: timeRange) { showMap = false }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(timeOf(p.recordedAt), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.location_update), style = MaterialTheme.typography.titleMedium)
-            Text("%.4f, %.4f".format(p.lat, p.lng), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(timeRange, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+            Text("%.4f, %.4f".format(stay.lat, stay.lng), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Map, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.view_on_map))
@@ -1978,6 +2213,8 @@ private const val P_NOTIFICATIONS = 4
 private const val P_BATTERY_UNRESTRICTED = 8
 private const val P_APP_USAGE = 16
 private const val P_PHONE_BACKGROUND = 32
+private const val P_URGENT_NOTIFICATIONS = 64
+private const val P_DND_BYPASS = 128
 
 internal fun Device?.shouldShowBackgroundAccessHelp(): Boolean {
     val device = this ?: return false
@@ -1988,6 +2225,10 @@ internal fun PermissionStatus?.hasMissingRequiredAccess(): Boolean =
     this != null && (m and criticalRequiredMask()) != criticalRequiredMask()
 
 private fun PermissionStatus.criticalRequiredMask(): Int = r and P_APP_USAGE.inv()
+
+internal fun PermissionStatus?.hasMissingUrgentAccess(): Boolean =
+    this != null && ((r and P_URGENT_NOTIFICATIONS) != 0 && (m and P_URGENT_NOTIFICATIONS) == 0 ||
+        (r and P_DND_BYPASS) != 0 && (m and P_DND_BYPASS) == 0)
 
 internal fun Device?.hasMissingPermissions(): Boolean =
     this?.permissionStatus.hasMissingRequiredAccess()
@@ -2063,6 +2304,8 @@ private fun ParentPermissionRows(status: PermissionStatus) {
         required = (status.r and P_FOREGROUND_LOCATION) != 0 || (status.r and P_BACKGROUND_LOCATION) != 0,
     )
     ParentPermissionRow(Icons.Filled.Notifications, stringResource(R.string.parent_permission_notifications), status, P_NOTIFICATIONS)
+    ParentPermissionRow(Icons.Filled.NotificationsActive, stringResource(R.string.parent_permission_urgent_notifications), status, P_URGENT_NOTIFICATIONS)
+    ParentPermissionRow(Icons.Filled.Warning, stringResource(R.string.parent_permission_dnd_bypass), status, P_DND_BYPASS)
     ParentPermissionRow(Icons.Filled.BatteryFull, stringResource(R.string.parent_permission_battery), status, P_BATTERY_UNRESTRICTED)
     ParentPermissionRow(Icons.Filled.Apps, stringResource(R.string.parent_permission_app_usage), granted = (status.m and P_APP_USAGE) != 0, required = true)
     if ((status.r and P_PHONE_BACKGROUND) != 0) {
@@ -2126,9 +2369,24 @@ private fun timeOf(iso: String): String = try {
     OffsetDateTime.parse(iso).toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a"))
 } catch (e: Exception) { "" }
 
+private fun timeRangeOf(startIso: String, endIso: String): String {
+    val start = timeOf(startIso)
+    val end = timeOf(endIso)
+    return if (start == end || end.isBlank()) start else "$start - $end"
+}
+
 private fun dateTimeOf(iso: String): String = try {
     OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("MMM d, h:mm a"))
 } catch (e: Exception) { timeOf(iso) }
+
+@Composable
+private fun rememberGeocodedPlaceName(lat: Double, lng: Double, enabled: Boolean): String? {
+    var name by remember(lat, lng, enabled) { mutableStateOf<String?>(null) }
+    LaunchedEffect(lat, lng, enabled) {
+        name = if (enabled) com.familyshield.mobile.net.Geocoding.reverse(lat, lng) else null
+    }
+    return name
+}
 
 private fun millisUntilNextLocalMidnight(): Long {
     val now = ZonedDateTime.now()

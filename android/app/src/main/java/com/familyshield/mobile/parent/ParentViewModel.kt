@@ -80,6 +80,10 @@ class ParentViewModel(
         private set
     var allFamilyAlerts by mutableStateOf<List<FamilyAlert>>(emptyList())
         private set
+    var sosByChild by mutableStateOf<Map<String, SosState>>(emptyMap())
+        private set
+    var urgentSending by mutableStateOf(false)
+        private set
     var loadingAllAlerts by mutableStateOf(false)
         private set
     /** null = "All Children"; otherwise the focused child id. */
@@ -230,6 +234,31 @@ class ParentViewModel(
         }
     }
 
+    fun sendUrgentAlert(childId: String, body: String) {
+        if (token == null || body.isBlank()) return
+        urgentSending = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                val result = authed { api.sendUrgentAlert(it, childId, body.trim()) }
+                val message = result.message
+                if (chatChildId == childId && chatMessages.none { it.id == message.id }) {
+                    chatMessages = chatMessages + message
+                }
+                loadFamilyOverview()
+            } catch (e: Exception) { error = e.message } finally { urgentSending = false }
+        }
+    }
+
+    fun acknowledgeSos(childId: String, eventId: String) {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                authed { api.acknowledgeSos(it, childId, eventId) }
+                loadSosStates(children)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
     fun updateChild(name: String, avatar: String? = null, phoneNumber: String? = selected?.phoneNumber) {
         val id = selectedId ?: return
         if (token == null || name.isBlank()) return
@@ -314,7 +343,7 @@ class ParentViewModel(
     fun logout() {
         store.parentToken = null; store.parentRefreshToken = null
         token = null; children = emptyList(); selectedId = null
-        location = null; allLocations = emptyMap(); mapZonesByChild = emptyMap()
+        location = null; allLocations = emptyMap(); mapZonesByChild = emptyMap(); sosByChild = emptyMap()
     }
 
     fun refreshChildren() {
@@ -349,13 +378,13 @@ class ParentViewModel(
         }
     }
 
-    fun select(id: String) {
+    fun select(id: String, historyDate: String = today()) {
         selectedId = id; pairingCode = null; location = null; alerts = emptyList()
         zones = mapZonesByChild[id] ?: emptyList(); history = emptyList(); distanceKm = 0.0
         frequentRoutes = emptyList(); trips = emptyList()
         refreshDetail()
         loadZones()
-        loadHistory(today())
+        loadHistory(historyDate)
         loadRoutes()
     }
 
@@ -397,6 +426,7 @@ class ParentViewModel(
                         for (c in kids) authed { api.currentLocation(it, c.id) }?.let { locs[c.id] = it }
                         allLocations = locs
                         location = selectedId?.let { locs[it] }
+                        loadSosStates(kids)
                     } catch (_: Exception) { /* stay quiet during live polling */ }
                 }
                 delay(intervalMs)
@@ -414,15 +444,29 @@ class ParentViewModel(
                 children = kids
                 val places = ArrayList<TopPlace>()
                 val alerts = ArrayList<FamilyAlert>()
+                val sos = HashMap<String, SosState>()
                 for (c in kids) {
                     val r = authed { api.routes(it, c.id) }
                     r.stops.filter { s -> isToday(s.arriveAt) }.forEach { s -> places.add(TopPlace(c.id, c.displayName, s.lat, s.lng, s.arriveAt, s.departAt)) }
                     authed { api.alerts(it, c.id) }.take(3).forEach { a -> alerts.add(FamilyAlert(c.id, c.displayName, a)) }
+                    val state = authed { api.currentSos(it, c.id) }
+                    if (state.active) sos[c.id] = state
                 }
                 topPlaces = places.sortedByDescending { it.arriveAt }.take(6)
                 familyAlerts = alerts.sortedByDescending { it.alert.createdAt }.take(6)
+                sosByChild = sos
             } catch (e: Exception) { error = e.message }
         }
+    }
+
+    private suspend fun loadSosStates(kids: List<Child>) {
+        if (token == null || kids.isEmpty()) return
+        val sos = HashMap<String, SosState>()
+        for (c in kids) {
+            val state = authed { api.currentSos(it, c.id) }
+            if (state.active) sos[c.id] = state
+        }
+        sosByChild = sos
     }
 
     fun loadAllFamilyAlerts() {

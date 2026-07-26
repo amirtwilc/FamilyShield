@@ -135,6 +135,7 @@ data class Message(
     val body: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("read_at") val readAt: String? = null,
+    val priority: String = "normal",
 )
 
 @Serializable
@@ -155,6 +156,68 @@ data class ConversationsResponse(val conversations: List<ConversationSummary> = 
 
 @Serializable
 data class SendMessageBody(val body: String)
+
+@Serializable
+data class SosLocation(
+    val lat: Double,
+    val lng: Double,
+)
+
+@Serializable
+data class SosEvent(
+    val id: String,
+    val childId: String,
+    val status: String,
+    val startedAt: String,
+    val endedAt: String? = null,
+    val timezone: String = "UTC",
+    val localDay: String,
+    val lastLocation: SosLocation? = null,
+    val lastLocationAt: String? = null,
+    val lastBatteryLevel: Int? = null,
+)
+
+@Serializable
+data class SosState(
+    val active: Boolean = false,
+    val event: SosEvent? = null,
+    val dailyUsedSeconds: Int = 0,
+    val dailyLimitSeconds: Int = 3600,
+    val highRateIntervalSeconds: Int = 60,
+    val remainingSeconds: Int = 3600,
+)
+
+@Serializable
+data class SosLocationResult(
+    val active: Boolean = false,
+    val accepted: Boolean = false,
+    val reason: String? = null,
+    val chargedSeconds: Int = 0,
+    val state: SosState = SosState(),
+)
+
+@Serializable
+data class SosStartBody(
+    val timezone: String,
+    @SerialName("local_day") val localDay: String,
+    val location: LocationPoint? = null,
+)
+
+@Serializable
+data class SosLocationBody(
+    val timezone: String,
+    @SerialName("local_day") val localDay: String,
+    val location: LocationPoint,
+)
+
+@Serializable
+data class SosEndBody(val reason: String = "child_ended")
+
+@Serializable
+data class UrgentAlertResult(val message: Message, val delivered: Boolean = false)
+
+@Serializable
+data class SosAckResult(val ok: Boolean = true, val delivered: Boolean = false)
 
 @Serializable
 data class AppUsageEntry(

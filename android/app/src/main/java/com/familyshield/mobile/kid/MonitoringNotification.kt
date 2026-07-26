@@ -44,6 +44,24 @@ fun monitoringNotification(context: Context): Notification {
         .build()
 }
 
+fun sosMonitoringNotification(context: Context): Notification {
+    val app = context.applicationContext
+    ensureMonitoringNotificationChannel(app)
+    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        Notification.Builder(app, CHANNEL_ID)
+    } else {
+        @Suppress("DEPRECATION")
+        Notification.Builder(app)
+    }
+    return builder
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentTitle(app.getString(R.string.kid_sos_notification_title))
+        .setContentText(app.getString(R.string.kid_sos_notification_body))
+        .setOngoing(true)
+        .setShowWhen(true)
+        .build()
+}
+
 fun showMonitoringNotification(context: Context) {
     val app = context.applicationContext
     val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -53,6 +71,17 @@ fun showMonitoringNotification(context: Context) {
     ) return
 
     manager.notify(MONITORING_NOTIFICATION_ID, monitoringNotification(app))
+}
+
+fun showSosMonitoringNotification(context: Context) {
+    val app = context.applicationContext
+    val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    ensureMonitoringNotificationChannel(app)
+    if (Build.VERSION.SDK_INT >= 33 &&
+        app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) return
+
+    manager.notify(MONITORING_NOTIFICATION_ID, sosMonitoringNotification(app))
 }
 
 fun cancelMonitoringNotification(context: Context) {

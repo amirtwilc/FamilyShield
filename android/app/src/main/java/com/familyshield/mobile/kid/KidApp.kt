@@ -15,6 +15,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.aspectRatio
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
@@ -76,6 +79,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.familyshield.mobile.Locales
 import com.familyshield.mobile.R
 import com.familyshield.mobile.net.Monitor
+import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
+import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.ui.OsmMap
 import com.familyshield.mobile.ui.formatMessageDate
@@ -89,6 +94,7 @@ import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
 import com.familyshield.mobile.ui.theme.SkyTint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Locale
 
@@ -369,8 +375,10 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
     LaunchedEffect(Unit) {
         vm.refreshMonitoring()
         vm.refreshAppUsageAccess(context)
+        vm.refreshSosState()
         while (true) {
             vm.refreshTelemetry(context)
+            vm.refreshSosState()
             monitoringStatus = backgroundMonitoringStatus(context)
             delay(30_000)
         }
@@ -424,6 +432,7 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
         ) {
             val currentLat = vm.lat
             val currentLng = vm.lng
+            KidSosCard(vm, snackbar)
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -520,6 +529,75 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                     monitoringStatus = backgroundMonitoringStatus(context)
                 },
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun KidSosCard(vm: KidViewModel, snackbar: SnackbarHostState) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val active = vm.sosState.active
+    val remainingMinutes = ((vm.sosState.remainingSeconds + 59) / 60).coerceAtLeast(0)
+    val holdHint = stringResource(R.string.kid_sos_hold_hint)
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = if (active) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.error,
+        shadowElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                enabled = !active && !vm.sosBusy,
+                onClick = { scope.launch { snackbar.showSnackbar(holdHint) } },
+                onLongClick = { vm.startSos(context) },
+            ),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    Icons.Filled.Warning,
+                    null,
+                    tint = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(if (active) R.string.kid_sos_active_title else R.string.kid_sos_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(if (active) R.string.kid_sos_active_body else R.string.kid_sos_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
+                    )
+                }
+            }
+            if (active) {
+                Text(
+                    stringResource(R.string.kid_sos_remaining, remainingMinutes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                OutlinedButton(
+                    onClick = { vm.endSos(context) },
+                    enabled = !vm.sosBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                ) {
+                    Text(stringResource(R.string.kid_sos_end_action), fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                Text(
+                    stringResource(R.string.kid_sos_hold_action),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onError,
+                )
+            }
+            if (vm.sosBusy) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -622,6 +700,20 @@ private fun PermissionsCard(
                 onInfo = { info = PermissionInfo.Notifications },
             )
             PermissionRow(
+                icon = Icons.Filled.NotificationsActive,
+                label = stringResource(R.string.kid_permission_urgent_notifications),
+                granted = status.urgentNotificationsEnabled,
+                onClick = { openUrgentNotificationSettings(context) },
+                onInfo = { info = PermissionInfo.UrgentNotifications },
+            )
+            PermissionRow(
+                icon = Icons.Filled.Warning,
+                label = stringResource(R.string.kid_permission_dnd_bypass),
+                granted = status.urgentDndBypassAllowed,
+                onClick = { openNotificationPolicyAccessSettings(context) },
+                onInfo = { info = PermissionInfo.DndBypass },
+            )
+            PermissionRow(
                 icon = Icons.Filled.BatteryFull,
                 label = stringResource(R.string.kid_permission_battery),
                 granted = status.batteryUnrestricted,
@@ -688,6 +780,8 @@ private enum class PermissionInfo {
     Notifications,
     Battery,
     AppUsage,
+    UrgentNotifications,
+    DndBypass,
     ManufacturerBackground,
 }
 
@@ -698,6 +792,8 @@ private fun permissionInfoTitle(info: PermissionInfo): String = stringResource(
         PermissionInfo.Notifications -> R.string.kid_permission_notifications
         PermissionInfo.Battery -> R.string.kid_permission_battery
         PermissionInfo.AppUsage -> R.string.kid_permission_app_usage
+        PermissionInfo.UrgentNotifications -> R.string.kid_permission_urgent_notifications
+        PermissionInfo.DndBypass -> R.string.kid_permission_dnd_bypass
         PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background
     },
 )
@@ -709,6 +805,8 @@ private fun permissionInfoBody(info: PermissionInfo): String = stringResource(
         PermissionInfo.Notifications -> R.string.kid_permission_notifications_info
         PermissionInfo.Battery -> R.string.kid_permission_battery_info
         PermissionInfo.AppUsage -> R.string.kid_permission_app_usage_info
+        PermissionInfo.UrgentNotifications -> R.string.kid_permission_urgent_notifications_info
+        PermissionInfo.DndBypass -> R.string.kid_permission_dnd_bypass_info
         PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background_info
     },
 )

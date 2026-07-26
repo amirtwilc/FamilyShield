@@ -9,6 +9,7 @@ import { reportUsageSchema } from '@/lib/schemas/appusage';
 import { createChildSchema } from '@/lib/schemas/children';
 import { createZoneSchema, updateZoneSchema } from '@/lib/schemas/zones';
 import { sendMessageSchema } from '@/lib/schemas/messages';
+import { sosEndSchema, sosLocationSchema, sosStartSchema, urgentAlertSchema } from '@/lib/schemas/sos';
 import { pushTokenSchema, historyQuery } from '@/lib/schemas/parent';
 import { z } from './registry';
 
@@ -40,6 +41,14 @@ export function buildOpenApiDocument() {
     request: { body: json(statusSchema) }, responses: { 200: { description: 'OK' } } });
   registry.registerPath({ method: 'post', path: '/api/device/telemetry', security: [{ deviceToken: [] }],
     request: { body: json(deviceTelemetrySchema) }, responses: { 200: { description: 'Telemetry ingested' }, 401: { description: 'Unauthorized' } } });
+  registry.registerPath({ method: 'post', path: '/api/device/sos/start', security: [{ deviceToken: [] }],
+    request: { body: json(sosStartSchema) }, responses: { 201: { description: 'SOS started' }, 401: { description: 'Unauthorized' } } });
+  registry.registerPath({ method: 'post', path: '/api/device/sos/location', security: [{ deviceToken: [] }],
+    request: { body: json(sosLocationSchema) }, responses: { 200: { description: 'SOS location accepted or quota exhausted' }, 401: { description: 'Unauthorized' } } });
+  registry.registerPath({ method: 'post', path: '/api/device/sos/end', security: [{ deviceToken: [] }],
+    request: { body: json(sosEndSchema) }, responses: { 200: { description: 'SOS ended' }, 401: { description: 'Unauthorized' } } });
+  registry.registerPath({ method: 'get', path: '/api/device/sos/state', security: [{ deviceToken: [] }],
+    responses: { 200: { description: 'Current SOS state' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'post', path: '/api/device/app-usage', security: [{ deviceToken: [] }],
     request: { body: json(reportUsageSchema) }, responses: { 200: { description: 'App usage ingested' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/device/monitoring', security: [{ deviceToken: [] }],
@@ -70,6 +79,12 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'Messages with a child' }, 404: { description: 'Child not found' } } });
   registry.registerPath({ method: 'post', path: '/api/children/{id}/messages', security: [{ parentJwt: [] }],
     request: { body: json(sendMessageSchema) }, responses: { 201: { description: 'Message sent' }, 404: { description: 'Child not found' } } });
+  registry.registerPath({ method: 'post', path: '/api/children/{id}/urgent-alert', security: [{ parentJwt: [] }],
+    request: { body: json(urgentAlertSchema) }, responses: { 201: { description: 'Urgent alert sent' }, 404: { description: 'Child not found' }, 429: { description: 'Urgent alert cooldown active' } } });
+  registry.registerPath({ method: 'get', path: '/api/children/{id}/sos/current', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'Current child SOS state' }, 404: { description: 'Child not found' } } });
+  registry.registerPath({ method: 'post', path: '/api/children/{id}/sos/{eventId}/ack', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'SOS acknowledged' }, 404: { description: 'Child or active SOS not found' } } });
   registry.registerPath({ method: 'get', path: '/api/messages/summary', security: [{ parentJwt: [] }],
     responses: { 200: { description: 'Conversation summary' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/app-usage', security: [{ parentJwt: [] }],
