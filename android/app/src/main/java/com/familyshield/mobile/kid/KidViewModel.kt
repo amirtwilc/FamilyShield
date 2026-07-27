@@ -66,11 +66,11 @@ class KidViewModel(
     fun clearError() { error = null }
     fun clearMessage() { message = null }
 
-    fun pair(code: String, platform: String) {
+    fun pair(code: String, platform: String, parentDisplayName: String) {
         error = null; message = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val r = api.pair(code.trim(), platform, AndroidTelemetry.deviceModel())
+                val r = api.pair(code.trim(), platform, AndroidTelemetry.deviceModel(), parentDisplayName.trim())
                 store.parentToken = null
                 store.parentRefreshToken = null
                 store.deviceToken = r.deviceToken
@@ -80,15 +80,29 @@ class KidViewModel(
         }
     }
 
-    fun addParent(code: String, platform: String) {
+    fun addParent(code: String, platform: String, parentDisplayName: String) {
         val t = deviceToken ?: return
         error = null; message = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val info = api.addParent(t, code.trim(), platform, AndroidTelemetry.deviceModel())
+                val info = api.addParent(t, code.trim(), platform, AndroidTelemetry.deviceModel(), parentDisplayName.trim())
                 monitors = info.monitors
                 message = "Parent added."
             } catch (e: Exception) { error = e.message } finally { busy = false }
+        }
+    }
+
+    fun updateMonitorName(parentId: String, parentDisplayName: String) {
+        val t = deviceToken ?: return
+        error = null; message = null; busy = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                monitors = api.updateMonitorName(t, parentId, parentDisplayName.trim()).monitors
+            } catch (e: Exception) {
+                if (!handleDeviceAuthError(e)) error = e.message
+            } finally {
+                busy = false
+            }
         }
     }
 

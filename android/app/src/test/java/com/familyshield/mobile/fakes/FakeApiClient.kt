@@ -16,6 +16,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     private val childAvatar = mutableMapOf<String, String>()     // childId -> avatar key
     private val childPhone = mutableMapOf<String, String?>()      // childId -> optional phone number
     private val childParents = mutableMapOf<String, MutableMap<String, String>>() // childId -> parent email -> display name
+    private val childParentNames = mutableMapOf<String, MutableMap<String, String>>() // childId -> parent email -> child-facing parent name
     private val deviceByChild = mutableMapOf<String, Device>()   // childId -> its device
     private val locations = mutableMapOf<String, CurrentLocation>()
     private val alertsByChild = mutableMapOf<String, MutableList<Alert>>()
@@ -93,6 +94,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         childParents[childId]?.remove(parentEmail(token))
         if (childParents[childId].isNullOrEmpty()) {
             childParents.remove(childId)
+            childParentNames.remove(childId)
             childName.remove(childId)
             childAvatar.remove(childId)
             childPhone.remove(childId)
@@ -168,19 +170,64 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     val appUsageRequests = mutableListOf<Pair<String, String?>>()
     private val reportedAppUsage = mutableMapOf<String, List<AppUsageReportItem>>()
     private val appUsageAccessByChild = mutableMapOf<String, Boolean>()
+    private val usageLimitsByChild = mutableMapOf<String, MutableList<AppUsageLimit>>()
 
     override suspend fun appUsage(token: String, childId: String, date: String?): AppUsageSummary {
         appUsageRequests.add(childId to date)
+        val limits = usageLimitsByChild[childId].orEmpty()
         val reported = reportedAppUsage[childId]
-        return if (reported == null) appUsageResult.copy(selectedDay = date) else AppUsageSummary(
+        return if (reported == null) appUsageResult.copy(selectedDay = date, limits = limits) else AppUsageSummary(
             selectedDay = date,
             totalTodayMin = reported.filter { it.minutes >= 5 }.sumOf { it.minutes },
             apps = reported.filter { it.minutes >= 5 }.map {
                 AppUsageEntry(it.app, it.category, it.minutes, it.packageName)
             },
+            limits = limits,
             lastUpdatedAt = now,
             appUsageAccessGranted = appUsageAccessByChild[childId],
         )
+    }
+
+    override suspend fun appUsageLimits(token: String, childId: String): List<AppUsageLimit> =
+        usageLimitsByChild[childId].orEmpty()
+
+    override suspend fun saveAppUsageLimit(token: String, childId: String, body: AppUsageLimitBody): AppUsageLimit {
+        val limits = usageLimitsByChild.getOrPut(childId) { mutableListOf() }
+        val existing = limits.firstOrNull {
+            if (body.type == "total") {
+                it.type == "total"
+            } else {
+                it.type == "app" && if (body.packageName != null) it.packageName == body.packageName else it.packageName == null && it.app == body.app
+            }
+        }
+        val updated = AppUsageLimit(
+            id = existing?.id ?: "limit-${++seq}",
+            childId = childId,
+            type = body.type,
+            packageName = if (body.type == "app") body.packageName else null,
+            app = if (body.type == "app") body.app else null,
+            category = if (body.type == "app") body.category else null,
+            limitMinutes = body.limitMinutes,
+            active = body.active ?: true,
+        )
+        if (existing == null) limits.add(updated) else limits[limits.indexOf(existing)] = updated
+        return updated
+    }
+
+    override suspend fun updateAppUsageLimit(token: String, childId: String, limitId: String, body: UpdateAppUsageLimitBody): AppUsageLimit {
+        val limits = usageLimitsByChild[childId] ?: throw ApiException(404, "Limit not found")
+        val index = limits.indexOfFirst { it.id == limitId }
+        if (index < 0) throw ApiException(404, "Limit not found")
+        val updated = limits[index].copy(
+            limitMinutes = body.limitMinutes ?: limits[index].limitMinutes,
+            active = body.active ?: limits[index].active,
+        )
+        limits[index] = updated
+        return updated
+    }
+
+    override suspend fun deleteAppUsageLimit(token: String, childId: String, limitId: String) {
+        usageLimitsByChild[childId]?.removeAll { it.id == limitId }
     }
 
     override suspend fun sendAppUsage(token: String, items: List<AppUsageReportItem>): InsertResult {
@@ -402,8 +449,10 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     }
 
     // ---- Kid device ----
-    override suspend fun pair(code: String, platform: String, model: String?): PairResult {
+    override suspend fun pair(code: String, platform: String, model: String?, parentDisplayName: String): PairResult {
         val childId = codeToChild.remove(code) ?: throw ApiException(400, "Code is invalid, expired, or already used")
+        val parent = childParents[childId]?.keys?.firstOrNull()
+        if (parent != null) childParentNames.getOrPut(childId) { linkedMapOf() }[parent] = parentDisplayName
         val deviceToken = "dev-${++seq}"
         deviceTokenToChild[deviceToken] = childId
         deviceByChild[childId] = Device(
@@ -413,7 +462,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         return PairResult(deviceToken, childId)
     }
 
-    override suspend fun addParent(token: String, code: String, platform: String, model: String?): MonitoringInfo {
+    override suspend fun addParent(token: String, code: String, platform: String, model: String?, parentDisplayName: String): MonitoringInfo {
         val currentChildId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val sourceChildId = codeToChild.remove(code) ?: throw ApiException(400, "Code is invalid, expired, or already used")
         if (deviceByChild[sourceChildId] != null) throw ApiException(400, "This code belongs to a child that already has a paired device")
@@ -423,7 +472,9 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
             throw ApiException(400, "This parent already monitors this child")
         }
         childParents.getOrPut(currentChildId) { linkedMapOf() }[parent] = sourceLinks.getValue(parent)
+        childParentNames.getOrPut(currentChildId) { linkedMapOf() }[parent] = parentDisplayName
         childParents.remove(sourceChildId)
+        childParentNames.remove(sourceChildId)
         childName.remove(sourceChildId)
         childAvatar.remove(sourceChildId)
         return monitoring(token)
@@ -432,9 +483,17 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun monitoring(token: String): MonitoringInfo {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val monitors = childParents[childId].orEmpty().map { (email, displayName) ->
-            Monitor("parent:$email", email, displayName, "caregiver")
+            Monitor("parent:$email", email, displayName, "caregiver", childParentNames[childId]?.get(email))
         }
         return MonitoringInfo(childId, monitors)
+    }
+
+    override suspend fun updateMonitorName(token: String, parentId: String, parentDisplayName: String): MonitoringInfo {
+        val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
+        val parent = parentId.removePrefix("parent:")
+        if (childParents[childId]?.containsKey(parent) != true) throw ApiException(404, "Monitor not found")
+        childParentNames.getOrPut(childId) { linkedMapOf() }[parent] = parentDisplayName
+        return monitoring(token)
     }
 
     override suspend fun removeMonitor(token: String, parentId: String): MonitorUnpairResult {
@@ -449,6 +508,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
             return MonitorUnpairResult(childId, emptyList(), unpaired = true)
         }
         links.remove(parent)
+        childParentNames[childId]?.remove(parent)
         monitorMessagesByChild[childId]?.remove(parent)
         return MonitorUnpairResult(childId, monitoring(token).monitors, unpaired = false)
     }

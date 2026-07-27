@@ -1623,6 +1623,7 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
         "safe_zone_enter", "safe_zone_exit" -> Triple(Icons.Filled.Place, Green.copy(alpha = 0.15f), Green)
         "kid_sos_started", "urgent_alert" -> Triple(Icons.Filled.Warning, MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error)
         "kid_sos_ended" -> Triple(Icons.Filled.CheckCircle, Green.copy(alpha = 0.15f), Green)
+        "app_usage_limit_exceeded" -> Triple(Icons.Filled.Schedule, SkyBright.copy(alpha = 0.18f), MaterialTheme.colorScheme.secondary)
         else -> Triple(Icons.Filled.NotificationsActive, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.tertiary)
     }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
@@ -1641,6 +1642,7 @@ private fun FamilyAlertRow(fa: FamilyAlert) {
                     a.type == "kid_sos_started" -> R.string.alert_kid_sos_started_body
                     a.type == "kid_sos_ended" -> R.string.alert_kid_sos_ended_body
                     a.type == "urgent_alert" -> R.string.alert_urgent_body
+                    a.type == "app_usage_limit_exceeded" -> R.string.alert_app_usage_limit_body
                     else -> R.string.alert_status_body
                 }),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1660,6 +1662,7 @@ private fun alertTypeLabel(type: String): String = when (type) {
     "kid_sos_started" -> stringResource(R.string.alert_kid_sos_started)
     "kid_sos_ended" -> stringResource(R.string.alert_kid_sos_ended)
     "urgent_alert" -> stringResource(R.string.alert_urgent)
+    "app_usage_limit_exceeded" -> stringResource(R.string.alert_app_usage_limit)
     else -> stringResource(R.string.alert_generic)
 }
 

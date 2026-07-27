@@ -6,7 +6,7 @@ import { alerts, childParentLinks, children, pairingCodes } from '@/db/schema';
 import { POST as pair } from '@/app/api/pair/route';
 import { GET as listChildren } from '@/app/api/children/route';
 import { GET as monitoring } from '@/app/api/device/monitoring/route';
-import { DELETE as removeMonitor } from '@/app/api/device/monitors/[parentId]/route';
+import { DELETE as removeMonitor, PATCH as renameMonitor } from '@/app/api/device/monitors/[parentId]/route';
 import { GET as currentLocation } from '@/app/api/children/[id]/location/current/route';
 import { signAccess } from '@/lib/auth/jwt';
 import { resetSender, setSender } from '@/lib/alerts/fcm';
@@ -28,6 +28,11 @@ const post = (body: unknown, token?: string) => new Request('http://t/', {
   headers: token ? { authorization: `Bearer ${token}` } : {},
   body: JSON.stringify(body),
 });
+const patch = (body: unknown, token: string) => new Request('http://t/', {
+  method: 'PATCH',
+  headers: { authorization: `Bearer ${token}` },
+  body: JSON.stringify(body),
+});
 const get = (token: string) => new Request('http://t/', { headers: { authorization: `Bearer ${token}` } });
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -39,17 +44,17 @@ describe('pairing', () => {
   it('pairs with a valid code, single-use', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     await makeCode(c.id, '111111');
-    const r = await pair(post({ code: '111111', platform: 'android', model: 'Pixel' }));
+    const r = await pair(post({ code: '111111', platform: 'android', model: 'Pixel', parentDisplayName: 'Mom' }));
     expect(r.status).toBe(201);
     expect((await r.json()).deviceToken).toBeTruthy();
-    const r2 = await pair(post({ code: '111111', platform: 'android' }));
+    const r2 = await pair(post({ code: '111111', platform: 'android', parentDisplayName: 'Mom' }));
     expect(r2.status).toBe(400); // already consumed
   });
 
   it('rejects expired codes', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     await makeCode(c.id, '222222', -1);
-    const r = await pair(post({ code: '222222', platform: 'android' }));
+    const r = await pair(post({ code: '222222', platform: 'android', parentDisplayName: 'Mom' }));
     expect(r.status).toBe(400);
   });
 
@@ -67,11 +72,12 @@ describe('pairing', () => {
       expiresAt: new Date(Date.now() + 10 * 60000),
     });
 
-    const r = await pair(post({ code: '333333', platform: 'android' }, deviceToken));
+    const r = await pair(post({ code: '333333', platform: 'android', parentDisplayName: 'Dad' }, deviceToken));
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body.childId).toBe(realChild.id);
     expect(body.monitors.map((m: any) => m.email).sort()).toEqual(['p1_pair@test.io', 'p2_pair@test.io']);
+    expect(body.monitors.find((m: any) => m.email === 'p2_pair@test.io').parentDisplayName).toBe('Dad');
 
     const links = await db.select().from(childParentLinks);
     expect(links.some((l) => l.childId === realChild.id && l.parentId === p2.id && l.displayName === 'Mimi')).toBe(true);
@@ -91,8 +97,22 @@ describe('pairing', () => {
     const { token: deviceToken } = await seedDevice(c.id);
     await makeCode(c.id, '444444');
 
-    const r = await pair(post({ code: '444444', platform: 'android' }, deviceToken));
+    const r = await pair(post({ code: '444444', platform: 'android', parentDisplayName: 'Mom' }, deviceToken));
     expect(r.status).toBe(400);
+  });
+
+  it('lets the kid device rename a monitoring parent', async () => {
+    const p = await seedParent('rename-monitor@test.io');
+    const c = await seedChild(p.id, 'Mia');
+    const { token: deviceToken } = await seedDevice(c.id);
+
+    const response = await renameMonitor(patch({ parentDisplayName: 'Ima' }, deviceToken),
+      { params: Promise.resolve({ parentId: p.id }) });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.monitors).toHaveLength(1);
+    expect(body.monitors[0]).toMatchObject({ email: 'rename-monitor@test.io', parentDisplayName: 'Ima' });
   });
 
   it('lets a kid device remove one monitor and fully unpairs after the last monitor', async () => {

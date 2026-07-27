@@ -107,11 +107,13 @@
     <string name="alert_child_unpaired">הילד ניתק את המכשיר</string>
     <string name="alert_safe_zone_enter">כניסה לאזור בטוח</string>
     <string name="alert_safe_zone_exit">יציאה מאזור בטוח</string>
+    <string name="alert_app_usage_limit">מגבלת שימוש באפליקציות</string>
     <string name="alert_generic">התראה</string>
     <string name="alert_named">%1$s: %2$s</string>
     <string name="alert_battery_body">הסוללה עומדת להתרוקן</string>
     <string name="alert_safe_zone_enter_body">הילד נכנס לאזור בטוח פעיל</string>
     <string name="alert_safe_zone_exit_body">הילד יצא מאזור בטוח פעיל</string>
+    <string name="alert_app_usage_limit_body">הושגה מגבלת שימוש יומית באפליקציות.</string>
     <string name="alert_status_body">עדכון מצב המכשיר</string>
 
     <!-- Map -->
@@ -194,6 +196,7 @@
     <string name="notification_channel_chat_name">הודעות צ\'אט</string>
     <string name="notification_channel_chat_description">הודעות צ\'אט חדשות ממשפחת FamilyShield.</string>
     <string name="notification_chat_fallback_title">הודעת צ\'אט חדשה</string>
+    <string name="notification_chat_from_name">הודעה חדשה מאת %1$s</string>
     <string name="notification_channel_alerts_name">התראות בטיחות</string>
     <string name="notification_channel_alerts_description">התראות מיקום, סוללה ומצב מכשיר.</string>
     <string name="notification_alert_fallback_title">התראת FamilyShield</string>
@@ -201,6 +204,8 @@
     <string name="notification_child_unpaired_body">הילד ניתק את המכשיר הזה.</string>
     <string name="notification_safe_zone_enter_body">הילד נכנס לאזור %1$s</string>
     <string name="notification_safe_zone_exit_body">הילד יצא מאזור %1$s</string>
+    <string name="notification_app_usage_limit_total_body">זמן המסך היומי הגיע ל-%1$s מתוך %2$s.</string>
+    <string name="notification_app_usage_limit_app_body">%1$s הגיע/ה ל-%2$s מתוך %3$s.</string>
     <string name="child_active">● פעיל%1$s</string>
     <string name="child_offline">לא מקוון</string>
     <string name="child_unpaired">נותק על ידי הילד</string>
@@ -254,12 +259,21 @@
     <string name="appusage_relevant_apps">אפליקציות רלוונטיות</string>
     <string name="appusage_last_updated">עודכן לאחרונה %1$s</string>
     <string name="appusage_see_all">הצג הכול</string>
-    <string name="appusage_limits_title">מגבלות אפליקציה</string>
-    <string name="appusage_limits_body">ניהול הקצאות זמן יומיות</string>
+    <string name="appusage_total_limit_title">מגבלת שימוש יומית</string>
+    <string name="appusage_app_limit_title">מגבלת %1$s</string>
+    <string name="appusage_no_limit">לא הוגדרה מגבלה</string>
+    <string name="appusage_limit_value">מגבלה: %1$s</string>
+    <string name="appusage_set_limit">הגדרת מגבלה</string>
+    <string name="appusage_edit_limit">עריכה</string>
+    <string name="appusage_limit_minutes_label">דקות ביום</string>
+    <string name="appusage_limit_enabled">המגבלה פעילה</string>
+    <string name="appusage_limit_disabled">המגבלה כבויה</string>
+    <string name="appusage_save_limit">שמירה</string>
+    <string name="appusage_delete_limit">מחיקה</string>
+    <string name="appusage_cancel">ביטול</string>
     <string name="appusage_connect_child">חברו את מכשיר הילד כדי לראות שימוש באפליקציות.</string>
     <string name="appusage_empty">לא נרשם שימוש באפליקציות עדיין.</string>
     <string name="appusage_permission_missing">גישת שימוש באפליקציות אינה מופעלת במכשיר הילד. פתחו את מכשיר הילד והפעילו גישת שימוש עבור FamilyShield כדי להתחיל לעקוב אחר פעילות באפליקציות.</string>
-    <string name="appusage_limits_soon">מגבלות אפליקציה יגיעו בקרוב.</string>
     <string name="cd_expand">הרחבה</string>
     <string name="cd_collapse">כיווץ</string>
 
@@ -273,6 +287,14 @@
     <string name="kid_connect_title">התחברות להורה</string>
     <string name="kid_connect_body">הזינו את קוד הצימוד בן 6 הספרות המוצג במכשיר ההורה כדי להתחיל להגן על הטלפון הזה.</string>
     <string name="kid_connect_action">חיבור המכשיר שלי</string>
+    <string name="kid_parent_name_label">שם ההורה</string>
+    <string name="kid_parent_name_helper">בחרו איך ההורה הזה יוצג בטלפון הזה.</string>
+    <string name="kid_parent_name_required">בחרו או הזינו שם להורה.</string>
+    <string name="kid_parent_name_mom">אמא</string>
+    <string name="kid_parent_name_dad">אבא</string>
+    <string name="kid_edit_parent_name_title">עריכת שם ההורה</string>
+    <string name="kid_edit_parent_name_body">השם הזה יוצג בטלפון הילד בצ׳אט, בהתראות וברשימת ההורים שעוקבים.</string>
+    <string name="kid_edit_parent_name_save">שמירת השם</string>
     <string name="kid_find_code">איפה מוצאים את הקוד?</string>
     <string name="kid_monitoring_disclosure_title">המכשיר הזה יהיה במעקב</string>
     <string name="kid_monitoring_disclosure_body">הורים מקושרים יכולים לראות את מיקום הטלפון, הסוללה/המצב, השימוש באפליקציות וההודעות.</string>
@@ -387,18 +409,20 @@
     <string name="parent_sos_call_action">התקשרות</string>
     <string name="parent_sos_ack_action">אני מגיב/ה</string>
     <string name="kid_sos_notification_title">SOS של FamilyShield פעיל</string>
-    <string name="kid_sos_notification_body">מצב SOS משתף את מיקום הטלפון בתדירות גבוהה יותר עם הורים מקושרים.</string>
+    <string name="kid_sos_notification_body">מצב SOS פעיל. ההורים קיבלו התראה.</string>
     <string name="kid_permission_urgent_notifications">צליל להתראות דחופות</string>
     <string name="kid_permission_dnd_bypass">עקיפת נא לא להפריע</string>
     <string name="kid_permission_urgent_notifications_info">FamilyShield משתמש בערוץ התראות דחוף נפרד עבור SOS והתראות מהורה. הקישו על השורה והשאירו את ערוץ ההתראות הדחופות פעיל עם צליל.</string>
     <string name="kid_permission_dnd_bypass_info">Android מאפשר להתראות דחופות להשמיע צליל בזמן נא לא להפריע רק כאשר מאשרים במפורש גישת Notification Policy והערוץ הדחוף יכול לעקוף את נא לא להפריע.</string>
     <string name="kid_sos_title">SOS</string>
-    <string name="kid_sos_body">לחיצה ארוכה תתריע להורים המקושרים ותשתף מיקום כל דקה באופן זמני.</string>
-    <string name="kid_sos_hold_action">לחצו לחיצה ארוכה על הכרטיס כדי להתחיל SOS</string>
-    <string name="kid_sos_hold_hint">לחצו והחזיקו כדי להתחיל SOS.</string>
+    <string name="kid_sos_body">לחצו במשך 3 שניות כדי להודיע להורים במקרה חירום.</string>
+    <string name="kid_sos_hold_action">לחצו במשך 3 שניות כדי להודיע להורים במקרה חירום</string>
+    <string name="kid_sos_hold_hint">לחצו במשך 3 שניות כדי להודיע להורים במקרה חירום.</string>
+    <string name="kid_sos_press_instruction">לחצו במשך 3 שניות כדי להודיע להורים במקרה חירום</string>
+    <string name="kid_sos_alerts_sent">ההתראות נשלחו להורים</string>
     <string name="kid_sos_active_title">SOS פעיל</string>
-    <string name="kid_sos_active_body">ההורים המקושרים קיבלו התראה. הטלפון משתף מיקום כל דקה כל עוד נותר זמן SOS יומי.</string>
-    <string name="kid_sos_remaining">נותרו היום %1$d דקות של מיקום בקצב גבוה</string>
+    <string name="kid_sos_active_body">מצב SOS פעיל. ההורים קיבלו התראה.</string>
+    <string name="kid_sos_remaining">מצב SOS פעיל.</string>
     <string name="kid_sos_end_action">אני בטוח/ה - סיום SOS</string>
     <string name="kid_sos_started_message">SOS נשלח להורים המקושרים.</string>
     <string name="kid_sos_ended_message">SOS הסתיים.</string>

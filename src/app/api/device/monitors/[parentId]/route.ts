@@ -3,11 +3,27 @@ import { db } from '@/db/client';
 import { childParentLinks, devices } from '@/db/schema';
 import { requireDevice } from '@/lib/auth/device';
 import { ok, err } from '@/lib/http';
+import { parseBody } from '@/lib/validate';
 import { monitoringInfo } from '@/lib/monitoring';
 import { fireChildUnpaired, fireParentRemovedByChild } from '@/lib/alerts/engine';
+import { monitorNameSchema } from '@/lib/schemas/pair';
 
 export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ parentId: string }> };
+
+export async function PATCH(req: Request, { params }: Ctx) {
+  const a = await requireDevice(req); if ('response' in a) return a.response;
+  const p = await parseBody(req, monitorNameSchema); if ('response' in p) return p.response;
+  const { parentId } = await params;
+
+  const [updated] = await db.update(childParentLinks)
+    .set({ parentDisplayName: p.data.parentDisplayName })
+    .where(and(eq(childParentLinks.childId, a.device.childId), eq(childParentLinks.parentId, parentId)))
+    .returning({ id: childParentLinks.id });
+
+  if (!updated) return err('not_found', 'Monitor not found', 404);
+  return ok(await monitoringInfo(a.device.childId));
+}
 
 export async function DELETE(req: Request, { params }: Ctx) {
   const a = await requireDevice(req); if ('response' in a) return a.response;

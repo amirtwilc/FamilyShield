@@ -1,11 +1,11 @@
 import { OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { registry } from './registry';
 import { registerSchema, loginSchema, refreshSchema, googleSchema, tokenPairSchema } from '@/lib/schemas/auth';
-import { pairSchema } from '@/lib/schemas/pair';
+import { monitorNameSchema, pairSchema } from '@/lib/schemas/pair';
 import { locationBatch } from '@/lib/schemas/locations';
 import { statusSchema } from '@/lib/schemas/status';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
-import { reportUsageSchema } from '@/lib/schemas/appusage';
+import { appUsageLimitSchema, reportUsageSchema, updateAppUsageLimitSchema } from '@/lib/schemas/appusage';
 import { createChildSchema } from '@/lib/schemas/children';
 import { createZoneSchema, updateZoneSchema } from '@/lib/schemas/zones';
 import { sendMessageSchema } from '@/lib/schemas/messages';
@@ -55,6 +55,9 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'Current monitoring relationships' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'delete', path: '/api/device/monitors/{parentId}', security: [{ deviceToken: [] }],
     responses: { 200: { description: 'Monitor removed' }, 404: { description: 'Monitor not found' } } });
+  registry.registerPath({ method: 'patch', path: '/api/device/monitors/{parentId}', security: [{ deviceToken: [] }],
+    request: { body: json(monitorNameSchema) },
+    responses: { 200: { description: 'Monitor parent name updated' }, 404: { description: 'Monitor not found' } } });
   registry.registerPath({ method: 'get', path: '/api/device/monitors/{parentId}/messages', security: [{ deviceToken: [] }],
     responses: { 200: { description: 'Messages with one monitor' }, 404: { description: 'Monitor not found' } } });
   registry.registerPath({ method: 'post', path: '/api/device/monitors/{parentId}/messages', security: [{ deviceToken: [] }],
@@ -107,9 +110,27 @@ export function buildOpenApiDocument() {
         lastUpdatedAt: z.union([z.string(), z.null()]),
       })),
       apps: z.array(z.object({ packageName: z.string(), app: z.string(), category: z.string(), min: z.number() })),
+      limits: z.array(z.object({
+        id: z.string(),
+        childId: z.string(),
+        type: z.enum(['total', 'app']),
+        packageName: z.union([z.string(), z.null()]),
+        app: z.union([z.string(), z.null()]),
+        category: z.union([z.string(), z.null()]),
+        limitMinutes: z.number(),
+        active: z.boolean(),
+      })),
       lastUpdatedAt: z.union([z.string(), z.null()]),
       appUsageAccessGranted: z.union([z.boolean(), z.null()]),
     })) } } });
+  registry.registerPath({ method: 'get', path: '/api/children/{id}/app-usage/limits', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'App usage limits' }, 404: { description: 'Child not found' } } });
+  registry.registerPath({ method: 'post', path: '/api/children/{id}/app-usage/limits', security: [{ parentJwt: [] }],
+    request: { body: json(appUsageLimitSchema) }, responses: { 201: { description: 'Limit created' }, 200: { description: 'Limit updated' }, 404: { description: 'Child not found' } } });
+  registry.registerPath({ method: 'patch', path: '/api/children/{id}/app-usage/limits/{limitId}', security: [{ parentJwt: [] }],
+    request: { body: json(updateAppUsageLimitSchema) }, responses: { 200: { description: 'Limit updated' }, 404: { description: 'Child or limit not found' } } });
+  registry.registerPath({ method: 'delete', path: '/api/children/{id}/app-usage/limits/{limitId}', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'Limit deleted' }, 404: { description: 'Child or limit not found' } } });
   registry.registerPath({ method: 'post', path: '/api/children/{id}/zones', security: [{ parentJwt: [] }],
     request: { body: json(createZoneSchema) }, responses: { 201: { description: 'Zone' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/zones', security: [{ parentJwt: [] }],

@@ -1,6 +1,6 @@
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { devices } from '@/db/schema';
+import { appUsageLimits, devices } from '@/db/schema';
 import { requireParent } from '@/lib/auth/parent';
 import { averageUsageMinutes, hasYesterdayUsageData } from '@/lib/app-usage-summary';
 import { assertChildOwned } from '@/lib/ownership';
@@ -52,6 +52,10 @@ export async function GET(req: Request, { params }: Ctx) {
       bool_or(${devices.appUsageAccessGranted}) FILTER (WHERE ${devices.appUsageAccessGranted} IS NOT NULL) AS granted
     FROM ${devices}
     WHERE ${devices.childId} = ${id} AND ${devices.revokedAt} IS NULL`);
+  const limitsR = await db.select().from(appUsageLimits).where(and(
+    eq(appUsageLimits.parentId, a.parentId),
+    eq(appUsageLimits.childId, id),
+  ));
   const weekR = await db.execute(sql`
     SELECT
       to_char(d.day::date, 'YYYY-MM-DD') AS day,
@@ -133,6 +137,18 @@ export async function GET(req: Request, { params }: Ctx) {
     week,
     dayDetails,
     apps,
+    limits: limitsR.map((limit) => ({
+      id: limit.id,
+      childId: limit.childId,
+      type: limit.type,
+      packageName: limit.packageName,
+      app: limit.app,
+      category: limit.category,
+      limitMinutes: limit.limitMinutes,
+      active: limit.active,
+      createdAt: limit.createdAt,
+      updatedAt: limit.updatedAt,
+    })),
     lastUpdatedAt,
     appUsageAccessGranted,
   });

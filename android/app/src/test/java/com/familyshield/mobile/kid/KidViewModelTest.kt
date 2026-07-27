@@ -40,12 +40,13 @@ class KidViewModelTest {
         val (_, _, code) = seedCode(api)
         val vm = viewModel(api)
 
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
 
         assertNotNull("device token should be set after pairing", vm.deviceToken)
         assertNull(vm.error)
         assertEquals(listOf("parent@x.com"), vm.monitors.map { it.email })
+        assertEquals(listOf("Mom"), vm.monitors.map { it.childFacingName })
     }
 
     @Test
@@ -55,7 +56,7 @@ class KidViewModelTest {
         val store = InMemoryTokenStore(parentToken = "parent-access", parentRefreshToken = "parent-refresh")
         val vm = viewModel(api, store)
 
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
 
         assertNotNull(vm.deviceToken)
@@ -67,7 +68,7 @@ class KidViewModelTest {
     fun `pairing with an invalid code surfaces an error`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
 
-        vm.pair("000000", "android")
+        vm.pair("000000", "android", "Mom")
         advanceUntilIdle()
 
         assertNull(vm.deviceToken)
@@ -79,7 +80,7 @@ class KidViewModelTest {
         val api = FakeApiClient()
         val (_, _, code) = seedCode(api)
         val vm = viewModel(api)
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
         val originalDeviceToken = vm.deviceToken
 
@@ -87,11 +88,12 @@ class KidViewModelTest {
         val placeholder = api.createChild(secondParentToken, "Mimi")
         val secondCode = api.pairingCode(secondParentToken, placeholder.id).code
 
-        vm.addParent(secondCode, "android")
+        vm.addParent(secondCode, "android", "Dad")
         advanceUntilIdle()
 
         assertEquals(originalDeviceToken, vm.deviceToken)
         assertEquals(listOf("parent@x.com", "other@x.com"), vm.monitors.map { it.email })
+        assertEquals(listOf("Mom", "Dad"), vm.monitors.map { it.childFacingName })
         assertEquals("Parent added.", vm.message)
     }
 
@@ -100,12 +102,12 @@ class KidViewModelTest {
         val api = FakeApiClient()
         val (_, _, code) = seedCode(api)
         val vm = viewModel(api)
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
 
         val secondParentToken = api.register("other-remove@x.com", "pw123456").accessToken
         val placeholder = api.createChild(secondParentToken, "Mimi")
-        vm.addParent(api.pairingCode(secondParentToken, placeholder.id).code, "android")
+        vm.addParent(api.pairingCode(secondParentToken, placeholder.id).code, "android", "Dad")
         advanceUntilIdle()
         val originalDeviceToken = vm.deviceToken
 
@@ -125,7 +127,7 @@ class KidViewModelTest {
         val api = FakeApiClient()
         val (parentToken, childId, code) = seedCode(api)
         val vm = viewModel(api)
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
         assertNotNull(vm.deviceToken)
 
@@ -142,12 +144,12 @@ class KidViewModelTest {
         val api = FakeApiClient()
         val (_, childId, code) = seedCode(api)
         val vm = viewModel(api)
-        vm.pair(code, "android")
+        vm.pair(code, "android", "Mom")
         advanceUntilIdle()
 
         val secondParentToken = api.register("chat-other@x.com", "pw123456").accessToken
         val placeholder = api.createChild(secondParentToken, "Mimi")
-        vm.addParent(api.pairingCode(secondParentToken, placeholder.id).code, "android")
+        vm.addParent(api.pairingCode(secondParentToken, placeholder.id).code, "android", "Dad")
         advanceUntilIdle()
         api.sendMessage(secondParentToken, childId, "Hi from second")
 
@@ -160,6 +162,21 @@ class KidViewModelTest {
         runCurrent()
         assertEquals(listOf("Hi from second", "Hi back"), vm.chatMessages.map { it.body })
         vm.stopChat()
+    }
+
+    @Test
+    fun `kid can rename a monitoring parent`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val (_, _, code) = seedCode(api)
+        val vm = viewModel(api)
+        vm.pair(code, "android", "Mom")
+        advanceUntilIdle()
+
+        vm.updateMonitorName(vm.monitors.single().parentId, "Ima")
+        advanceUntilIdle()
+
+        assertEquals("Ima", vm.monitors.single().childFacingName)
+        assertNull(vm.error)
     }
 
     @Test
@@ -288,3 +305,4 @@ class KidViewModelTest {
         assertEquals(ManufacturerBackgroundGuide.Generic, backgroundGuideFor("Samsung", "Samsung"))
     }
 }
+

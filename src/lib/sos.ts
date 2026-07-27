@@ -203,16 +203,22 @@ async function notifySosEnded(device: Device, eventId: string): Promise<void> {
 }
 
 async function notifyChildSosAcknowledged(childId: string, parentId: string, eventId: string): Promise<boolean> {
-  const [parent] = await db.select({ email: parents.email }).from(parents).where(eq(parents.id, parentId));
+  const [parent] = await db.select({
+    email: parents.email,
+    parentDisplayName: childParentLinks.parentDisplayName,
+  }).from(parents)
+    .leftJoin(childParentLinks, and(eq(childParentLinks.childId, childId), eq(childParentLinks.parentId, parents.id)))
+    .where(eq(parents.id, parentId));
+  const parentName = parent?.parentDisplayName?.trim() || parent?.email || 'A parent';
   let delivered = false;
   for (const token of await childDeviceTokens(childId)) {
-    delivered = await sendSafely(token, 'Parent is responding', `${parent?.email ?? 'A parent'} acknowledged your SOS`, {
+    delivered = await sendSafely(token, 'Parent is responding', `${parentName} acknowledged your SOS`, {
       type: 'sos_acknowledged',
       recipient: 'child',
       childId,
       parentId,
       eventId,
-      parentName: parent?.email ?? '',
+      parentName,
       priority: 'urgent',
     }, URGENT_PUSH_OPTIONS) || delivered;
   }

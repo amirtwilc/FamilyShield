@@ -207,6 +207,36 @@ class ParentViewModel(
         }
     }
 
+    fun saveAppUsageLimit(childId: String, body: AppUsageLimitBody) {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                authed { api.saveAppUsageLimit(it, childId, body) }
+                loadAppUsage(childId, appUsageDate)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun updateAppUsageLimit(childId: String, limitId: String, body: UpdateAppUsageLimitBody) {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                authed { api.updateAppUsageLimit(it, childId, limitId, body) }
+                loadAppUsage(childId, appUsageDate)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun deleteAppUsageLimit(childId: String, limitId: String) {
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                authed { api.deleteAppUsageLimit(it, childId, limitId) }
+                loadAppUsage(childId, appUsageDate)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
     fun sendChat(body: String) {
         val id = chatChildId ?: return
         if (token == null || body.isBlank()) return

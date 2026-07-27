@@ -3,6 +3,7 @@ package com.familyshield.mobile.kid
 import android.Manifest
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,11 +13,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.aspectRatio
@@ -53,11 +54,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -83,6 +97,7 @@ import com.familyshield.mobile.ui.OsmMap
 import com.familyshield.mobile.ui.formatMessageDate
 import com.familyshield.mobile.ui.formatMessageTime
 import com.familyshield.mobile.ui.messageLocalDate
+import com.familyshield.mobile.ui.theme.Danger
 import com.familyshield.mobile.ui.theme.Green
 import com.familyshield.mobile.ui.theme.GreenTint
 import com.familyshield.mobile.ui.theme.Navy
@@ -90,7 +105,9 @@ import com.familyshield.mobile.ui.theme.NavyContainer
 import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
 import com.familyshield.mobile.ui.theme.SkyTint
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Locale
@@ -186,6 +203,7 @@ private fun requestKidNotificationPermission(
 @Composable
 private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -> Unit) {
     var code by remember { mutableStateOf("") }
+    var parentName by remember { mutableStateOf("") }
     var disclosureAccepted by remember { mutableStateOf(false) }
 
     Column(
@@ -238,11 +256,13 @@ private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -
                 Spacer(Modifier.height(24.dp))
                 MonitoringDisclosure(checked = disclosureAccepted, onCheckedChange = { disclosureAccepted = it })
                 Spacer(Modifier.height(18.dp))
+                ParentNameInput(parentName, { parentName = it })
+                Spacer(Modifier.height(18.dp))
                 CodeBoxes(code) { code = it.filter { c -> c.isDigit() }.take(6) }
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { vm.pair(code, "android") },
-                    enabled = disclosureAccepted && code.length == 6 && !vm.busy,
+                    onClick = { vm.pair(code, "android", parentName) },
+                    enabled = disclosureAccepted && parentName.isNotBlank() && code.length == 6 && !vm.busy,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -310,6 +330,40 @@ private fun CodeBoxes(code: String, onChange: (String) -> Unit) {
 }
 
 @Composable
+private fun ParentNameInput(
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onChange(it.take(80)) },
+            label = { Text(stringResource(R.string.kid_parent_name_label)) },
+            supportingText = {
+                Text(
+                    stringResource(
+                        if (value.isBlank()) R.string.kid_parent_name_required else R.string.kid_parent_name_helper,
+                    ),
+                )
+            },
+            isError = value.isBlank(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(R.string.kid_parent_name_mom, R.string.kid_parent_name_dad).forEach { res ->
+                val label = stringResource(res)
+                AssistChip(
+                    onClick = { onChange(label) },
+                    label = { Text(label) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun InfoCard(modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, title: String, bg: Color, fg: Color) {
     Surface(modifier = modifier, shape = RoundedCornerShape(18.dp), color = bg) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -366,6 +420,7 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
     val snackbar = remember { SnackbarHostState() }
     var addParentOpen by remember { mutableStateOf(false) }
     var pendingUnpair by remember { mutableStateOf<Monitor?>(null) }
+    var editingMonitor by remember { mutableStateOf<Monitor?>(null) }
     var monitoringStatus by remember { mutableStateOf(backgroundMonitoringStatus(context)) }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
@@ -392,11 +447,22 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
     }
 
     if (addParentOpen) AddParentDialog(vm, onDismiss = { addParentOpen = false })
+    editingMonitor?.let { monitor ->
+        EditParentNameDialog(
+            initialName = monitor.childFacingName,
+            onDismiss = { editingMonitor = null },
+            onSave = { name ->
+                vm.updateMonitorName(monitor.parentId, name)
+                editingMonitor = null
+            },
+            saving = vm.busy,
+        )
+    }
     pendingUnpair?.let { monitor ->
         AlertDialog(
             onDismissRequest = { pendingUnpair = null },
             title = { Text(stringResource(R.string.kid_unpair_confirm_title)) },
-            text = { Text(stringResource(R.string.kid_unpair_confirm_body, monitor.email)) },
+            text = { Text(stringResource(R.string.kid_unpair_confirm_body, monitor.childFacingName)) },
             confirmButton = {
                 TextButton(onClick = { vm.removeMonitor(monitor.parentId); pendingUnpair = null }) {
                     Text(stringResource(R.string.kid_unpair), color = MaterialTheme.colorScheme.error)
@@ -423,13 +489,18 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
+        Box(Modifier.padding(pad).fillMaxSize()) {
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).widthIn(max = 600.dp),
+            Modifier.fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(top = 16.dp, bottom = 184.dp)
+                .widthIn(max = 600.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val currentLat = vm.lat
             val currentLng = vm.lng
-            KidSosCard(vm, snackbar)
+            KidSosActiveCard(vm)
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -449,9 +520,20 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(monitor.email, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                                            Text(monitor.displayName, style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                monitor.childFacingName,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier
+                                                    .clip(MaterialTheme.shapes.small)
+                                                    .clickable { editingMonitor = monitor }
+                                                    .padding(vertical = 2.dp),
+                                            )
+                                            Text(
+                                                monitor.email,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         }
                                         FilledTonalIconButton(onClick = { onChat(monitor) }) {
                                             Icon(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.kid_chat_title))
@@ -527,75 +609,209 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                 },
             )
         }
+            FloatingSosButton(
+                active = vm.sosState.active,
+                busy = vm.sosBusy,
+                onStart = { vm.startSos(context) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp),
+            )
+        }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun KidSosCard(vm: KidViewModel, snackbar: SnackbarHostState) {
+private fun KidSosActiveCard(vm: KidViewModel) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val active = vm.sosState.active
-    val remainingMinutes = ((vm.sosState.remainingSeconds + 59) / 60).coerceAtLeast(0)
-    val holdHint = stringResource(R.string.kid_sos_hold_hint)
+    if (!vm.sosState.active) return
     Surface(
         shape = MaterialTheme.shapes.large,
-        color = if (active) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.error,
+        color = Danger,
         shadowElevation = 2.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                enabled = !active && !vm.sosBusy,
-                onClick = { scope.launch { snackbar.showSnackbar(holdHint) } },
-                onLongClick = { vm.startSos(context) },
-            ),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(
-                    Icons.Filled.Warning,
-                    null,
-                    tint = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
-                )
+                Icon(Icons.Filled.Warning, null, tint = Color.White)
                 Column(Modifier.weight(1f)) {
                     Text(
-                        stringResource(if (active) R.string.kid_sos_active_title else R.string.kid_sos_title),
+                        stringResource(R.string.kid_sos_active_title),
                         style = MaterialTheme.typography.titleLarge,
-                        color = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        stringResource(if (active) R.string.kid_sos_active_body else R.string.kid_sos_body),
+                        stringResource(R.string.kid_sos_active_body),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (active) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onError,
+                        color = Color.White,
                     )
                 }
             }
-            if (active) {
-                Text(
-                    stringResource(R.string.kid_sos_remaining, remainingMinutes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                OutlinedButton(
-                    onClick = { vm.endSos(context) },
-                    enabled = !vm.sosBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer),
-                ) {
-                    Text(stringResource(R.string.kid_sos_end_action), fontWeight = FontWeight.SemiBold)
-                }
-            } else {
-                Text(
-                    stringResource(R.string.kid_sos_hold_action),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onError,
-                )
+            Button(
+                onClick = { vm.endSos(context) },
+                enabled = !vm.sosBusy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Danger),
+            ) {
+                Text(stringResource(R.string.kid_sos_end_action), fontWeight = FontWeight.SemiBold)
             }
             if (vm.sosBusy) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = Color.White)
             }
         }
+    }
+}
+
+private const val SOS_HOLD_DURATION_MS = 3_000L
+
+@Composable
+private fun FloatingSosButton(
+    active: Boolean,
+    busy: Boolean,
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var progress by remember { mutableStateOf(0f) }
+    var completed by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    val instruction = stringResource(R.string.kid_sos_press_instruction)
+    val sent = stringResource(R.string.kid_sos_alerts_sent)
+
+    LaunchedEffect(active, busy) {
+        if (active) {
+            completed = true
+            progress = 1f
+        } else if (!busy) {
+            completed = false
+            progress = 0f
+        }
+    }
+
+    val confirmed = active || completed
+    val buttonColor = if (confirmed) Green else Danger
+    val buttonGradient = if (confirmed) {
+        Brush.verticalGradient(listOf(Green.copy(alpha = 0.95f), Green))
+    } else {
+        Brush.verticalGradient(listOf(Color(0xFFD93343), Color(0xFF92001F)))
+    }
+    val semanticLabel = if (confirmed) sent else instruction
+
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier
+                .size(148.dp)
+                .semantics {
+                    contentDescription = semanticLabel
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            SosProgressRing(progress = if (confirmed) 1f else progress, color = buttonColor)
+            Box(
+                Modifier
+                    .size(104.dp)
+                    .shadow(18.dp, CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(buttonGradient)
+                    .border(4.dp, Color.White.copy(alpha = 0.22f), CircleShape)
+                    .pointerInput(active, busy) {
+                        detectTapGestures(
+                            onPress = {
+                            if (active || busy) {
+                                    tryAwaitRelease()
+                                    return@detectTapGestures
+                            }
+                            coroutineScope {
+                                var triggered = false
+                                val startedAt = SystemClock.uptimeMillis()
+                                val job = launch {
+                                    while (isActive) {
+                                        val elapsed = SystemClock.uptimeMillis() - startedAt
+                                        val nextProgress = (elapsed.toFloat() / SOS_HOLD_DURATION_MS).coerceIn(0f, 1f)
+                                        progress = nextProgress
+                                        if (nextProgress >= 1f) {
+                                            triggered = true
+                                            completed = true
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onStart()
+                                            break
+                                        }
+                                        delay(32)
+                                    }
+                                }
+                                    tryAwaitRelease()
+                                job.cancel()
+                                if (!triggered) progress = 0f
+                            }
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (confirmed) {
+                    Icon(Icons.Filled.CheckCircle, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                } else if (progress > 0f) {
+                    Text(
+                        ((SOS_HOLD_DURATION_MS - (progress * SOS_HOLD_DURATION_MS)).toInt() / 1000 + 1)
+                            .coerceIn(1, 3)
+                            .toString(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.kid_sos_title),
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                }
+            }
+        }
+        Surface(
+            color = if (confirmed) GreenTint.copy(alpha = 0.96f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            contentColor = if (confirmed) Green else MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = CircleShape,
+            shadowElevation = 2.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        ) {
+            Text(
+                if (confirmed) sent else instruction,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SosProgressRing(progress: Float, color: Color) {
+    Canvas(Modifier.size(142.dp)) {
+        val strokeWidth = 5.dp.toPx()
+        val inset = strokeWidth / 2f
+        drawCircle(
+            color = color.copy(alpha = 0.14f),
+            radius = (size.minDimension - strokeWidth) / 2f,
+            style = Stroke(width = strokeWidth),
+        )
+        drawArc(
+            color = color,
+            startAngle = -90f,
+            sweepAngle = 360f * progress.coerceIn(0f, 1f),
+            useCenter = false,
+            topLeft = Offset(inset, inset),
+            size = Size(size.width - strokeWidth, size.height - strokeWidth),
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+        )
     }
 }
 
@@ -731,6 +947,7 @@ private fun TelemetryRow(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 @Composable
 private fun AddParentDialog(vm: KidViewModel, onDismiss: () -> Unit) {
     var code by remember { mutableStateOf("") }
+    var parentName by remember { mutableStateOf("") }
     var disclosureAccepted by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -738,14 +955,48 @@ private fun AddParentDialog(vm: KidViewModel, onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 MonitoringDisclosure(checked = disclosureAccepted, onCheckedChange = { disclosureAccepted = it })
+                ParentNameInput(parentName, { parentName = it })
                 CodeBoxes(code) { code = it.filter { c -> c.isDigit() }.take(6) }
             }
         },
         confirmButton = {
             Button(
-                onClick = { vm.addParent(code, "android"); onDismiss() },
-                enabled = disclosureAccepted && code.length == 6 && !vm.busy,
+                onClick = { vm.addParent(code, "android", parentName); onDismiss() },
+                enabled = disclosureAccepted && parentName.isNotBlank() && code.length == 6 && !vm.busy,
             ) { Text(stringResource(R.string.action_add)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun EditParentNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    saving: Boolean,
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.kid_edit_parent_name_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.kid_edit_parent_name_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ParentNameInput(name, { name = it })
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name) },
+                enabled = name.isNotBlank() && !saving,
+            ) { Text(stringResource(R.string.kid_edit_parent_name_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
@@ -770,7 +1021,7 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.kid_chat_title_with, monitor.email), style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.kid_chat_title_with, monitor.childFacingName), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back)) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )

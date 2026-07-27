@@ -45,7 +45,7 @@ export type Device = {
 export type Child = { id: string; displayName: string; avatar: string; phoneNumber: string | null; devices: Device[] };
 export type CurrentLocation = { lat: number; lng: number; recordedAt: string } | null;
 export type Alert = { id: string; type: string; payload: Record<string, unknown>; createdAt: string };
-export type Monitor = { parentId: string; email: string; displayName: string; role: string };
+export type Monitor = { parentId: string; email: string; displayName: string; parentDisplayName?: string | null; role: string };
 export type MonitoringInfo = { childId: string; monitors: Monitor[] };
 export type MonitorUnpairResult = MonitoringInfo & { unpaired: boolean };
 export type Message = { id: string; sender: string; body: string; created_at: string; read_at: string | null };
@@ -70,12 +70,14 @@ export const listAlerts = (token: string, childId: string) =>
   call<{ alerts: Alert[] }>(`/api/children/${childId}/alerts`, { token }).then((r) => r.alerts);
 
 // ---- Kid device ----
-export const pairDevice = (code: string, platform: string, model?: string) =>
-  call<{ deviceToken: string; childId: string }>('/api/pair', { method: 'POST', body: { code, platform, model } });
-export const addParentToDevice = (token: string, code: string, platform: string, model?: string) =>
-  call<MonitoringInfo>('/api/pair', { method: 'POST', token, body: { code, platform, model } });
+export const pairDevice = (code: string, platform: string, model?: string, parentDisplayName = 'Parent') =>
+  call<{ deviceToken: string; childId: string }>('/api/pair', { method: 'POST', body: { code, platform, model, parentDisplayName } });
+export const addParentToDevice = (token: string, code: string, platform: string, model?: string, parentDisplayName = 'Parent') =>
+  call<MonitoringInfo>('/api/pair', { method: 'POST', token, body: { code, platform, model, parentDisplayName } });
 export const deviceMonitoring = (token: string) =>
   call<MonitoringInfo>('/api/device/monitoring', { token });
+export const updateDeviceMonitorName = (token: string, parentId: string, parentDisplayName: string) =>
+  call<MonitoringInfo>(`/api/device/monitors/${parentId}`, { method: 'PATCH', token, body: { parentDisplayName } });
 export const removeDeviceMonitor = (token: string, parentId: string) =>
   call<MonitorUnpairResult>(`/api/device/monitors/${parentId}`, { method: 'DELETE', token });
 export const deviceMonitorMessages = (token: string, parentId: string) =>

@@ -50,6 +50,7 @@ class ChatPushNotificationsTest {
     fun `recognizes safety alert push data`() {
         assertEquals(true, isSafetyAlertPushData(mapOf("type" to "low_battery", "childId" to "child-1")))
         assertEquals(true, isSafetyAlertPushData(mapOf("type" to "safe_zone_exit", "zoneName" to "School")))
+        assertEquals(true, isSafetyAlertPushData(mapOf("type" to "app_usage_limit_exceeded", "limitId" to "limit-1")))
         assertEquals(false, isSafetyAlertPushData(mapOf("type" to "chat_message")))
     }
 
@@ -89,6 +90,10 @@ class ChatPushNotificationsTest {
         assertNotEquals(
             safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-1")),
             safetyAlertNotificationId(mapOf("type" to "safe_zone_enter", "childId" to "child-1", "zoneId" to "zone-2")),
+        )
+        assertNotEquals(
+            safetyAlertNotificationId(mapOf("type" to "app_usage_limit_exceeded", "childId" to "child-1", "limitId" to "limit-1")),
+            safetyAlertNotificationId(mapOf("type" to "app_usage_limit_exceeded", "childId" to "child-1", "limitId" to "limit-2")),
         )
     }
 }

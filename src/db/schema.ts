@@ -19,6 +19,12 @@ export const alertType = pgEnum('alert_type', [
   'kid_sos_started',
   'kid_sos_ended',
   'urgent_alert',
+  'app_usage_limit_exceeded',
+]);
+
+export const appUsageLimitType = pgEnum('app_usage_limit_type', [
+  'total',
+  'app',
 ]);
 
 export const subscriptionTiers = pgTable('subscription_tiers', {
@@ -58,6 +64,7 @@ export const childParentLinks = pgTable('child_parent_links', {
   childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
   parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
+  parentDisplayName: text('parent_display_name'),
   role: text('role').notNull().default('caregiver'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -227,4 +234,36 @@ export const appUsage = pgTable('app_usage', {
   byChildDay: index('app_usage_child_day_idx').on(t.childId, t.day),
   byRelevant: index('app_usage_relevant_idx').on(t.childId, t.day, t.isRelevant),
   uniqPerApp: uniqueIndex('app_usage_unique_idx').on(t.childId, t.packageName, t.day),
+}));
+
+export const appUsageLimits = pgTable('app_usage_limits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  type: appUsageLimitType('type').notNull(),
+  packageName: text('package_name'),
+  app: text('app'),
+  category: text('category'),
+  limitMinutes: integer('limit_minutes').notNull(),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  byParentChild: index('app_usage_limits_parent_child_idx').on(t.parentId, t.childId),
+  byChildActive: index('app_usage_limits_child_active_idx').on(t.childId, t.active),
+}));
+
+export const appUsageLimitEvents = pgTable('app_usage_limit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  limitId: uuid('limit_id').notNull().references(() => appUsageLimits.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  childId: uuid('child_id').notNull().references(() => children.id, { onDelete: 'cascade' }),
+  day: date('day').notNull(),
+  usageMinutes: integer('usage_minutes').notNull(),
+  limitMinutes: integer('limit_minutes').notNull(),
+  alertId: uuid('alert_id').references(() => alerts.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  uniqLimitDay: uniqueIndex('app_usage_limit_events_limit_day_idx').on(t.limitId, t.day),
+  byParentChild: index('app_usage_limit_events_parent_child_idx').on(t.parentId, t.childId, t.day),
 }));

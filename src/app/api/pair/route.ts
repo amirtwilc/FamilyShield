@@ -38,6 +38,14 @@ export async function POST(req: Request) {
         childId: claimed.child_id, deviceTokenHash: hash,
         platform: p.data.platform, model: p.data.model ?? null, lastSeenAt: new Date(),
       });
+      await tx.update(childParentLinks)
+        .set({ parentDisplayName: p.data.parentDisplayName })
+        .where(and(
+          eq(childParentLinks.childId, claimed.child_id),
+          claimed.created_by_parent_id
+            ? eq(childParentLinks.parentId, claimed.created_by_parent_id)
+            : undefined,
+        ));
       return { type: 'initial' as const, token, childId: claimed.child_id };
     }
 
@@ -63,6 +71,7 @@ export async function POST(req: Request) {
       childId: existingDevice.childId,
       parentId: sourceLink.parentId,
       displayName: sourceLink.displayName,
+      parentDisplayName: p.data.parentDisplayName,
       role: 'caregiver',
     });
     if (claimed.child_id !== existingDevice.childId) {

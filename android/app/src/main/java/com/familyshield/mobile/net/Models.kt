@@ -248,6 +248,18 @@ data class AppUsageDayDetail(
 )
 
 @Serializable
+data class AppUsageLimit(
+    val id: String,
+    val childId: String,
+    val type: String,
+    val packageName: String? = null,
+    val app: String? = null,
+    val category: String? = null,
+    val limitMinutes: Int,
+    val active: Boolean = true,
+)
+
+@Serializable
 data class AppUsageSummary(
     val selectedDay: String? = null,
     val totalTodayMin: Int = 0,
@@ -257,6 +269,7 @@ data class AppUsageSummary(
     val week: List<UsageDay> = emptyList(),
     val dayDetails: List<AppUsageDayDetail> = emptyList(),
     val apps: List<AppUsageEntry> = emptyList(),
+    val limits: List<AppUsageLimit> = emptyList(),
     val lastUpdatedAt: String? = null,
     val appUsageAccessGranted: Boolean? = null,
 )
@@ -272,6 +285,28 @@ data class AppUsageReportItem(
 
 @Serializable
 data class AppUsageReportBody(val items: List<AppUsageReportItem>)
+
+@Serializable
+data class AppUsageLimitsResponse(val limits: List<AppUsageLimit> = emptyList())
+
+@Serializable
+data class AppUsageLimitResponse(val limit: AppUsageLimit)
+
+@Serializable
+data class AppUsageLimitBody(
+    val type: String,
+    val limitMinutes: Int,
+    val packageName: String? = null,
+    val app: String? = null,
+    val category: String? = null,
+    val active: Boolean? = null,
+)
+
+@Serializable
+data class UpdateAppUsageLimitBody(
+    val limitMinutes: Int? = null,
+    val active: Boolean? = null,
+)
 
 @Serializable
 data class AppUsageTelemetryBody(
@@ -305,7 +340,10 @@ data class Monitor(
     val email: String,
     val displayName: String,
     val role: String,
-)
+    val parentDisplayName: String? = null,
+) {
+    val childFacingName: String get() = parentDisplayName?.takeIf { it.isNotBlank() } ?: email
+}
 
 @Serializable
 data class MonitoringInfo(
@@ -340,7 +378,10 @@ data class PushTokenBody(@SerialName("fcm_token") val fcmToken: String)
 data class CreateChildBody(val displayName: String, val avatar: String? = null, val phoneNumber: String? = null)
 
 @Serializable
-data class PairBody(val code: String, val platform: String, val model: String? = null)
+data class PairBody(val code: String, val platform: String, val model: String? = null, val parentDisplayName: String)
+
+@Serializable
+data class MonitorNameBody(val parentDisplayName: String)
 
 @Serializable
 data class LocationPoint(

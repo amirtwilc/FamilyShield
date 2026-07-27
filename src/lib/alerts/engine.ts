@@ -1,6 +1,14 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { db } from '../../db/client';
-import { devices, childParentLinks, parents, alerts, safeZoneStates } from '../../db/schema';
+import {
+  devices,
+  childParentLinks,
+  parents,
+  alerts,
+  safeZoneStates,
+  appUsageLimits,
+  appUsageLimitEvents,
+} from '../../db/schema';
 import { getSender, type PushOptions } from './fcm';
 
 type Device = typeof devices.$inferSelect;
@@ -168,6 +176,84 @@ export async function fireChildUnpaired(device: Device): Promise<void> {
   }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
     await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, a.id));
   }
+}
+
+export async function fireAppUsageLimitAlertsForDay(childId: string, day: string): Promise<{ fired: number }> {
+  const limits = await db.select().from(appUsageLimits).where(and(
+    eq(appUsageLimits.childId, childId),
+    eq(appUsageLimits.active, true),
+  ));
+  if (limits.length === 0) return { fired: 0 };
+
+  const totalR = await db.execute(sql`
+    SELECT COALESCE(SUM(minutes), 0)::int AS min
+    FROM app_usage
+    WHERE child_id = ${childId} AND day = ${day}::date AND is_relevant = true AND minutes >= 5`);
+  const appR = await db.execute(sql`
+    SELECT package_name AS "packageName", app, COALESCE(SUM(minutes), 0)::int AS min
+    FROM app_usage
+    WHERE child_id = ${childId} AND day = ${day}::date AND is_relevant = true AND minutes >= 5
+    GROUP BY package_name, app`);
+
+  const totalMin = (totalR.rows[0] as { min: number }).min;
+  const byPackage = new Map<string, number>();
+  const byApp = new Map<string, number>();
+  for (const row of appR.rows as { packageName: string; app: string; min: number }[]) {
+    byPackage.set(row.packageName, (byPackage.get(row.packageName) ?? 0) + row.min);
+    byApp.set(row.app, (byApp.get(row.app) ?? 0) + row.min);
+  }
+
+  let fired = 0;
+  for (const limit of limits) {
+    const usageMin = limit.type === 'total'
+      ? totalMin
+      : limit.packageName
+        ? byPackage.get(limit.packageName) ?? 0
+        : byApp.get(limit.app ?? '') ?? 0;
+    if (usageMin < limit.limitMinutes) continue;
+
+    const inserted = await db.execute(sql`
+      INSERT INTO app_usage_limit_events (limit_id, parent_id, child_id, day, usage_minutes, limit_minutes)
+      VALUES (${limit.id}, ${limit.parentId}, ${limit.childId}, ${day}::date, ${usageMin}, ${limit.limitMinutes})
+      ON CONFLICT (limit_id, day) DO NOTHING
+      RETURNING id`);
+    const event = (inserted.rows as { id: string }[])[0];
+    if (!event) continue;
+
+    const isAppLimit = limit.type === 'app';
+    const title = isAppLimit ? `${limit.app ?? 'App'} limit reached` : 'Daily screen time limit reached';
+    const body = `${usageMin} minutes used of ${limit.limitMinutes} minutes allowed`;
+    const [alert] = await db.insert(alerts).values({
+      childId: limit.childId,
+      parentId: limit.parentId,
+      type: 'app_usage_limit_exceeded',
+      payload: {
+        limitId: limit.id,
+        limitType: limit.type,
+        app: limit.app,
+        packageName: limit.packageName,
+        usageMinutes: usageMin,
+        limitMinutes: limit.limitMinutes,
+        day,
+      },
+    }).returning();
+    await db.update(appUsageLimitEvents).set({ alertId: alert.id }).where(eq(appUsageLimitEvents.id, event.id));
+
+    if (await sendToParent(limit.parentId, title, body, {
+      type: 'app_usage_limit_exceeded',
+      childId: limit.childId,
+      limitId: limit.id,
+      limitType: limit.type,
+      usageMinutes: String(usageMin),
+      limitMinutes: String(limit.limitMinutes),
+      ...(limit.app ? { app: limit.app } : {}),
+      ...(limit.packageName ? { packageName: limit.packageName } : {}),
+    }, LOCALIZED_ALERT_PUSH_OPTIONS)) {
+      await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
+    }
+    fired++;
+  }
+  return { fired };
 }
 
 export async function fireParentRemovedByChild(parentId: string, device: Device): Promise<void> {

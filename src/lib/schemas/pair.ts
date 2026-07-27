@@ -3,4 +3,9 @@ export const pairSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
   platform: z.string().min(1).max(40),
   model: z.string().max(120).optional(),
+  parentDisplayName: z.string().trim().min(1).max(80),
+});
+
+export const monitorNameSchema = z.object({
+  parentDisplayName: z.string().trim().min(1).max(80),
 });

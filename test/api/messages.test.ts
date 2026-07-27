@@ -9,7 +9,7 @@ import { GET as summary } from '@/app/api/messages/summary/route';
 import { db } from '@/db/client';
 import { childParentLinks, devices } from '@/db/schema';
 import { setSender, resetSender } from '@/lib/alerts/fcm';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 beforeAll(async () => { await resetDb(); });
 beforeEach(() => { resetSender(); });
@@ -131,6 +131,8 @@ describe('parent ⇄ kid chat', () => {
     const p = await seedParent('notify-parent-child@test.io');
     const c = await seedChild(p.id, 'Mia');
     const { device } = await seedDevice(c.id);
+    await db.update(childParentLinks).set({ parentDisplayName: 'Mom' })
+      .where(and(eq(childParentLinks.childId, c.id), eq(childParentLinks.parentId, p.id)));
     await db.update(devices).set({ fcmToken: 'kid-fcm-token' }).where(eq(devices.id, device.id));
     const ptok = await signAccess(p.id);
 
@@ -144,7 +146,7 @@ describe('parent ⇄ kid chat', () => {
     expect(r.status).toBe(201);
     expect(pushes).toEqual([expect.objectContaining({
       token: 'kid-fcm-token',
-      title: 'New message from parent',
+      title: 'New message from Mom',
       body: 'Please call me',
       data: expect.objectContaining({
         type: 'chat_message',
@@ -152,6 +154,7 @@ describe('parent ⇄ kid chat', () => {
         childId: c.id,
         parentId: p.id,
         messageId: sent.id,
+        parentName: 'Mom',
       }),
     })]);
   });

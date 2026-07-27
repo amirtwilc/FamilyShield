@@ -24,6 +24,7 @@ private val safetyAlertTypes = setOf(
     "child_unpaired",
     "safe_zone_enter",
     "safe_zone_exit",
+    "app_usage_limit_exceeded",
 )
 
 fun isSafetyAlertPushData(data: Map<String, String>): Boolean =
@@ -50,8 +51,19 @@ fun safetyAlertNotificationId(data: Map<String, String>): Int {
         data["type"].orEmpty(),
         data["childId"].orEmpty(),
         data["zoneId"].orEmpty(),
+        data["limitId"].orEmpty(),
     ).joinToString(":")
     return 12_000 + abs(key.hashCode() % 100_000)
+}
+
+private fun formatLimitMinutes(min: Int): String {
+    val h = min / 60
+    val m = min % 60
+    return when {
+        h > 0 && m > 0 -> "${h}h ${m}m"
+        h > 0 -> "${h}h"
+        else -> "${m}m"
+    }
 }
 
 internal fun safetyAlertNotificationCopy(
@@ -97,6 +109,21 @@ internal fun safetyAlertNotificationCopy(
             PushNotificationCopy(
                 context.getString(R.string.alert_safe_zone_exit),
                 context.getString(R.string.notification_safe_zone_exit_body, zoneName),
+            )
+        }
+        "app_usage_limit_exceeded" -> {
+            val usage = data["usageMinutes"]?.toIntOrNull()?.let(::formatLimitMinutes)
+            val limit = data["limitMinutes"]?.toIntOrNull()?.let(::formatLimitMinutes)
+            val app = data["app"]?.takeIf { it.isNotBlank() }
+            PushNotificationCopy(
+                context.getString(R.string.alert_app_usage_limit),
+                when {
+                    usage != null && limit != null && app != null ->
+                        context.getString(R.string.notification_app_usage_limit_app_body, app, usage, limit)
+                    usage != null && limit != null ->
+                        context.getString(R.string.notification_app_usage_limit_total_body, usage, limit)
+                    else -> context.getString(R.string.alert_app_usage_limit_body)
+                },
             )
         }
         else -> PushNotificationCopy(fallbackTitle, fallbackBody)

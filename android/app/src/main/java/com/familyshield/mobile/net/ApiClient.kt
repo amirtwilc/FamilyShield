@@ -41,15 +41,20 @@ interface ApiClient {
     suspend fun locationHistoryDays(token: String, childId: String, days: Int = 14): List<String>
     suspend fun routes(token: String, childId: String): RoutesResponse
     suspend fun appUsage(token: String, childId: String, date: String? = null): AppUsageSummary
+    suspend fun appUsageLimits(token: String, childId: String): List<AppUsageLimit>
+    suspend fun saveAppUsageLimit(token: String, childId: String, body: AppUsageLimitBody): AppUsageLimit
+    suspend fun updateAppUsageLimit(token: String, childId: String, limitId: String, body: UpdateAppUsageLimitBody): AppUsageLimit
+    suspend fun deleteAppUsageLimit(token: String, childId: String, limitId: String)
     suspend fun messages(token: String, childId: String, after: String? = null, before: String? = null, markRead: Boolean = false): MessagesResponse
     suspend fun conversationsSummary(token: String): List<ConversationSummary>
     suspend fun sendMessage(token: String, childId: String, body: String): Message
     suspend fun sendUrgentAlert(token: String, childId: String, body: String): UrgentAlertResult
     suspend fun currentSos(token: String, childId: String): SosState
     suspend fun acknowledgeSos(token: String, childId: String, eventId: String): SosAckResult
-    suspend fun pair(code: String, platform: String, model: String?): PairResult
-    suspend fun addParent(token: String, code: String, platform: String, model: String?): MonitoringInfo
+    suspend fun pair(code: String, platform: String, model: String?, parentDisplayName: String): PairResult
+    suspend fun addParent(token: String, code: String, platform: String, model: String?, parentDisplayName: String): MonitoringInfo
     suspend fun monitoring(token: String): MonitoringInfo
+    suspend fun updateMonitorName(token: String, parentId: String, parentDisplayName: String): MonitoringInfo
     suspend fun removeMonitor(token: String, parentId: String): MonitorUnpairResult
     suspend fun monitorMessages(token: String, parentId: String, after: String? = null): MessagesResponse
     suspend fun sendMonitorMessage(token: String, parentId: String, body: String): Message
@@ -192,6 +197,25 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         return json.decodeFromString(requestRaw("GET", "/api/children/$childId/app-usage$query", token = token))
     }
 
+    override suspend fun appUsageLimits(token: String, childId: String): List<AppUsageLimit> =
+        json.decodeFromString<AppUsageLimitsResponse>(
+            requestRaw("GET", "/api/children/$childId/app-usage/limits", token = token),
+        ).limits
+
+    override suspend fun saveAppUsageLimit(token: String, childId: String, body: AppUsageLimitBody): AppUsageLimit =
+        json.decodeFromString<AppUsageLimitResponse>(
+            requestRaw("POST", "/api/children/$childId/app-usage/limits", json.encodeToString(body), token),
+        ).limit
+
+    override suspend fun updateAppUsageLimit(token: String, childId: String, limitId: String, body: UpdateAppUsageLimitBody): AppUsageLimit =
+        json.decodeFromString<AppUsageLimitResponse>(
+            requestRaw("PATCH", "/api/children/$childId/app-usage/limits/$limitId", json.encodeToString(body), token),
+        ).limit
+
+    override suspend fun deleteAppUsageLimit(token: String, childId: String, limitId: String) {
+        requestRaw("DELETE", "/api/children/$childId/app-usage/limits/$limitId", token = token)
+    }
+
     override suspend fun messages(token: String, childId: String, after: String?, before: String?, markRead: Boolean): MessagesResponse {
         val q = buildList {
             if (after != null) add("after=" + java.net.URLEncoder.encode(after, "UTF-8"))
@@ -220,16 +244,20 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         json.decodeFromString(requestRaw("POST", "/api/children/$childId/sos/$eventId/ack", token = token))
 
     // ---- Kid device ----
-    override suspend fun pair(code: String, platform: String, model: String?): PairResult =
+    override suspend fun pair(code: String, platform: String, model: String?, parentDisplayName: String): PairResult =
         json.decodeFromString(requestRaw("POST", "/api/pair",
-            json.encodeToString(PairBody(code, platform, model))))
+            json.encodeToString(PairBody(code, platform, model, parentDisplayName))))
 
-    override suspend fun addParent(token: String, code: String, platform: String, model: String?): MonitoringInfo =
+    override suspend fun addParent(token: String, code: String, platform: String, model: String?, parentDisplayName: String): MonitoringInfo =
         json.decodeFromString(requestRaw("POST", "/api/pair",
-            json.encodeToString(PairBody(code, platform, model)), token))
+            json.encodeToString(PairBody(code, platform, model, parentDisplayName)), token))
 
     override suspend fun monitoring(token: String): MonitoringInfo =
         json.decodeFromString(requestRaw("GET", "/api/device/monitoring", token = token))
+
+    override suspend fun updateMonitorName(token: String, parentId: String, parentDisplayName: String): MonitoringInfo =
+        json.decodeFromString(requestRaw("PATCH", "/api/device/monitors/$parentId",
+            json.encodeToString(MonitorNameBody(parentDisplayName)), token))
 
     override suspend fun removeMonitor(token: String, parentId: String): MonitorUnpairResult =
         json.decodeFromString(requestRaw("DELETE", "/api/device/monitors/$parentId", token = token))

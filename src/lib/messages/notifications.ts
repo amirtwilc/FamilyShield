@@ -1,10 +1,14 @@
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { children, devices, parents } from '@/db/schema';
-import { getSender } from '@/lib/alerts/fcm';
+import { childParentLinks, children, devices, parents } from '@/db/schema';
+import { getSender, type PushOptions } from '@/lib/alerts/fcm';
 
 const CHAT_MESSAGE_TYPE = 'chat_message';
 const MAX_NOTIFICATION_BODY = 120;
+const CHAT_PUSH_OPTIONS: PushOptions = {
+  includeNotification: false,
+  android: { priority: 'high' },
+};
 
 function notificationBody(body: string): string {
   const trimmed = body.trim().replace(/\s+/g, ' ');
@@ -22,7 +26,7 @@ function pushError(error: unknown): Record<string, string | undefined> {
 
 async function sendSafely(token: string, title: string, body: string, data: Record<string, string>): Promise<boolean> {
   try {
-    const sent = await getSender().send(token, title, notificationBody(body), data);
+    const sent = await getSender().send(token, title, notificationBody(body), data, CHAT_PUSH_OPTIONS);
     if (!sent) {
       console.warn('[push] Chat notification was not sent', {
         type: data.type,
@@ -52,7 +56,15 @@ export async function notifyChildMessageFromParent(
   messageId: string,
   body: string,
 ): Promise<boolean> {
-  const [child] = await db.select({ name: children.displayName }).from(children).where(eq(children.id, childId));
+  const [link] = await db.select({
+    childName: children.displayName,
+    parentEmail: parents.email,
+    parentDisplayName: childParentLinks.parentDisplayName,
+  }).from(childParentLinks)
+    .innerJoin(children, eq(children.id, childParentLinks.childId))
+    .innerJoin(parents, eq(parents.id, childParentLinks.parentId))
+    .where(and(eq(childParentLinks.childId, childId), eq(childParentLinks.parentId, parentId)));
+  const parentName = link?.parentDisplayName?.trim() || link?.parentEmail || '';
   const tokens = await db.select({ token: devices.fcmToken })
     .from(devices)
     .where(and(eq(devices.childId, childId), isNull(devices.revokedAt), isNotNull(devices.fcmToken)));
@@ -60,13 +72,14 @@ export async function notifyChildMessageFromParent(
   let sent = false;
   for (const row of tokens) {
     if (!row.token) continue;
-    sent = await sendSafely(row.token, 'New message from parent', body, {
+    sent = await sendSafely(row.token, parentName ? `New message from ${parentName}` : 'New message from parent', body, {
       type: CHAT_MESSAGE_TYPE,
       childId,
       parentId,
       messageId,
       recipient: 'child',
-      childName: child?.name ?? '',
+      childName: link?.childName ?? '',
+      parentName,
     }) || sent;
   }
   return sent;

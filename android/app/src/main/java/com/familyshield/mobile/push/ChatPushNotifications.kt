@@ -23,6 +23,8 @@ private const val KEY_RECIPIENT = "recipient"
 private const val KEY_CHILD_ID = "childId"
 private const val KEY_PARENT_ID = "parentId"
 private const val KEY_MESSAGE_ID = "messageId"
+private const val KEY_CHILD_NAME = "childName"
+private const val KEY_PARENT_NAME = "parentName"
 
 data class ChatPushDestination(
     val recipient: String,
@@ -99,8 +101,7 @@ fun showChatPushNotification(
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    val notificationTitle = title?.takeIf { it.isNotBlank() }
-        ?: localized.getString(R.string.notification_chat_fallback_title)
+    val notificationTitle = localizedChatTitle(localized, title, data)
     val notificationBody = body?.takeIf { it.isNotBlank() }.orEmpty()
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Notification.Builder(app, CHAT_PUSH_CHANNEL_ID)
@@ -125,4 +126,16 @@ fun showChatPushNotification(
 
     val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     manager.notify(chatPushNotificationId(data), notification)
+}
+
+private fun localizedChatTitle(context: Context, remoteTitle: String?, data: Map<String, String>): String {
+    val recipient = data[KEY_RECIPIENT]
+    val senderName = when (recipient) {
+        "child" -> data[KEY_PARENT_NAME]?.takeIf { it.isNotBlank() }
+        "parent" -> data[KEY_CHILD_NAME]?.takeIf { it.isNotBlank() }
+        else -> null
+    }
+    return senderName?.let { context.getString(R.string.notification_chat_from_name, it) }
+        ?: remoteTitle?.takeIf { it.isNotBlank() }
+        ?: context.getString(R.string.notification_chat_fallback_title)
 }

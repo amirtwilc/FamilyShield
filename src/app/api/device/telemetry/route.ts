@@ -7,9 +7,9 @@ import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/en
 import { ok } from '@/lib/http';
 import { parseBody } from '@/lib/validate';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
+import { upsertAppUsageReport } from '@/lib/app-usage-ingest';
 
 export const runtime = 'nodejs';
-const MIN_REPORTED_MINUTES = 5;
 
 export async function POST(req: Request) {
   const a = await requireDevice(req); if ('response' in a) return a.response;
@@ -59,39 +59,7 @@ export async function POST(req: Request) {
   const usageItems = p.data.app_usage?.items ?? [];
   let appUsageInserted = 0;
   if (usageItems.length > 0) {
-    const byKey = new Map<string, typeof usageItems[number]>();
-    for (const it of usageItems) {
-      if ((it.is_relevant ?? true) !== true || it.minutes < MIN_REPORTED_MINUTES) continue;
-      byKey.set(`${it.package_name ?? it.app}|${it.day ?? ''}`, it);
-    }
-    const items = [...byKey.values()];
-    if (items.length === 0) {
-      const [fresh] = await db.select().from(devices).where(eq(devices.id, deviceId));
-      await fireLowBatteryIfNeeded(fresh);
-      return ok({ ok: true, locationInserted, appUsageInserted: 0 });
-    }
-    const rows = items.map((it) => sql`(
-      ${a.device.childId},
-      ${it.package_name ?? it.app},
-      ${it.app},
-      ${it.category},
-      ${it.minutes},
-      COALESCE(${it.day ?? null}::date, CURRENT_DATE),
-      true,
-      null,
-      now()
-    )`);
-    await db.execute(sql`
-      INSERT INTO app_usage (child_id, package_name, app, category, minutes, day, is_relevant, hidden_reason, last_reported_at)
-      VALUES ${sql.join(rows, sql`, `)}
-      ON CONFLICT (child_id, package_name, day) DO UPDATE SET
-        app = EXCLUDED.app,
-        minutes = EXCLUDED.minutes,
-        category = EXCLUDED.category,
-        is_relevant = true,
-        hidden_reason = NULL,
-        last_reported_at = EXCLUDED.last_reported_at`);
-    appUsageInserted = items.length;
+    appUsageInserted = (await upsertAppUsageReport(a.device, usageItems)).inserted;
   }
 
   const [fresh] = await db.select().from(devices).where(eq(devices.id, deviceId));

@@ -64,13 +64,13 @@ describe('full parent + kid journey (all features)', () => {
     // 3) PAIRING — code + kid device pairs (Connect screen)
     const code = (await J(await genCode(post({}, accessToken), ctx(mia.id)))).body.code as string;
     expect(code).toMatch(/^\d{6}$/);
-    const paired = await J(await pair(post({ code, platform: 'android', model: 'Pixel' })));
+    const paired = await J(await pair(post({ code, platform: 'android', model: 'Pixel', parentDisplayName: 'Mom' })));
     expect(paired.status).toBe(201);
     const deviceToken = paired.body.deviceToken as string;
     expect(paired.body.childId).toBe(mia.id);          // the kid peered to the right child
     // A wrong code, and re-using the consumed code, are both rejected.
-    expect((await pair(post({ code: '000000', platform: 'android' }))).status).toBe(400);
-    expect((await pair(post({ code, platform: 'android' }))).status).toBe(400);
+    expect((await pair(post({ code: '000000', platform: 'android', parentDisplayName: 'Mom' }))).status).toBe(400);
+    expect((await pair(post({ code, platform: 'android', parentDisplayName: 'Mom' }))).status).toBe(400);
 
     // 4) LOCATION — kid reports a home→school path (Map + History + Routes screens)
     const base = new Date(); base.setUTCHours(12, 0, 0, 0);
@@ -139,7 +139,7 @@ describe('full parent + kid journey (all features)', () => {
     const coToken = regCo.body.accessToken as string;
     const coPlaceholder = await J(await createChild(post({ displayName: 'Mimi' }, coToken)));
     const coCode = (await J(await genCode(post({}, coToken), ctx(coPlaceholder.body.id)))).body.code as string;
-    const addParent = await J(await pair(post({ code: coCode, platform: 'android', model: 'Pixel' }, deviceToken)));
+    const addParent = await J(await pair(post({ code: coCode, platform: 'android', model: 'Pixel', parentDisplayName: 'Dad' }, deviceToken)));
     expect(addParent.status).toBe(200);
     expect(addParent.body.monitors).toHaveLength(2);
 

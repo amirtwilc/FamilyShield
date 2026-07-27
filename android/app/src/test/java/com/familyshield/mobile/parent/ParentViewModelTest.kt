@@ -6,9 +6,11 @@ import com.familyshield.mobile.fakes.InMemoryTokenStore
 import com.familyshield.mobile.net.ApiClient
 import com.familyshield.mobile.net.AppUsageDayDetail
 import com.familyshield.mobile.net.AppUsageEntry
+import com.familyshield.mobile.net.AppUsageLimitBody
 import com.familyshield.mobile.net.AppUsageSummary
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.PermissionStatus
+import com.familyshield.mobile.net.UpdateAppUsageLimitBody
 import com.familyshield.mobile.net.UsageDay
 import com.familyshield.mobile.permissions.requiredPermissionsSatisfied
 import com.familyshield.mobile.net.FrequentRoute
@@ -135,7 +137,7 @@ class ParentViewModelTest {
         advanceUntilIdle()
         val childId = vm.selectedId!!
         val code = api.pairingCode(vm.token!!, childId).code
-        val deviceToken = api.pair(code, "android", null).deviceToken
+        val deviceToken = api.pair(code, "android", null, "Mom").deviceToken
         api.sendLocation(deviceToken, lat = 1.0, lng = 2.0, battery = 80)
 
         vm.startLive(intervalMs = 1000)
@@ -252,7 +254,7 @@ class ParentViewModelTest {
 
             for ((id, lat) in listOf(miaId to 1.0, noahId to 9.0)) {
                 val code = api.pairingCode(vm.token!!, id).code
-                val dt = api.pair(code, "android", null).deviceToken
+                val dt = api.pair(code, "android", null, "Mom").deviceToken
                 api.sendLocation(dt, lat = lat, lng = 0.0, battery = 80)
             }
 
@@ -280,7 +282,7 @@ class ParentViewModelTest {
             advanceUntilIdle()
 
             val code = api.pairingCode(vm.token!!, noahId).code
-            val dt = api.pair(code, "android", null).deviceToken
+            val dt = api.pair(code, "android", null, "Mom").deviceToken
             api.sendLocation(dt, lat = 9.0, lng = 1.0, battery = 80)
 
             vm.startLive(intervalMs = 1000)
@@ -306,7 +308,7 @@ class ParentViewModelTest {
 
             for ((id, lat) in listOf(miaId to 1.0, noahId to 9.0)) {
                 val code = api.pairingCode(vm.token!!, id).code
-                val dt = api.pair(code, "android", null).deviceToken
+                val dt = api.pair(code, "android", null, "Mom").deviceToken
                 api.sendLocation(dt, lat = lat, lng = 0.0, battery = 80)
             }
             vm.startLive(intervalMs = 1000)
@@ -349,7 +351,7 @@ class ParentViewModelTest {
         vm.addChild("Mia"); advanceUntilIdle()
         val id = vm.selectedId!!
         val code = api.pairingCode(vm.token!!, id).code
-        val dt = api.pair(code, "android", null).deviceToken
+        val dt = api.pair(code, "android", null, "Mom").deviceToken
 
         // Parent opens the thread (starts polling) and sends a message.
         vm.openChat(id); runCurrent()
@@ -455,6 +457,35 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `creates updates and deletes app usage limits`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val vm = viewModel(api)
+        vm.authenticate("usage-limits@x.com", "pw123456", register = true); advanceUntilIdle()
+        vm.addChild("Mia"); advanceUntilIdle()
+        val childId = vm.selectedId!!
+
+        vm.saveAppUsageLimit(childId, AppUsageLimitBody(type = "total", limitMinutes = 60))
+        advanceUntilIdle()
+
+        val created = vm.appUsage?.limits?.single()
+        assertNotNull(created)
+        assertEquals("total", created!!.type)
+        assertEquals(60, created.limitMinutes)
+
+        vm.updateAppUsageLimit(childId, created.id, UpdateAppUsageLimitBody(limitMinutes = 90, active = false))
+        advanceUntilIdle()
+
+        val updated = vm.appUsage?.limits?.single()
+        assertEquals(90, updated?.limitMinutes)
+        assertFalse(updated?.active == true)
+
+        vm.deleteAppUsageLimit(childId, created.id)
+        advanceUntilIdle()
+
+        assertTrue(vm.appUsage?.limits.orEmpty().isEmpty())
+    }
+
+    @Test
     fun `renaming a child updates the list`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
         vm.authenticate("parent@x.com", "pw123456", register = true)
@@ -515,7 +546,7 @@ class ParentViewModelTest {
         advanceUntilIdle()
         val childId = vm.children.first().id
         val code = api.pairingCode(vm.token!!, childId).code
-        val pair = api.pair(code, "android", "Pixel")
+        val pair = api.pair(code, "android", "Pixel", "Mom")
         api.startSos(
             pair.deviceToken,
             "Asia/Jerusalem",
@@ -637,7 +668,7 @@ class ParentViewModelTest {
             val code = vm.pairingCode!!
 
             // Kid device: pair with that code and report a low-battery GPS fix
-            val paired = api.pair(code, "android", "Simulator")
+            val paired = api.pair(code, "android", "Simulator", "Mom")
             api.sendLocation(paired.deviceToken, lat = 32.0853, lng = 34.7818, battery = 10)
 
             // Parent: refresh the child detail
@@ -672,7 +703,7 @@ class ParentViewModelTest {
             advanceUntilIdle()
             val childId = vm.selectedId!!
             val code = api.pairingCode(vm.token!!, childId).code
-            val paired = api.pair(code, "android", "Pixel")
+            val paired = api.pair(code, "android", "Pixel", "Mom")
             api.sendLocation(paired.deviceToken, lat = 32.1, lng = 34.8, battery = 71)
             val parentId = api.monitoring(paired.deviceToken).monitors.single().parentId
 
@@ -721,3 +752,4 @@ class ParentViewModelTest {
         assertFalse(PermissionStatus(g = "g", r = 207, m = 79).requiredPermissionsSatisfied())
     }
 }
+
