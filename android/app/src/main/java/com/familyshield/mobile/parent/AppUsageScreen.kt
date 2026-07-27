@@ -31,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -380,22 +382,24 @@ private fun DurationNumberPicker(totalMinutes: Int, onTotalMinutesChange: (Int) 
         onTotalMinutesChange((adjustedHours * 60 + adjustedMinutes).coerceIn(1, 1440))
     }
 
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        DurationPickerColumn(
-            label = stringResource(R.string.appusage_alert_hours_label),
-            value = hours,
-            min = 0,
-            max = 24,
-            onValueChange = { applyDuration(it, minutes) },
-        )
-        Spacer(Modifier.width(20.dp))
-        DurationPickerColumn(
-            label = stringResource(R.string.appusage_alert_minutes_label),
-            value = minutes,
-            min = if (hours == 0) 1 else 0,
-            max = if (hours == 24) 0 else 59,
-            onValueChange = { applyDuration(hours, it) },
-        )
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            DurationPickerColumn(
+                label = stringResource(R.string.appusage_alert_hours_label),
+                value = hours,
+                min = 0,
+                max = 24,
+                onValueChange = { applyDuration(it, minutes) },
+            )
+            Spacer(Modifier.width(20.dp))
+            DurationPickerColumn(
+                label = stringResource(R.string.appusage_alert_minutes_label),
+                value = minutes,
+                min = if (hours == 0) 1 else 0,
+                max = if (hours == 24) 0 else 59,
+                onValueChange = { applyDuration(hours, it) },
+            )
+        }
     }
 }
 
@@ -534,6 +538,13 @@ private fun AppRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 0.8.sp,
                     )
+                    limit?.let {
+                        Text(
+                            stringResource(R.string.appusage_limit_value, fmtDur(it.limitMinutes)),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
