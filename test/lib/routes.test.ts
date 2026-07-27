@@ -3,6 +3,7 @@ import { detectStops, buildTrips, frequentRoutes, analyzeRoutes, type GpsPoint, 
 
 const HOME = { lat: 32.000, lng: 34.000 };
 const SCHOOL = { lat: 32.020, lng: 34.020 }; // ~2.8 km from HOME
+const GYM = { lat: 50.934953, lng: 6.974577 };
 
 // Build a synthetic two-day history: stay home → go to school → stay → go home.
 function twoDayHistory(): GpsPoint[] {
@@ -96,6 +97,29 @@ describe('route detection', () => {
 
     expect(frequent).toHaveLength(5);
     expect(Date.parse(frequent[0].lastAt)).toBe(Date.parse('2026-06-25T09:20:00Z'));
+  });
+
+  it('keeps a stop continuous across isolated noisy or invalid GPS points', () => {
+    const points: GpsPoint[] = [
+      { ...HOME, at: '2026-07-27T17:00:00Z' },
+      { ...HOME, at: '2026-07-27T17:10:00Z' },
+      { ...GYM, at: '2026-07-27T17:24:00Z' },
+      { lat: GYM.lat + 0.002, lng: GYM.lng, at: '2026-07-27T17:38:00Z' },
+      { ...GYM, at: '2026-07-27T17:52:00Z' },
+      { ...GYM, at: '2026-07-27T18:02:00Z' },
+      { lat: 1.135e45, lng: GYM.lng, at: '2026-07-27T18:05:00Z' },
+      { ...GYM, at: '2026-07-27T18:14:00Z' },
+      { ...HOME, at: '2026-07-27T18:30:00Z' },
+      { ...HOME, at: '2026-07-27T18:40:00Z' },
+    ];
+
+    const stops = detectStops(points);
+    const gymStop = stops.find((stop) => Math.abs(stop.lat - GYM.lat) < 0.001);
+    const trips = buildTrips(stops, points);
+
+    expect(gymStop?.arriveAt).toBe('2026-07-27T17:24:00Z');
+    expect(gymStop?.departAt).toBe('2026-07-27T18:14:00Z');
+    expect(trips.flatMap((route) => route.points).some((point) => point.lat > 90)).toBe(false);
   });
 });
 

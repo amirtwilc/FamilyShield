@@ -259,13 +259,16 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
                     .add(0, Alert("alert-${++seq}", "low_battery", now))
             }
         }
-        body.location?.let { location ->
+        val telemetryLocations = (body.locations + listOfNotNull(body.location))
+            .distinctBy { it.recordedAt }
+            .sortedBy { it.recordedAt }
+        telemetryLocations.lastOrNull()?.let { location ->
             locations[childId] = CurrentLocation(location.lat, location.lng, location.recordedAt)
             fireSafeZoneAlerts(childId, location.lat, location.lng)
         }
         return DeviceTelemetryResult(
             ok = true,
-            locationInserted = if (body.location == null) 0 else 1,
+            locationInserted = telemetryLocations.size,
             appUsageInserted = body.appUsage?.items?.count { it.minutes >= 5 } ?: 0,
         )
     }

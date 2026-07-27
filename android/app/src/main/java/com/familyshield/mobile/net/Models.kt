@@ -318,6 +318,7 @@ data class AppUsageTelemetryBody(
 data class DeviceTelemetryBody(
     val status: StatusBody? = null,
     val location: LocationPoint? = null,
+    val locations: List<LocationPoint> = emptyList(),
     @SerialName("app_usage") val appUsage: AppUsageTelemetryBody? = null,
 )
 

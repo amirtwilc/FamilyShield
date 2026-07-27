@@ -14,6 +14,10 @@ internal const val HISTORY_SIMILAR_LOCATION_RADIUS_M = 75.0
 internal const val HISTORY_ROUTE_MATCH_PROXIMITY_M = 300.0
 internal const val HISTORY_MOVEMENT_PAUSE_MIN = 5.0
 internal const val HISTORY_MOVEMENT_MIN_DISTANCE_M = 250.0
+// GPS can occasionally report a short-lived point hundreds of meters away from
+// the real position. If stable groups before and after that point are within
+// this distance, keep the stay continuous instead of splitting it into movement.
+internal const val HISTORY_OUTLIER_BRIDGE_RADIUS_M = 300.0
 
 sealed interface HistoryActivity {
     val startAt: String
@@ -121,7 +125,10 @@ private fun buildStayAndMovementActivities(points: List<HistoryPoint>, zones: Li
 
 private fun buildHistoryPointGroups(points: List<HistoryPoint>, similarLocationRadiusM: Double): List<HistoryPointGroup> {
     val groups = mutableListOf<MutableList<HistoryPoint>>()
-    points.sortedBy { it.recordedAt }.forEach { point ->
+    points
+        .filter { it.isValidHistoryPoint() }
+        .sortedBy { it.recordedAt }
+        .forEach { point ->
         val current = groups.lastOrNull()
         if (current == null) {
             groups += mutableListOf(point)
@@ -136,15 +143,52 @@ private fun buildHistoryPointGroups(points: List<HistoryPoint>, similarLocationR
             groups += mutableListOf(point)
         }
     }
-    return groups.map { group ->
-        HistoryPointGroup(
-            points = group,
-            lat = group.sumOf { it.lat } / group.size,
-            lng = group.sumOf { it.lng } / group.size,
-            startAt = group.first().recordedAt,
-            endAt = group.last().recordedAt,
-        )
+    return bridgeIsolatedOutlierGroups(
+        groups.map { it.toHistoryPointGroup() },
+        similarLocationRadiusM,
+    )
+}
+
+private fun bridgeIsolatedOutlierGroups(
+    groups: List<HistoryPointGroup>,
+    similarLocationRadiusM: Double,
+): List<HistoryPointGroup> {
+    val bridged = mutableListOf<HistoryPointGroup>()
+    var changed = false
+    var index = 0
+    while (index < groups.size) {
+        val canBridge = index + 2 < groups.size &&
+            !groups[index + 1].isResting &&
+            groups[index].points.size + groups[index + 2].points.size >= 3 &&
+            distanceMeters(
+                groups[index].lat,
+                groups[index].lng,
+                groups[index + 2].lat,
+                groups[index + 2].lng,
+            ) <= maxOf(similarLocationRadiusM, HISTORY_OUTLIER_BRIDGE_RADIUS_M)
+
+        if (canBridge) {
+            bridged += (groups[index].points + groups[index + 1].points + groups[index + 2].points)
+                .sortedBy { it.recordedAt }
+                .toHistoryPointGroup()
+            changed = true
+            index += 3
+        } else {
+            bridged += groups[index]
+            index += 1
+        }
     }
+    return if (changed) bridgeIsolatedOutlierGroups(bridged, similarLocationRadiusM) else bridged
+}
+
+private fun List<HistoryPoint>.toHistoryPointGroup(): HistoryPointGroup {
+    return HistoryPointGroup(
+        points = this,
+        lat = sumOf { it.lat } / size,
+        lng = sumOf { it.lng } / size,
+        startAt = first().recordedAt,
+        endAt = last().recordedAt,
+    )
 }
 
 private fun HistoryPointGroup.toStay(zones: List<Zone>): HistoryStay {
@@ -235,6 +279,13 @@ private fun pathDistanceMeters(points: List<HistoryPoint>): Double {
 private fun minutesBetween(startAt: String, endAt: String): Double =
     (java.time.OffsetDateTime.parse(endAt).toInstant().toEpochMilli() -
         java.time.OffsetDateTime.parse(startAt).toInstant().toEpochMilli()) / 60_000.0
+
+private fun HistoryPoint.isValidHistoryPoint(): Boolean =
+    lat.isFinite() &&
+        lng.isFinite() &&
+        lat in -90.0..90.0 &&
+        lng in -180.0..180.0 &&
+        runCatching { java.time.OffsetDateTime.parse(recordedAt) }.isSuccess
 
 private fun distanceMeters(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
     val dLat = Math.toRadians(bLat - aLat)

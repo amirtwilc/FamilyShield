@@ -25,6 +25,9 @@ import java.time.ZoneId
 
 private const val ACTION_STOP = "com.familyshield.mobile.kid.STOP_MONITORING"
 internal const val TELEMETRY_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
+internal const val MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS = 60 * 1000L
+internal const val MOVEMENT_LOCATION_MIN_DISTANCE_M = 75f
+internal const val LOCATION_STALE_AFTER_MS = 2 * 60 * 1000L
 internal const val APP_USAGE_UPLOAD_INTERVAL_MS = 30 * 60 * 1000L
 internal const val FCM_TOKEN_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000L
 private const val SOS_IDLE_CHECK_INTERVAL_MS = 60 * 1000L
@@ -61,6 +64,8 @@ class KidMonitoringService : Service() {
     private val api = HttpApiClient()
     private var monitorJob: Job? = null
     private var sosJob: Job? = null
+    private var movementLocationUpdates: AndroidTelemetry.LocationUpdatesHandle? = null
+    private val bufferedLocations = mutableListOf<LocationPoint>()
 
     override fun onCreate() {
         super.onCreate()
@@ -74,10 +79,13 @@ class KidMonitoringService : Service() {
         }
         if (monitorJob?.isActive != true) monitorJob = scope.launch { monitorLoop() }
         if (sosJob?.isActive != true) sosJob = scope.launch { sosLoop() }
+        startMovementLocationCollection()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        movementLocationUpdates?.stop()
+        movementLocationUpdates = null
         scope.cancel()
         super.onDestroy()
     }
@@ -140,12 +148,17 @@ class KidMonitoringService : Service() {
             val telemetry = AndroidTelemetry.snapshot(this)
             val loc = telemetry.location
             if (loc != null) {
+                val locationPoint = loc.toLocationPoint(telemetry.batteryLevel)
+                if (locationPoint == null) {
+                    delay(SOS_IDLE_CHECK_INTERVAL_MS)
+                    continue
+                }
                 val result = runCatching {
                     api.sendSosLocation(
                         token,
                         timezoneId(),
                         day,
-                        LocationPoint(loc.latitude, loc.longitude, nowIso(), telemetry.batteryLevel),
+                        locationPoint,
                     )
                 }
                 val error = result.exceptionOrNull()
@@ -178,23 +191,56 @@ class KidMonitoringService : Service() {
         }
         val fcmToken = if (optionalFields.fcmToken) kidFcmTokenOrNull() else null
         val battery = telemetry.batteryLevel
-        val loc = telemetry.location
+        val currentLocation = telemetry.location?.toLocationPoint(battery)
+        val locations = drainBufferedLocations(currentLocation)
+        val latestLocation = locations.lastOrNull()
         val status = StatusBody(battery, telemetry.isCharging, fcmToken, permissionStatusPayload(this))
         api.sendTelemetry(
             token,
             DeviceTelemetryBody(
                 status = status,
-                location = if (loc != null) LocationPoint(loc.latitude, loc.longitude, nowIso(), battery) else null,
+                location = latestLocation,
+                locations = locations,
                 appUsage = appUsage,
             ),
         )
         uploadPolicy.markUploaded(optionalFields, nowMs)
     }
 
-    private fun nowIso(): String {
-        val df = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
-        df.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        return df.format(java.util.Date())
+    private fun startMovementLocationCollection() {
+        if (movementLocationUpdates != null) return
+        movementLocationUpdates = AndroidTelemetry.movementLocationUpdates(
+            this,
+            MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS,
+            MOVEMENT_LOCATION_MIN_DISTANCE_M,
+        ) { location ->
+            location.toLocationPoint(batteryLevel = null)?.let { bufferLocation(it) }
+        }
+    }
+
+    private fun bufferLocation(location: LocationPoint) {
+        synchronized(bufferedLocations) {
+            if (bufferedLocations.none { it.recordedAt == location.recordedAt }) {
+                bufferedLocations += location
+            }
+        }
+    }
+
+    private fun drainBufferedLocations(currentLocation: LocationPoint?): List<LocationPoint> {
+        val points = synchronized(bufferedLocations) {
+            val buffered = bufferedLocations.toList()
+            bufferedLocations.clear()
+            buffered
+        } + listOfNotNull(currentLocation)
+        return points
+            .distinctBy { it.recordedAt }
+            .sortedBy { it.recordedAt }
+    }
+
+    private fun android.location.Location.toLocationPoint(batteryLevel: Int?): LocationPoint? {
+        val nowMs = System.currentTimeMillis()
+        if (!AndroidTelemetry.isUsableLocation(this, nowMs, LOCATION_STALE_AFTER_MS)) return null
+        return LocationPoint(latitude, longitude, AndroidTelemetry.locationRecordedAtIso(this), batteryLevel)
     }
 
     private fun localDay(): String = LocalDate.now(ZoneId.systemDefault()).toString()

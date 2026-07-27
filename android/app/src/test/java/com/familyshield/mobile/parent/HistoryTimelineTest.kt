@@ -11,6 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import kotlin.math.abs
 
 class HistoryTimelineTest {
 
@@ -39,6 +40,7 @@ class HistoryTimelineTest {
             points = listOf(
                 point(32.0000, 34.0000, "2026-07-26T08:00:00Z"),
                 point(32.0100, 34.0100, "2026-07-26T09:00:00Z"),
+                point(32.0101, 34.0101, "2026-07-26T09:06:00Z"),
                 point(32.0001, 34.0001, "2026-07-26T10:00:00Z"),
             ),
             zones = emptyList(),
@@ -51,6 +53,38 @@ class HistoryTimelineTest {
         assertNull(stays[0].zoneName)
         assertNull(stays[1].zoneName)
         assertNull(stays[2].zoneName)
+    }
+
+    @Test
+    fun `isolated noisy or invalid points do not split a long stay`() {
+        val gym = Geo(50.934953, 6.974577)
+        val activities = buildHistoryActivities(
+            points = listOf(
+                point(32.0000, 34.0000, "2026-07-27T17:00:00Z"),
+                point(32.0000, 34.0000, "2026-07-27T17:10:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T17:24:00Z"),
+                point(gym.lat + 0.002, gym.lng, "2026-07-27T17:38:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T17:52:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T18:02:00Z"),
+                point(1.135e45, gym.lng, "2026-07-27T18:05:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T18:14:00Z"),
+                point(32.0000, 34.0000, "2026-07-27T18:30:00Z"),
+                point(32.0000, 34.0000, "2026-07-27T18:40:00Z"),
+            ),
+            trips = emptyList(),
+            zones = emptyList(),
+            selectedDate = "2026-07-27",
+        )
+
+        val gymStay = activities
+            .filterIsInstance<HistoryStay>()
+            .single { abs(it.lat - gym.lat) < 0.001 }
+
+        assertEquals("2026-07-27T17:24:00Z", gymStay.startAt)
+        assertEquals("2026-07-27T18:14:00Z", gymStay.endAt)
+        assertTrue(activities.filterIsInstance<HistoryMovementActivity>().all { movement ->
+            movement.points.none { it.lat > 90.0 }
+        })
     }
 
     @Test

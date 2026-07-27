@@ -25,6 +25,10 @@ export const ROUTE_CONTINUATION_PAUSE_MIN = 5;
 export const FREQUENT_ROUTE_PROXIMITY_M = 300;
 export const FREQUENT_ROUTE_MIN_COUNT = 2;
 export const FREQUENT_ROUTE_LIMIT = 5;
+/** A short-lived GPS cluster can be noise even when it is farther than the stop
+ *  radius. If stable clusters before and after it are within this distance,
+ *  route detection treats the noisy middle cluster as part of the same stop. */
+export const ROUTE_OUTLIER_BRIDGE_RADIUS_M = 300;
 
 export function haversineM(a: LatLng, b: LatLng): number {
   const R = 6_371_000;
@@ -45,18 +49,28 @@ export function detectStops(
   radiusM = ROUTE_STOP_RADIUS_M,
   minDwellMin = ROUTE_CONTINUATION_PAUSE_MIN,
 ): Stop[] {
-  const sorted = [...points].sort((a, b) => +new Date(a.at) - +new Date(b.at));
+  const sorted = points.filter(isValidGpsPoint).sort((a, b) => +new Date(a.at) - +new Date(b.at));
+  const grouped = bridgeIsolatedOutliers(groupPoints(sorted, radiusM), radiusM, minDwellMin);
   const stops: Stop[] = [];
-  let group: GpsPoint[] = [];
 
-  const flush = () => {
-    if (group.length === 0) return;
+  for (const group of grouped) {
     const dwell = minutesBetween(group[0].at, group[group.length - 1].at);
     if (dwell >= minDwellMin) {
       const lat = group.reduce((s, p) => s + p.lat, 0) / group.length;
       const lng = group.reduce((s, p) => s + p.lng, 0) / group.length;
       stops.push({ lat, lng, arriveAt: group[0].at, departAt: group[group.length - 1].at, dwellMin: dwell });
     }
+  }
+  return stops;
+}
+
+function groupPoints(sorted: GpsPoint[], radiusM: number): GpsPoint[][] {
+  const groups: GpsPoint[][] = [];
+  let group: GpsPoint[] = [];
+
+  const flush = () => {
+    if (group.length === 0) return;
+    groups.push(group);
     group = [];
   };
 
@@ -67,13 +81,51 @@ export function detectStops(
     else { flush(); group = [p]; }
   }
   flush();
-  return stops;
+  return groups;
+}
+
+function bridgeIsolatedOutliers(groups: GpsPoint[][], radiusM: number, minDwellMin: number): GpsPoint[][] {
+  const bridged: GpsPoint[][] = [];
+  let i = 0;
+  while (i < groups.length) {
+    if (
+      i + 2 < groups.length &&
+      groupDwellMin(groups[i + 1]) < minDwellMin &&
+      groups[i].length + groups[i + 2].length >= 3 &&
+      haversineM(groupCenter(groups[i]), groupCenter(groups[i + 2])) <= Math.max(radiusM, ROUTE_OUTLIER_BRIDGE_RADIUS_M)
+    ) {
+      bridged.push([...groups[i], ...groups[i + 1], ...groups[i + 2]]);
+      i += 3;
+    } else {
+      bridged.push(groups[i]);
+      i += 1;
+    }
+  }
+  return bridged.length === groups.length ? bridged : bridgeIsolatedOutliers(bridged, radiusM, minDwellMin);
+}
+
+function groupDwellMin(group: GpsPoint[]): number {
+  return group.length < 2 ? 0 : minutesBetween(group[0].at, group[group.length - 1].at);
+}
+
+function groupCenter(group: GpsPoint[]): LatLng {
+  return {
+    lat: avg(group.map((p) => p.lat)),
+    lng: avg(group.map((p) => p.lng)),
+  };
+}
+
+function isValidGpsPoint(p: GpsPoint): boolean {
+  return Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+    p.lat >= -90 && p.lat <= 90 &&
+    p.lng >= -180 && p.lng <= 180 &&
+    !Number.isNaN(Date.parse(p.at));
 }
 
 /** Trips between consecutive stops (ignoring stays at the same place). */
 export function buildTrips(stops: Stop[], points: GpsPoint[] = [], minTripM = 250): Trip[] {
   const trips: Trip[] = [];
-  const sortedPoints = [...points].sort((a, b) => +new Date(a.at) - +new Date(b.at));
+  const sortedPoints = points.filter(isValidGpsPoint).sort((a, b) => +new Date(a.at) - +new Date(b.at));
   for (let i = 1; i < stops.length; i++) {
     const a = stops[i - 1];
     const b = stops[i];

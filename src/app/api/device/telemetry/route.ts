@@ -34,23 +34,32 @@ export async function POST(req: Request) {
   }
 
   let locationInserted = 0;
-  if (p.data.location) {
-    const pt = p.data.location;
-    await ensureLocationPartition(new Date(pt.recorded_at.slice(0, 7) + '-01T00:00:00Z'));
-    const r = await db.execute(sql`
-      INSERT INTO locations (device_id, geom, speed, accuracy, battery_level, recorded_at)
-      VALUES (${deviceId}, ST_SetSRID(ST_MakePoint(${pt.lng}, ${pt.lat}), 4326),
-              ${pt.speed ?? null}, ${pt.accuracy ?? null}, ${pt.battery_level ?? null}, ${pt.recorded_at})
-      ON CONFLICT (device_id, recorded_at) DO NOTHING`);
-    locationInserted = r.rowCount ?? 0;
-    if (locationInserted > 0) {
-      await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+  const locationPoints = dedupeLocationPoints([
+    ...(p.data.locations ?? []),
+    ...(p.data.location ? [p.data.location] : []),
+  ]);
+  if (locationPoints.length > 0) {
+    const months = new Set(locationPoints.map((pt) => pt.recorded_at.slice(0, 7)));
+    for (const ym of months) await ensureLocationPartition(new Date(`${ym}-01T00:00:00Z`));
+
+    for (const pt of locationPoints) {
+      const r = await db.execute(sql`
+        INSERT INTO locations (device_id, geom, speed, accuracy, battery_level, recorded_at)
+        VALUES (${deviceId}, ST_SetSRID(ST_MakePoint(${pt.lng}, ${pt.lat}), 4326),
+                ${pt.speed ?? null}, ${pt.accuracy ?? null}, ${pt.battery_level ?? null}, ${pt.recorded_at})
+        ON CONFLICT (device_id, recorded_at) DO NOTHING`);
+      locationInserted += r.rowCount ?? 0;
+      if ((r.rowCount ?? 0) > 0) {
+        await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+      }
     }
+
+    const latest = locationPoints.reduce((a, b) => (a.recorded_at >= b.recorded_at ? a : b));
     await db.execute(sql`
       UPDATE devices SET
-        last_location = ST_SetSRID(ST_MakePoint(${pt.lng}, ${pt.lat}), 4326),
-        last_location_at = ${pt.recorded_at},
-        battery_level = COALESCE(${pt.battery_level ?? null}, battery_level)
+        last_location = ST_SetSRID(ST_MakePoint(${latest.lng}, ${latest.lat}), 4326),
+        last_location_at = ${latest.recorded_at},
+        battery_level = COALESCE(${latest.battery_level ?? null}, battery_level)
       WHERE id = ${deviceId}`);
   }
 
@@ -65,4 +74,10 @@ export async function POST(req: Request) {
   const [fresh] = await db.select().from(devices).where(eq(devices.id, deviceId));
   await fireLowBatteryIfNeeded(fresh);
   return ok({ ok: true, locationInserted, appUsageInserted });
+}
+
+function dedupeLocationPoints<T extends { recorded_at: string }>(points: T[]): T[] {
+  const byRecordedAt = new Map<string, T>();
+  for (const point of points) byRecordedAt.set(point.recorded_at, point);
+  return [...byRecordedAt.values()].sort((a, b) => +new Date(a.recorded_at) - +new Date(b.recorded_at));
 }
