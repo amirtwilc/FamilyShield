@@ -62,6 +62,8 @@ class ParentViewModel(
         private set
     var historyDate by mutableStateOf(today())
         private set
+    var historyDays by mutableStateOf<List<String>>(emptyList())
+        private set
     var distanceKm by mutableStateOf(0.0)
         private set
     var frequentRoutes by mutableStateOf<List<FrequentRoute>>(emptyList())
@@ -184,15 +186,18 @@ class ParentViewModel(
         private set
     var appUsageChildId by mutableStateOf<String?>(null)
         private set
+    var appUsageDate by mutableStateOf<String?>(null)
+        private set
     var loadingUsage by mutableStateOf(false)
         private set
 
-    fun loadAppUsage(childId: String) {
+    fun loadAppUsage(childId: String, date: String? = null) {
         appUsageChildId = childId
+        appUsageDate = date
         if (token == null) return
         appUsage = null; loadingUsage = true
         viewModelScope.launch(dispatcher) {
-            try { appUsage = authed { api.appUsage(it, childId) } }
+            try { appUsage = authed { api.appUsage(it, childId, date) } }
             catch (e: Exception) { error = e.message }
             finally { loadingUsage = false }
         }
@@ -380,11 +385,12 @@ class ParentViewModel(
 
     fun select(id: String, historyDate: String = today()) {
         selectedId = id; pairingCode = null; location = null; alerts = emptyList()
-        zones = mapZonesByChild[id] ?: emptyList(); history = emptyList(); distanceKm = 0.0
+        zones = mapZonesByChild[id] ?: emptyList(); history = emptyList(); historyDays = emptyList(); distanceKm = 0.0
         frequentRoutes = emptyList(); trips = emptyList()
         refreshDetail()
         loadZones()
         loadHistory(historyDate)
+        loadHistoryDays()
         loadRoutes()
     }
 
@@ -392,10 +398,11 @@ class ParentViewModel(
         selectedId = id; pairingCode = null; alerts = emptyList()
         location = allLocations[id]
         zones = mapZonesByChild[id] ?: emptyList()
-        history = emptyList(); distanceKm = 0.0
+        history = emptyList(); historyDays = emptyList(); distanceKm = 0.0
         frequentRoutes = emptyList(); trips = emptyList()
         loadZones()
         loadHistory(today())
+        loadHistoryDays()
         loadRoutes()
     }
 
@@ -447,7 +454,7 @@ class ParentViewModel(
                 val sos = HashMap<String, SosState>()
                 for (c in kids) {
                     val r = authed { api.routes(it, c.id) }
-                    r.stops.filter { s -> isToday(s.arriveAt) }.forEach { s -> places.add(TopPlace(c.id, c.displayName, s.lat, s.lng, s.arriveAt, s.departAt)) }
+                    r.stops.filter { s -> overlapsToday(s.arriveAt, s.departAt) }.forEach { s -> places.add(TopPlace(c.id, c.displayName, s.lat, s.lng, s.arriveAt, s.departAt)) }
                     authed { api.alerts(it, c.id) }.take(3).forEach { a -> alerts.add(FamilyAlert(c.id, c.displayName, a)) }
                     val state = authed { api.currentSos(it, c.id) }
                     if (state.active) sos[c.id] = state
@@ -509,6 +516,16 @@ class ParentViewModel(
             try {
                 val loaded = authed { api.listZones(it, id) }
                 applySharedZones(loaded)
+            } catch (e: Exception) { error = e.message }
+        }
+    }
+
+    fun loadHistoryDays() {
+        val id = selectedId ?: return
+        if (token == null) return
+        viewModelScope.launch(dispatcher) {
+            try {
+                historyDays = authed { api.locationHistoryDays(it, id, HISTORY_DAY_RANGE_DAYS) }
             } catch (e: Exception) { error = e.message }
         }
     }
@@ -600,8 +617,12 @@ class ParentViewModel(
 
     private fun today() = java.time.LocalDate.now().toString()
 
-    private fun isToday(iso: String): Boolean = runCatching {
-        OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate() == LocalDate.now()
+    private fun overlapsToday(arriveAt: String, departAt: String): Boolean = runCatching {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now()
+        val arriveDay = OffsetDateTime.parse(arriveAt).atZoneSameInstant(zone).toLocalDate()
+        val departDay = OffsetDateTime.parse(departAt).atZoneSameInstant(zone).toLocalDate()
+        !arriveDay.isAfter(today) && !departDay.isBefore(today)
     }.getOrDefault(false)
 
     /** Total path length (km) across the day's location points. */

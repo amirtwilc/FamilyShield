@@ -43,6 +43,27 @@ describe('app usage', () => {
     expect((await g.json()).totalTodayMin).toBe(35);
   });
 
+  it('parent can read the app breakdown for a selected day', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const { token: dtok } = await seedDevice(c.id);
+    const ptok = await signAccess(p.id);
+    const ctx = { params: Promise.resolve({ id: c.id }) };
+    const selectedDay = '2026-06-23';
+
+    await usagePost(new Request('http://t/', { method: 'POST', headers: { authorization: `Bearer ${dtok}` },
+      body: JSON.stringify({ items: [
+        { package_name: 'com.video', app: 'Video', category: 'Entertainment', minutes: 90, day: selectedDay },
+        { package_name: 'com.today', app: 'Today App', category: 'Games', minutes: 20 },
+      ] }) }));
+
+    const g = await usageGet(new Request(`http://t/?date=${selectedDay}`, { headers: { authorization: `Bearer ${ptok}` } }), ctx);
+    const data = await g.json();
+    expect(data.selectedDay).toBe(selectedDay);
+    expect(data.totalTodayMin).toBe(90);
+    expect(data.apps).toHaveLength(1);
+    expect(data.apps[0]).toMatchObject({ app: 'Video', min: 90 });
+  });
+
   it('drops system activity and sessions shorter than 5 minutes', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     const { token: dtok } = await seedDevice(c.id);

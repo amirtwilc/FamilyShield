@@ -4,6 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
+import android.os.Build
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.util.Locale
 
 /**
@@ -20,26 +24,48 @@ object Locales {
     private const val PREFS = "familyshield"
     private const val KEY = "app_language"
 
+    var currentTag by mutableStateOf("")
+        private set
+
     /** Saved language tag, or "" to follow the system. */
     fun saved(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "") ?: ""
 
-    /** Persist the choice and recreate the activity so it takes effect immediately. */
+    fun initialize(context: Context) {
+        currentTag = saved(context)
+    }
+
+    /** Persist the choice and notify Compose so text and layout direction update immediately. */
     fun apply(context: Context, tag: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, tag).apply()
-        context.findActivity()?.recreate()
+        currentTag = tag
+        Locale.setDefault(resolveLocale(context, tag))
     }
 
     /** Wrap a base context so resources + layout direction follow the saved language. */
-    fun wrap(context: Context): Context {
-        val tag = saved(context)
-        if (tag.isEmpty()) return context
-        val locale = Locale.forLanguageTag(tag)
+    fun wrap(context: Context, tag: String = saved(context)): Context {
+        val locale = resolveLocale(context, tag)
         Locale.setDefault(locale)
         val config = Configuration(context.resources.configuration)
         config.setLocale(locale)
         config.setLayoutDirection(locale)
         return context.createConfigurationContext(config)
+    }
+
+    fun resolveLocale(context: Context, tag: String): Locale =
+        if (tag.isBlank()) systemLocale(context) else Locale.forLanguageTag(tag)
+
+    fun isRtl(locale: Locale): Boolean =
+        locale.language.lowercase(Locale.US) in setOf("ar", "fa", "he", "iw", "ur")
+
+    private fun systemLocale(context: Context): Locale {
+        val configuration = context.applicationContext.resources.configuration
+        return if (Build.VERSION.SDK_INT >= 24) {
+            configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            configuration.locale
+        }
     }
 }
 

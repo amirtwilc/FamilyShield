@@ -10,7 +10,7 @@ import { createChildSchema } from '@/lib/schemas/children';
 import { createZoneSchema, updateZoneSchema } from '@/lib/schemas/zones';
 import { sendMessageSchema } from '@/lib/schemas/messages';
 import { sosEndSchema, sosLocationSchema, sosStartSchema, urgentAlertSchema } from '@/lib/schemas/sos';
-import { pushTokenSchema, historyQuery } from '@/lib/schemas/parent';
+import { pushTokenSchema, historyQuery, appUsageQuery } from '@/lib/schemas/parent';
 import { z } from './registry';
 
 let built: object | null = null;
@@ -71,6 +71,8 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'Current location' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/location/history', security: [{ parentJwt: [] }],
     request: { query: historyQuery }, responses: { 200: { description: 'History' } } });
+  registry.registerPath({ method: 'get', path: '/api/children/{id}/location/days', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'Available location-history days' }, 404: { description: 'Child not found' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/alerts', security: [{ parentJwt: [] }],
     responses: { 200: { description: 'Alerts' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/routes', security: [{ parentJwt: [] }],
@@ -88,7 +90,9 @@ export function buildOpenApiDocument() {
   registry.registerPath({ method: 'get', path: '/api/messages/summary', security: [{ parentJwt: [] }],
     responses: { 200: { description: 'Conversation summary' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/app-usage', security: [{ parentJwt: [] }],
+    request: { query: appUsageQuery },
     responses: { 200: { description: 'App usage summary', ...json(z.object({
+      selectedDay: z.union([z.string(), z.null()]).optional(),
       totalTodayMin: z.number(),
       yesterdayMin: z.number(),
       yesterdayHasData: z.boolean(),

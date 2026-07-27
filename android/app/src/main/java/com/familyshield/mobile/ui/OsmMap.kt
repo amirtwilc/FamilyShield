@@ -37,6 +37,9 @@ import kotlin.math.sin
 private fun newMap(context: Context, zoom: Double): MapView = MapView(context).apply {
     setTileSource(TileSourceFactory.MAPNIK)
     setMultiTouchControls(true)
+    setBackgroundColor(AndroidColor.rgb(0xE8, 0xF3, 0xF6))
+    overlayManager.tilesOverlay.setLoadingBackgroundColor(AndroidColor.TRANSPARENT)
+    overlayManager.tilesOverlay.setLoadingLineColor(AndroidColor.TRANSPARENT)
     controller.setZoom(zoom)
 }
 
@@ -187,6 +190,46 @@ fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, descri
     )
 }
 
+/** OSM map for a single route path. It draws start/end markers and centers on
+ *  the end point so the arrival location is immediately visible. */
+@Composable
+fun OsmRoutePath(points: List<MapPoint>, modifier: Modifier = Modifier, description: String = "Route map") {
+    val context = LocalContext.current
+    val mapView = remember { newMap(context, 15.0) }
+    lifecycleBind(mapView)
+    AndroidView(
+        modifier = modifier.semantics { contentDescription = description },
+        factory = { mapView },
+        update = { mv ->
+            mv.overlays.clear()
+            val geoPoints = points.map { GeoPoint(it.lat, it.lng) }
+            if (geoPoints.isNotEmpty()) {
+                if (geoPoints.size > 1) {
+                    mv.overlays.add(Polyline(mv).apply {
+                        setPoints(geoPoints)
+                        outlinePaint.color = AndroidColor.rgb(0x1E, 0x88, 0xE5)
+                        outlinePaint.strokeWidth = 7f
+                    })
+                }
+                mv.overlays.add(Marker(mv).apply {
+                    position = geoPoints.first()
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    infoWindow = null
+                })
+                mv.overlays.add(Marker(mv).apply {
+                    position = geoPoints.last()
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    infoWindow = null
+                })
+                mv.controller.setCenter(geoPoints.last())
+                if (mv.zoomLevelDouble < 15.0) mv.controller.setZoom(15.0)
+            }
+            mv.invalidate()
+        },
+        onRelease = { it.onDetach() },
+    )
+}
+
 /** Live map with every located child, all safe zones, parent location, and explicit camera commands. */
 @Composable
 fun OsmLiveFamilyMap(
@@ -202,6 +245,7 @@ fun OsmLiveFamilyMap(
     val context = LocalContext.current
     val mapView = remember { newMap(context, zoom) }
     var lastCameraCommand by remember { mutableStateOf<Long?>(null) }
+    var initialCameraSet by remember { mutableStateOf(false) }
     lifecycleBind(mapView)
     AndroidView(
         modifier = modifier.semantics { contentDescription = description },
@@ -241,10 +285,19 @@ fun OsmLiveFamilyMap(
             parentLocation?.let { parent ->
                 mv.overlays.add(UserLocationDotOverlay(GeoPoint(parent.lat, parent.lng)))
             }
+            val initialTarget = childMarkers.firstOrNull { it.selected }?.let { MapPoint(it.lat, it.lng) }
+                ?: childMarkers.firstOrNull()?.let { MapPoint(it.lat, it.lng) }
+                ?: parentLocation
+            if (!initialCameraSet && initialTarget != null) {
+                if (mv.zoomLevelDouble < zoom) mv.controller.setZoom(zoom)
+                mv.controller.setCenter(GeoPoint(initialTarget.lat, initialTarget.lng))
+                initialCameraSet = true
+            }
             if (cameraTarget != null && cameraCommand != lastCameraCommand) {
                 if (mv.zoomLevelDouble < zoom) mv.controller.setZoom(zoom)
                 mv.controller.animateTo(GeoPoint(cameraTarget.lat, cameraTarget.lng))
                 lastCameraCommand = cameraCommand
+                initialCameraSet = true
             }
             mv.invalidate()
         },

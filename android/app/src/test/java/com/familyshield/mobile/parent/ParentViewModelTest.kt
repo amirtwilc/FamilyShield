@@ -9,6 +9,7 @@ import com.familyshield.mobile.net.AppUsageSummary
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.UsageDay
+import com.familyshield.mobile.permissions.requiredPermissionsSatisfied
 import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.LocationPoint
@@ -20,6 +21,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -212,6 +214,30 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `family overview includes a place that started before midnight and continued today`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+        api.routesResult = RoutesResponse(
+            stops = listOf(
+                Stop(31.0, 34.0, "${yesterday}T18:00:00Z", "${yesterday}T19:00:00Z", dwellMin = 60.0),
+                Stop(32.0, 35.0, "${yesterday}T23:30:00Z", "${today}T10:00:00Z", dwellMin = 630.0),
+            ),
+        )
+        val vm = viewModel(api)
+        vm.authenticate("overnight-place@x.com", "pw123456", register = true)
+        advanceUntilIdle()
+        vm.addChild("Mia")
+        advanceUntilIdle()
+
+        vm.loadFamilyOverview()
+        advanceUntilIdle()
+
+        assertEquals(1, vm.topPlaces.size)
+        assertEquals(32.0, vm.topPlaces.single().lat, 1e-9)
+    }
+
+    @Test
     fun `live tracking exposes every child's location, not just the selected one`() =
         runTest(mainRule.dispatcher) {
             val api = FakeApiClient()
@@ -377,6 +403,27 @@ class ParentViewModelTest {
         assertEquals(155, vm.appUsage?.totalTodayMin)
         assertEquals("YouTube", vm.appUsage?.apps?.first()?.app)
         assertEquals(vm.selectedId, vm.appUsageChildId)
+    }
+
+    @Test
+    fun `loads app usage summary for a selected day`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        api.appUsageResult = AppUsageSummary(
+            totalTodayMin = 90,
+            week = listOf(UsageDay("2026-06-23", "Tue", 90)),
+            apps = listOf(AppUsageEntry("Video", "Entertainment", 90)),
+        )
+        val vm = viewModel(api)
+        vm.authenticate("usage-day@x.com", "pw123456", register = true); advanceUntilIdle()
+        vm.addChild("Mia"); advanceUntilIdle()
+        val childId = vm.selectedId!!
+
+        vm.loadAppUsage(childId, "2026-06-23"); advanceUntilIdle()
+
+        assertEquals("2026-06-23", vm.appUsageDate)
+        assertEquals(childId to "2026-06-23", api.appUsageRequests.last())
+        assertEquals("2026-06-23", vm.appUsage?.selectedDay)
+        assertEquals("Video", vm.appUsage?.apps?.single()?.app)
     }
 
     @Test
@@ -642,5 +689,7 @@ class ParentViewModelTest {
         assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 207, m = 79)).hasMissingPermissions())
         assertTrue(device.copy(permissionStatus = PermissionStatus(g = "g", r = 207, m = 79)).permissionStatus.hasMissingUrgentAccess())
         assertTrue(device.copy(permissionStatus = null).hasMissingPermissions() == false)
+        assertTrue(PermissionStatus(g = "g", r = 223, m = 207).requiredPermissionsSatisfied())
+        assertFalse(PermissionStatus(g = "g", r = 207, m = 79).requiredPermissionsSatisfied())
     }
 }

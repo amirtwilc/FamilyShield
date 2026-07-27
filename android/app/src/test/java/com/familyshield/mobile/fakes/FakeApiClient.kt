@@ -156,17 +156,24 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint> =
         locations[childId]?.let { listOf(HistoryPoint(it.lat, it.lng, it.recordedAt)) } ?: emptyList()
 
+    var historyDaysResult: List<String> = emptyList()
+    override suspend fun locationHistoryDays(token: String, childId: String, days: Int): List<String> =
+        historyDaysResult
+
     /** Test-controllable routes payload. */
     var routesResult = RoutesResponse()
     override suspend fun routes(token: String, childId: String): RoutesResponse = routesResult
 
     var appUsageResult = AppUsageSummary()
+    val appUsageRequests = mutableListOf<Pair<String, String?>>()
     private val reportedAppUsage = mutableMapOf<String, List<AppUsageReportItem>>()
     private val appUsageAccessByChild = mutableMapOf<String, Boolean>()
 
-    override suspend fun appUsage(token: String, childId: String): AppUsageSummary {
+    override suspend fun appUsage(token: String, childId: String, date: String?): AppUsageSummary {
+        appUsageRequests.add(childId to date)
         val reported = reportedAppUsage[childId]
-        return if (reported == null) appUsageResult else AppUsageSummary(
+        return if (reported == null) appUsageResult.copy(selectedDay = date) else AppUsageSummary(
+            selectedDay = date,
             totalTodayMin = reported.filter { it.minutes >= 5 }.sumOf { it.minutes },
             apps = reported.filter { it.minutes >= 5 }.map {
                 AppUsageEntry(it.app, it.category, it.minutes, it.packageName)

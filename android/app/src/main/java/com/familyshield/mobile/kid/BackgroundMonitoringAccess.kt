@@ -10,19 +10,18 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import com.familyshield.mobile.net.PermissionStatus
+import com.familyshield.mobile.permissions.PERMISSION_APP_USAGE
+import com.familyshield.mobile.permissions.PERMISSION_BACKGROUND_LOCATION
+import com.familyshield.mobile.permissions.PERMISSION_BATTERY_UNRESTRICTED
+import com.familyshield.mobile.permissions.PERMISSION_DND_BYPASS
+import com.familyshield.mobile.permissions.PERMISSION_FOREGROUND_LOCATION
+import com.familyshield.mobile.permissions.PERMISSION_MANUFACTURER_BACKGROUND
+import com.familyshield.mobile.permissions.PERMISSION_NOTIFICATIONS
+import com.familyshield.mobile.permissions.PERMISSION_URGENT_NOTIFICATIONS
 import com.familyshield.mobile.push.hasUrgentDndBypass
 import com.familyshield.mobile.push.hasUrgentNotificationsEnabled
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-
-const val PERMISSION_FOREGROUND_LOCATION = 1
-const val PERMISSION_BACKGROUND_LOCATION = 2
-const val PERMISSION_NOTIFICATIONS = 4
-const val PERMISSION_BATTERY_UNRESTRICTED = 8
-const val PERMISSION_APP_USAGE = 16
-const val PERMISSION_MANUFACTURER_BACKGROUND = 32
-const val PERMISSION_URGENT_NOTIFICATIONS = 64
-const val PERMISSION_DND_BYPASS = 128
 
 private const val PREFS_BACKGROUND_ACCESS = "familyshield_background_access"
 private const val KEY_MANUFACTURER_ACCESS_CONFIRMED = "manufacturer_access_confirmed"

@@ -38,6 +38,7 @@ import com.familyshield.mobile.R
 import com.familyshield.mobile.net.AppUsageEntry
 import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.Device
+import com.familyshield.mobile.net.UsageDay
 import androidx.compose.ui.res.stringResource
 import com.familyshield.mobile.ui.theme.Green
 import com.familyshield.mobile.ui.theme.Navy
@@ -65,6 +66,7 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
     val usage = vm.appUsage
     val usageChildId = vm.appUsageChildId ?: initialChildId
     val childConnected = vm.children.find { it.id == usageChildId }?.primaryDevice()?.isConnected() == true
+    val selectedUsageDay = vm.appUsageDate ?: usage?.selectedDay ?: usage?.week?.lastOrNull()?.day
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -92,7 +94,7 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
 
                 if (usage == null) {
                     Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else if (usage.totalTodayMin == 0 && usage.apps.isEmpty()) {
+                } else if (usage.totalTodayMin == 0 && usage.apps.isEmpty() && usage.week.none { it.hasData || it.min > 0 }) {
                     Text(
                         stringResource(
                             when {
@@ -105,9 +107,19 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    SummaryCard(usage.totalTodayMin, usage.yesterdayMin, usage.yesterdayHasData)
+                    val summaryLabel = if (selectedUsageDay == usage.week.lastOrNull()?.day) {
+                        stringResource(R.string.appusage_total_today)
+                    } else {
+                        stringResource(R.string.appusage_total_usage)
+                    }
+                    SummaryCard(summaryLabel, usage.totalTodayMin, usage.yesterdayMin, usage.yesterdayHasData)
                     usage.lastUpdatedAt?.let { LastUpdatedText(it) }
-                    WeeklyTrend(usage.week.map { it.dow to it.min }, usage.avgWeekMin)
+                    WeeklyTrend(
+                        days = usage.week,
+                        avgMin = usage.avgWeekMin,
+                        selectedDay = selectedUsageDay,
+                        onDaySelected = { day -> vm.loadAppUsage(usageChildId, day) },
+                    )
                     Breakdown(usage.apps)
                     LimitsCard { scope.launch { snackbar.showSnackbar(limitsMsg) } }
                     Spacer(Modifier.height(8.dp))
@@ -144,12 +156,12 @@ private fun ChildSegment(child: Child, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SummaryCard(totalMin: Int, yesterdayMin: Int, yesterdayHasData: Boolean) {
+private fun SummaryCard(label: String, totalMin: Int, yesterdayMin: Int, yesterdayHasData: Boolean) {
     val pct = if (yesterdayMin > 0) Math.round((totalMin - yesterdayMin) * 100f / yesterdayMin) else 0
     Surface(color = Navy, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.appusage_total_today), style = MaterialTheme.typography.labelLarge,
+                Text(label, style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.75f), letterSpacing = 1.5.sp)
                 Text(fmtDur(totalMin), style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Bold)
                 if (yesterdayHasData) {
@@ -175,8 +187,8 @@ private fun SummaryCard(totalMin: Int, yesterdayMin: Int, yesterdayHasData: Bool
 }
 
 @Composable
-private fun WeeklyTrend(days: List<Pair<String, Int>>, avgMin: Int) {
-    val maxMin = (days.maxOfOrNull { it.second } ?: 1).coerceAtLeast(1)
+private fun WeeklyTrend(days: List<UsageDay>, avgMin: Int, selectedDay: String?, onDaySelected: (String) -> Unit) {
+    val maxMin = (days.maxOfOrNull { it.min } ?: 1).coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Text(stringResource(R.string.appusage_weekly_trend), style = MaterialTheme.typography.headlineSmall)
@@ -184,18 +196,26 @@ private fun WeeklyTrend(days: List<Pair<String, Int>>, avgMin: Int) {
         }
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(20.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                days.forEachIndexed { i, (dow, min) ->
+                days.forEachIndexed { i, day ->
                     val today = i == days.lastIndex
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val selected = day.day == selectedDay
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onDaySelected(day.day) }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Box(Modifier.height(120.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                            Box(Modifier.fillMaxWidth(0.62f).fillMaxHeight((min.toFloat() / maxMin).coerceIn(0.04f, 1f))
+                            Box(Modifier.fillMaxWidth(0.62f).fillMaxHeight((day.min.toFloat() / maxMin).coerceIn(0.04f, 1f))
                                 .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                                .background(if (today) SkyBright else SkyBright.copy(alpha = 0.3f)))
+                                .background(if (selected) SkyBright else SkyBright.copy(alpha = 0.3f)))
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text(dow, style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (today) FontWeight.Bold else FontWeight.Normal,
-                            color = if (today) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(day.dow, style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (selected || today) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

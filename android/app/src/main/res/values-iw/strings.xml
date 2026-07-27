@@ -138,6 +138,8 @@
     <string name="route_summary">~%1$s ק\"מ · ~%2$d דק\' · אחרון %3$s</string>
     <string name="open_return_point">פתיחת נקודת החזרה</string>
     <string name="location_update">עדכון מיקום</string>
+    <string name="history_route_start_coordinates">התחלה: %1$s</string>
+    <string name="history_route_end_coordinates">סיום: %1$s</string>
     <string name="view_on_map">הצג במפה</string>
     <string name="route_count">× %1$d</string>
 
@@ -176,11 +178,18 @@
     <string name="add_child">הוספת ילד</string>
     <string name="privacy_lock">נעילת פרטיות</string>
     <string name="privacy_lock_body">דרשו אימות ביומטרי כדי לפתוח את האפליקציה.</string>
+    <string name="parent_lock_title">FamilyShield נעולה</string>
+    <string name="parent_lock_body">בטלו נעילה כדי לראות את פרטי לוח הבקרה של ההורה.</string>
+    <string name="parent_lock_unlock">ביטול נעילה</string>
+    <string name="parent_lock_prompt_title">ביטול נעילת FamilyShield</string>
+    <string name="parent_lock_prompt_body">אשרו שזה אתם לפני פתיחת נתוני ההורה.</string>
+    <string name="parent_lock_setup_required">הגדירו נעילת מסך, טביעת אצבע או זיהוי פנים לפני הפעלת נעילת פרטיות.</string>
+    <string name="parent_lock_unavailable">נעילת פרטיות אינה זמינה במכשיר הזה.</string>
     <string name="settings_zones">אזורים</string>
     <string name="settings_zones_body">ניהול %1$d אזורים בטוחים</string>
     <string name="settings_alerts">התראות</string>
     <string name="alerts_on">התראות פוש פעילות</string>
-    <string name="alerts_off">התראות כבויות</string>
+    <string name="alerts_off">התראת פוש כבויה</string>
     <string name="firebase_default_notification_channel_id">familyshield_chat</string>
     <string name="notification_channel_chat_name">הודעות צ\'אט</string>
     <string name="notification_channel_chat_description">הודעות צ\'אט חדשות ממשפחת FamilyShield.</string>
@@ -203,6 +212,7 @@
     <string name="parent_permissions_attention">חלק מההרשאות דורשות טיפול בטלפון הילד.</string>
     <string name="parent_permissions_action">הרשאות</string>
     <string name="parent_permissions_title">הרשאות של %1$s</string>
+    <string name="parent_permissions_body">אלה ההרשאות שדווחו לאחרונה מטלפון הילד. הקישו על כפתור המידע כדי להבין למה כל הרשאה או אפשרות חשובה.</string>
     <string name="parent_permissions_no_device">חברו מכשיר ילד כדי לראות מצב הרשאות.</string>
     <string name="parent_permissions_pending">מצב ההרשאות יופיע אחרי שטלפון הילד ישלח את העדכון הבא.</string>
     <string name="parent_permissions_all_enabled">כל ההרשאות הדרושות פעילות.</string>
@@ -231,6 +241,7 @@
     <string name="appusage_card_title">זמן מסך</string>
     <string name="appusage_card_body">ראו כמה זמן בכל אפליקציה</string>
     <string name="appusage_total_today">שימוש כולל היום</string>
+    <string name="appusage_total_usage">שימוש כולל</string>
     <string name="appusage_more">%1$d%% יותר מאתמול</string>
     <string name="appusage_less">%1$d%% פחות מאתמול</string>
     <string name="appusage_same">כמו אתמול</string>

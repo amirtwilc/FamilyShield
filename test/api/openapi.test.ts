@@ -29,6 +29,7 @@ describe('openapi', () => {
       '/api/children/{id}/pairing-code',
       '/api/children/{id}/location/current',
       '/api/children/{id}/location/history',
+      '/api/children/{id}/location/days',
       '/api/children/{id}/routes',
       '/api/children/{id}/alerts',
       '/api/children/{id}/messages',

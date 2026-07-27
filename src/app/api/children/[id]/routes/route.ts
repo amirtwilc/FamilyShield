@@ -7,6 +7,7 @@ import { analyzeRoutes, type GpsPoint } from '@/lib/routes';
 
 export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ id: string }> };
+export const HISTORY_ROUTE_LOOKBACK_DAYS = 14;
 
 /** Detected routes for a child: recurring routes (with departure/return points)
  *  plus the individual trips, derived from the location history. */
@@ -15,7 +16,7 @@ export async function GET(req: Request, { params }: Ctx) {
   const { id } = await params;
   if (!(await assertChildOwned(a.parentId, id))) return err('not_found', 'Child not found', 404);
 
-  const days = Math.min(Math.max(Number(new URL(req.url).searchParams.get('days') ?? 14), 1), 90);
+  const days = Math.min(Math.max(Number(new URL(req.url).searchParams.get('days') ?? HISTORY_ROUTE_LOOKBACK_DAYS), 1), 90);
   const r = await db.execute(sql`
     SELECT ST_Y(l.geom) AS lat, ST_X(l.geom) AS lng, l.recorded_at
     FROM locations l JOIN devices d ON d.id = l.device_id

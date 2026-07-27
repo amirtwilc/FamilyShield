@@ -6,6 +6,7 @@ import { signAccess } from '@/lib/auth/jwt';
 import { POST as upload } from '@/app/api/locations/route';
 import { GET as current } from '@/app/api/children/[id]/location/current/route';
 import { GET as history } from '@/app/api/children/[id]/location/history/route';
+import { GET as historyDays } from '@/app/api/children/[id]/location/days/route';
 
 beforeAll(async () => { await resetDb(); });
 beforeEach(() => setSender({ async send() { return true; } }));
@@ -33,6 +34,28 @@ describe('location reads', () => {
 
     const his = await history(new Request(`http://t/?date=${day}`, { headers: { authorization: `Bearer ${ptok}` } }), ctx);
     expect((await his.json()).points).toHaveLength(2);
+  });
+
+  it('returns available history days capped to the requested recent range', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const { token } = await seedDevice(c.id);
+    const recent = new Date(); recent.setUTCHours(8, 0, 0, 0);
+    const old = new Date(recent); old.setUTCDate(old.getUTCDate() - 15);
+    await upload(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify({ points: [
+        { lat: 32.07, lng: 34.78, recorded_at: recent.toISOString() },
+        { lat: 32.08, lng: 34.79, recorded_at: old.toISOString() },
+      ] }),
+    }));
+    const ptok = await signAccess(p.id);
+
+    const res = await historyDays(new Request('http://t/?days=14', { headers: { authorization: `Bearer ${ptok}` } }),
+      { params: Promise.resolve({ id: c.id }) });
+    const body = await res.json();
+
+    expect(body.days).toContain(recent.toISOString().slice(0, 10));
+    expect(body.days).not.toContain(old.toISOString().slice(0, 10));
   });
 
   it('forbids reading a child you do not own', async () => {

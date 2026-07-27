@@ -11,6 +11,15 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MIN_VISIBLE_MINUTES = 5;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function selectedDay(req: Request): string | null {
+  const date = new URL(req.url).searchParams.get('date');
+  if (!date || !DATE_RE.test(date)) return null;
+  const parsed = new Date(date + 'T00:00:00Z');
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
+  return date;
+}
 
 /** Screen-time summary for a child: today's total + per-app breakdown, the last
  *  7 days of daily totals (for the trend chart), and yesterday's total. */
@@ -18,25 +27,26 @@ export async function GET(req: Request, { params }: Ctx) {
   const a = await requireParent(req); if ('response' in a) return a.response;
   const { id } = await params;
   if (!(await assertChildOwned(a.parentId, id))) return err('not_found', 'Child not found', 404);
+  const day = selectedDay(req);
 
   const today = await db.execute(sql`
     SELECT COALESCE(SUM(minutes),0)::int AS m
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
+    WHERE child_id=${id} AND day = COALESCE(${day}::date, CURRENT_DATE) AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const yest = await db.execute(sql`
     SELECT COALESCE(SUM(minutes),0)::int AS m, COUNT(*)::int AS n
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE - 1 AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
+    WHERE child_id=${id} AND day = COALESCE(${day}::date, CURRENT_DATE) - 1 AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const appsR = await db.execute(sql`
     SELECT package_name AS "packageName", app, category, SUM(minutes)::int AS min
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}
+    WHERE child_id=${id} AND day = COALESCE(${day}::date, CURRENT_DATE) AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}
     GROUP BY package_name, app, category
     ORDER BY min DESC`);
   const updatedR = await db.execute(sql`
     SELECT MAX(last_reported_at) AS "lastUpdatedAt"
     FROM app_usage
-    WHERE child_id=${id} AND day = CURRENT_DATE AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
+    WHERE child_id=${id} AND day = COALESCE(${day}::date, CURRENT_DATE) AND is_relevant = true AND minutes >= ${MIN_VISIBLE_MINUTES}`);
   const accessR = await db.execute(sql`
     SELECT
       bool_or(${devices.appUsageAccessGranted}) FILTER (WHERE ${devices.appUsageAccessGranted} IS NOT NULL) AS granted
@@ -64,6 +74,7 @@ export async function GET(req: Request, { params }: Ctx) {
   const lastUpdatedAt = (updatedR.rows[0] as { lastUpdatedAt: Date | string | null }).lastUpdatedAt;
   const appUsageAccessGranted = (accessR.rows[0] as { granted: boolean | null }).granted;
   return ok({
+    selectedDay: day,
     totalTodayMin,
     yesterdayMin,
     yesterdayHasData,

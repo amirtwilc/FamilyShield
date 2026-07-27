@@ -38,8 +38,9 @@ interface ApiClient {
     suspend fun updateZone(token: String, childId: String, zoneId: String, name: String? = null, radiusM: Int? = null, active: Boolean? = null): Zone
     suspend fun deleteZone(token: String, childId: String, zoneId: String)
     suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint>
+    suspend fun locationHistoryDays(token: String, childId: String, days: Int = 14): List<String>
     suspend fun routes(token: String, childId: String): RoutesResponse
-    suspend fun appUsage(token: String, childId: String): AppUsageSummary
+    suspend fun appUsage(token: String, childId: String, date: String? = null): AppUsageSummary
     suspend fun messages(token: String, childId: String, after: String? = null, before: String? = null, markRead: Boolean = false): MessagesResponse
     suspend fun conversationsSummary(token: String): List<ConversationSummary>
     suspend fun sendMessage(token: String, childId: String, body: String): Message
@@ -179,11 +180,17 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         json.decodeFromString<HistoryResponse>(
             requestRaw("GET", "/api/children/$childId/location/history?date=$date", token = token)).points
 
+    override suspend fun locationHistoryDays(token: String, childId: String, days: Int): List<String> =
+        json.decodeFromString<HistoryDaysResponse>(
+            requestRaw("GET", "/api/children/$childId/location/days?days=$days", token = token)).days
+
     override suspend fun routes(token: String, childId: String): RoutesResponse =
         json.decodeFromString(requestRaw("GET", "/api/children/$childId/routes", token = token))
 
-    override suspend fun appUsage(token: String, childId: String): AppUsageSummary =
-        json.decodeFromString(requestRaw("GET", "/api/children/$childId/app-usage", token = token))
+    override suspend fun appUsage(token: String, childId: String, date: String?): AppUsageSummary {
+        val query = date?.let { "?date=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+        return json.decodeFromString(requestRaw("GET", "/api/children/$childId/app-usage$query", token = token))
+    }
 
     override suspend fun messages(token: String, childId: String, after: String?, before: String?, markRead: Boolean): MessagesResponse {
         val q = buildList {

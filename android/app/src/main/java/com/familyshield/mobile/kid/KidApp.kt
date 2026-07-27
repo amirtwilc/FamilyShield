@@ -36,17 +36,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FamilyRestroom
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
@@ -79,6 +74,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.familyshield.mobile.Locales
 import com.familyshield.mobile.R
 import com.familyshield.mobile.net.Monitor
+import com.familyshield.mobile.permissions.MonitoredPermissionsCard
+import com.familyshield.mobile.permissions.toMonitoredPermissionItems
 import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
 import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.push.ChatPushDestination
@@ -650,171 +647,26 @@ private fun PermissionsCard(
     onManualConfirmationChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val okColor = Green
-    val warnColor = MaterialTheme.colorScheme.error
-    var info by remember { mutableStateOf<PermissionInfo?>(null) }
-    info?.let { selected ->
-        AlertDialog(
-            onDismissRequest = { info = null },
-            title = { Text(permissionInfoTitle(selected)) },
-            text = { Text(permissionInfoBody(selected)) },
-            confirmButton = {
-                TextButton(onClick = { info = null }) { Text(stringResource(R.string.action_ok)) }
-            },
-        )
-    }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(
-                    if (status.ready) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                    null,
-                    tint = if (status.ready) okColor else warnColor,
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.kid_permissions_title), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(if (status.ready) R.string.kid_permissions_ready else R.string.kid_permissions_needs_attention),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (status.ready) okColor else warnColor,
-                    )
-                }
-            }
-            Text(
-                stringResource(R.string.kid_permissions_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PermissionRow(
-                icon = Icons.Filled.LocationOn,
-                label = stringResource(R.string.kid_permission_location),
-                granted = status.foregroundLocationGranted && status.backgroundLocationGranted,
-                onClick = { openAppPermissionSettings(context) },
-                onInfo = { info = PermissionInfo.Location },
-            )
-            PermissionRow(
-                icon = Icons.Filled.Notifications,
-                label = stringResource(R.string.kid_permission_notifications),
-                granted = status.notificationsEnabled,
-                onClick = { openAppNotificationSettings(context) },
-                onInfo = { info = PermissionInfo.Notifications },
-            )
-            PermissionRow(
-                icon = Icons.Filled.NotificationsActive,
-                label = stringResource(R.string.kid_permission_urgent_notifications),
-                granted = status.urgentNotificationsEnabled,
-                onClick = { openUrgentNotificationSettings(context) },
-                onInfo = { info = PermissionInfo.UrgentNotifications },
-            )
-            PermissionRow(
-                icon = Icons.Filled.Warning,
-                label = stringResource(R.string.kid_permission_dnd_bypass),
-                granted = status.urgentDndBypassAllowed,
-                onClick = { openNotificationPolicyAccessSettings(context) },
-                onInfo = { info = PermissionInfo.DndBypass },
-            )
-            PermissionRow(
-                icon = Icons.Filled.BatteryFull,
-                label = stringResource(R.string.kid_permission_battery),
-                granted = status.batteryUnrestricted,
-                onClick = { openBatteryOptimizationSettings(context) },
-                onInfo = { info = PermissionInfo.Battery },
-            )
-            PermissionRow(
-                icon = Icons.Filled.Apps,
-                label = stringResource(R.string.kid_permission_app_usage),
-                granted = status.appUsageGranted,
-                onClick = { context.startActivity(AppUsageTelemetry.usageAccessIntent()) },
-                onInfo = { info = PermissionInfo.AppUsage },
-            )
-            if (status.manufacturerGuide.requiresManualConfirmation) {
-                PermissionRow(
-                    icon = Icons.Filled.PhoneAndroid,
-                    label = stringResource(R.string.kid_permission_manufacturer_background),
-                    granted = status.manufacturerAccessConfirmed,
-                    onClick = { openManufacturerBackgroundSettings(context) },
-                    onInfo = { info = PermissionInfo.ManufacturerBackground },
-                    checked = status.manufacturerAccessConfirmed,
-                    onCheckedChange = onManualConfirmationChange,
-                )
-            }
-        }
-    }
+    MonitoredPermissionsCard(
+        ready = status.ready,
+        body = stringResource(R.string.kid_permissions_body),
+        items = status.toMonitoredPermissionItems(
+            onLocationClick = { openAppPermissionSettings(context) },
+            onNotificationsClick = { openAppNotificationSettings(context) },
+            onUrgentNotificationsClick = { openUrgentNotificationSettings(context) },
+            onDndBypassClick = { openNotificationPolicyAccessSettings(context) },
+            onBatteryClick = { openBatteryOptimizationSettings(context) },
+            onAppUsageClick = { context.startActivity(AppUsageTelemetry.usageAccessIntent()) },
+            onManufacturerBackgroundClick = { openManufacturerBackgroundSettings(context) },
+            onManualConfirmationChange = onManualConfirmationChange,
+        ),
+    )
 }
-
-@Composable
-private fun PermissionRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    granted: Boolean,
-    onClick: () -> Unit,
-    onInfo: () -> Unit,
-    checked: Boolean? = null,
-    onCheckedChange: ((Boolean) -> Unit)? = null,
-) {
-    Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        if (checked != null && onCheckedChange != null) {
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        }
-        IconButton(onClick = onInfo, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Info, stringResource(R.string.kid_permission_info, label), modifier = Modifier.size(20.dp))
-        }
-        Icon(
-            if (granted) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-            null,
-            tint = if (granted) Green else MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-private enum class PermissionInfo {
-    Location,
-    Notifications,
-    Battery,
-    AppUsage,
-    UrgentNotifications,
-    DndBypass,
-    ManufacturerBackground,
-}
-
-@Composable
-private fun permissionInfoTitle(info: PermissionInfo): String = stringResource(
-    when (info) {
-        PermissionInfo.Location -> R.string.kid_permission_location
-        PermissionInfo.Notifications -> R.string.kid_permission_notifications
-        PermissionInfo.Battery -> R.string.kid_permission_battery
-        PermissionInfo.AppUsage -> R.string.kid_permission_app_usage
-        PermissionInfo.UrgentNotifications -> R.string.kid_permission_urgent_notifications
-        PermissionInfo.DndBypass -> R.string.kid_permission_dnd_bypass
-        PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background
-    },
-)
-
-@Composable
-private fun permissionInfoBody(info: PermissionInfo): String = stringResource(
-    when (info) {
-        PermissionInfo.Location -> R.string.kid_permission_location_info
-        PermissionInfo.Notifications -> R.string.kid_permission_notifications_info
-        PermissionInfo.Battery -> R.string.kid_permission_battery_info
-        PermissionInfo.AppUsage -> R.string.kid_permission_app_usage_info
-        PermissionInfo.UrgentNotifications -> R.string.kid_permission_urgent_notifications_info
-        PermissionInfo.DndBypass -> R.string.kid_permission_dnd_bypass_info
-        PermissionInfo.ManufacturerBackground -> R.string.kid_permission_manufacturer_background_info
-    },
-)
 
 @Composable
 private fun KidLanguageCard() {
     val context = LocalContext.current
-    val current = remember { Locales.saved(context) }
+    val current = Locales.currentTag
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

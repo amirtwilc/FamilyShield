@@ -73,3 +73,27 @@ fun FullScreenMap(
         }
     }
 }
+
+@Composable
+fun FullScreenRouteMap(
+    points: List<MapPoint>,
+    title: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.White)) {
+            OsmRoutePath(points, Modifier.fillMaxSize())
+            Surface(
+                color = Color.White.copy(alpha = 0.95f), shadowElevation = 4.dp,
+                modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars),
+            ) {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, "Close map", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}

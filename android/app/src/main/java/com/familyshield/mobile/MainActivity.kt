@@ -5,23 +5,28 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.fragment.app.FragmentActivity
 import com.familyshield.mobile.kid.KidApp
 import com.familyshield.mobile.net.PrefsTokenStore
 import com.familyshield.mobile.parent.ParentApp
@@ -32,8 +37,9 @@ import com.familyshield.mobile.push.ensureSafetyAlertNotificationChannel
 import com.familyshield.mobile.push.ensureUrgentPushNotificationChannel
 import com.familyshield.mobile.ui.theme.FamilyShieldTheme
 import org.osmdroid.config.Configuration
+import java.io.File
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val pendingChatDestination = mutableStateOf<ChatPushDestination?>(null)
 
     // Apply the saved language (English/Hebrew) before any resources are resolved.
@@ -43,6 +49,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Locales.initialize(this)
         pendingChatDestination.value = chatPushDestinationFromIntent(intent)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -53,16 +60,30 @@ class MainActivity : ComponentActivity() {
         ensureChatPushNotificationChannel(this)
         ensureSafetyAlertNotificationChannel(this)
         ensureUrgentPushNotificationChannel(this)
-        Configuration.getInstance().userAgentValue = packageName
+        configureOpenStreetMap()
         setContent {
-            FamilyShieldTheme {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Root(
-                        chatDestination = pendingChatDestination.value,
-                        onChatDestinationConsumed = { consumed ->
-                            if (pendingChatDestination.value == consumed) pendingChatDestination.value = null
-                        },
-                    )
+            val languageTag = Locales.currentTag
+            val localizedContext = remember(languageTag) { Locales.wrap(this@MainActivity, languageTag) }
+            val layoutDirection = if (Locales.isRtl(Locales.resolveLocale(this@MainActivity, languageTag))) {
+                LayoutDirection.Rtl
+            } else {
+                LayoutDirection.Ltr
+            }
+            CompositionLocalProvider(
+                LocalActivityResultRegistryOwner provides this@MainActivity,
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedContext.resources.configuration,
+                LocalLayoutDirection provides layoutDirection,
+            ) {
+                FamilyShieldTheme {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Root(
+                            chatDestination = pendingChatDestination.value,
+                            onChatDestinationConsumed = { consumed ->
+                                if (pendingChatDestination.value == consumed) pendingChatDestination.value = null
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -72,6 +93,27 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingChatDestination.value = chatPushDestinationFromIntent(intent)
+    }
+
+    private fun configureOpenStreetMap() {
+        val prefs = getSharedPreferences(OSMDROID_PREFS, MODE_PRIVATE)
+        Configuration.getInstance().load(this, prefs)
+        Configuration.getInstance().apply {
+            userAgentValue = packageName
+            osmdroidTileCache = File(cacheDir, "osmdroid/tiles").apply { mkdirs() }
+            setCacheMapTileCount(MAP_MEMORY_TILE_COUNT)
+            setCacheMapTileOvershoot(MAP_MEMORY_TILE_OVERSHOOT)
+            setTileFileSystemCacheMaxBytes(MAP_TILE_CACHE_MAX_BYTES)
+            setTileFileSystemCacheTrimBytes(MAP_TILE_CACHE_TRIM_BYTES)
+        }
+    }
+
+    private companion object {
+        private const val OSMDROID_PREFS = "osmdroid"
+        private const val MAP_MEMORY_TILE_COUNT: Short = 64
+        private const val MAP_MEMORY_TILE_OVERSHOOT: Short = 1
+        private const val MAP_TILE_CACHE_MAX_BYTES = 150L * 1024L * 1024L
+        private const val MAP_TILE_CACHE_TRIM_BYTES = 100L * 1024L * 1024L
     }
 }
 

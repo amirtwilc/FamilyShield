@@ -7,9 +7,14 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -67,11 +72,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -82,9 +90,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.familyshield.mobile.BuildConfig
 import com.familyshield.mobile.R
 import com.familyshield.mobile.Locales
@@ -92,12 +105,21 @@ import com.familyshield.mobile.net.Alert
 import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
+import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.SosState
 import com.familyshield.mobile.net.Zone
+import com.familyshield.mobile.permissions.MonitoredPermissionsContent
+import com.familyshield.mobile.permissions.PERMISSION_DND_BYPASS
+import com.familyshield.mobile.permissions.PERMISSION_URGENT_NOTIFICATIONS
+import com.familyshield.mobile.permissions.PermissionStatusIcon
+import com.familyshield.mobile.permissions.requiredPermissionsSatisfied
+import com.familyshield.mobile.permissions.toMonitoredPermissionItems
 import com.familyshield.mobile.push.ChatPushDestination
+import com.familyshield.mobile.push.hasAppNotificationsEnabled
 import com.familyshield.mobile.push.hasUrgentDndBypass
 import com.familyshield.mobile.push.hasUrgentNotificationsEnabled
+import com.familyshield.mobile.push.openAppNotificationSettings
 import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
 import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.ui.Avatar
@@ -112,6 +134,7 @@ import com.familyshield.mobile.ui.PulsingDot
 import com.familyshield.mobile.ui.childAvatarOptions
 import com.familyshield.mobile.ui.FullScreenFamilyMap
 import com.familyshield.mobile.ui.FullScreenMap
+import com.familyshield.mobile.ui.FullScreenRouteMap
 import com.familyshield.mobile.ui.formatMessageDate
 import com.familyshield.mobile.ui.formatMessageTime
 import com.familyshield.mobile.ui.messageLocalDate
@@ -129,7 +152,10 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
@@ -139,7 +165,130 @@ fun ParentApp(
     onChatDestinationConsumed: (ChatPushDestination) -> Unit = {},
     vm: ParentViewModel = viewModel(factory = ParentViewModel.factory(LocalContext.current)),
 ) {
-    if (vm.token == null) LoginScreen(vm, onKidDevice) else ParentShell(vm, chatDestination, onChatDestinationConsumed)
+    if (vm.token == null) {
+        LoginScreen(vm, onKidDevice)
+    } else {
+        ParentLockGate(vm) {
+            ParentShell(vm, chatDestination, onChatDestinationConsumed)
+        }
+    }
+}
+
+@Composable
+private fun ParentLockGate(vm: ParentViewModel, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var unlocked by remember(vm.biometricLock) { mutableStateOf(!vm.biometricLock) }
+    var promptActive by remember { mutableStateOf(false) }
+    var lastStoppedAt by remember { mutableStateOf<Long?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    fun requestUnlock() {
+        if (!vm.biometricLock || unlocked || promptActive) return
+        when (val availability = parentBiometricAvailability(context)) {
+            is ParentBiometricAvailability.Available -> {
+                promptActive = true
+                showParentBiometricPrompt(
+                    availability.activity,
+                    onSuccess = {
+                        unlocked = true
+                        promptActive = false
+                        message = null
+                    },
+                    onCancelOrError = {
+                        promptActive = false
+                    },
+                )
+            }
+            ParentBiometricAvailability.NotEnrolled -> {
+                message = context.getString(R.string.parent_lock_setup_required)
+                openDeviceSecuritySettings(context)
+            }
+            ParentBiometricAvailability.Unavailable -> {
+                message = context.getString(R.string.parent_lock_unavailable)
+            }
+        }
+    }
+
+    LaunchedEffect(vm.biometricLock, unlocked) {
+        if (vm.biometricLock && !unlocked) requestUnlock()
+    }
+    DisposableEffect(lifecycleOwner, vm.biometricLock) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> lastStoppedAt = System.currentTimeMillis()
+                Lifecycle.Event.ON_START -> {
+                    val stoppedAt = lastStoppedAt
+                    if (vm.biometricLock && stoppedAt != null &&
+                        System.currentTimeMillis() - stoppedAt > PARENT_LOCK_GRACE_MS
+                    ) {
+                        unlocked = false
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (!vm.biometricLock || unlocked) {
+        content()
+    } else {
+        ParentLockedScreen(
+            message = message,
+            onUnlock = { requestUnlock() },
+            onLogout = { vm.logout() },
+        )
+    }
+}
+
+private const val PARENT_LOCK_GRACE_MS = 30_000L
+
+@Composable
+private fun ParentLockedScreen(message: String?, onUnlock: () -> Unit, onLogout: () -> Unit) {
+    BackHandler(enabled = true) {}
+    Column(
+        Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+            Icon(
+                Icons.Filled.Fingerprint,
+                null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(18.dp).size(34.dp),
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Text(stringResource(R.string.parent_lock_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+        Text(
+            stringResource(R.string.parent_lock_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        message?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+        GradientButton(
+            text = stringResource(R.string.parent_lock_unlock),
+            onClick = onUnlock,
+            modifier = Modifier.fillMaxWidth().widthIn(max = 320.dp),
+        )
+        TextButton(onClick = onLogout, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(R.string.action_logout))
+        }
+    }
 }
 
 /* ----------------------------------- Login ----------------------------------- */
@@ -241,11 +390,20 @@ private fun ParentShell(
     }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
+    val scope = rememberCoroutineScope()
+    val tabs = Tab.entries
     var tab by remember { mutableStateOf(Tab.Dashboard) }
+    var dragTarget by remember { mutableStateOf<Tab?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragOffsetPx by remember { mutableStateOf(0f) }
+    val sectionOffset = remember { Animatable(0f) }
     var showSettings by remember { mutableStateOf(false) }
     var appUsageFor by remember { mutableStateOf<String?>(null) }
     var showAllAlerts by remember { mutableStateOf(false) }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val screenWidthPx = with(density) { screenWidthDp.dp.toPx() }
     val navLabelStyle = MaterialTheme.typography.labelSmall.copy(
         fontSize = when {
             screenWidthDp < 320 -> 7.sp
@@ -260,6 +418,22 @@ private fun ParentShell(
         letterSpacing = 0.sp,
     )
     val openSettings = { showSettings = true }
+    fun openTab(next: Tab) {
+        if (next == tab) return
+        scope.launch {
+            val widthPx = screenWidthPx.takeIf { it > 0f } ?: return@launch
+            sectionOffset.stop()
+            val baseOffset = sectionTargetBaseOffset(tab, next, widthPx, layoutDirection)
+            dragging = false
+            dragOffsetPx = 0f
+            dragTarget = next
+            sectionOffset.snapTo(0f)
+            sectionOffset.animateTo(-baseOffset, tween(durationMillis = 240))
+            tab = next
+            dragTarget = null
+            sectionOffset.snapTo(0f)
+        }
+    }
     // Stop chat polling whenever the Chat tab isn't the one on screen.
     LaunchedEffect(tab, showSettings, appUsageFor, showAllAlerts, chatDestination?.key) {
         if (chatDestination == null && (tab != Tab.Chat || showSettings || appUsageFor != null || showAllAlerts)) {
@@ -271,13 +445,13 @@ private fun ParentShell(
         showSettings = false
         appUsageFor = null
         showAllAlerts = false
-        tab = Tab.Chat
         vm.openChat(destination.childId)
+        openTab(Tab.Chat)
         onChatDestinationConsumed(destination)
     }
 
     if (showSettings) {
-        SettingsScreen(vm, onBack = { showSettings = false }, onOpenZones = { showSettings = false; tab = Tab.Zones })
+        SettingsScreen(vm, onBack = { showSettings = false }, onOpenZones = { showSettings = false; openTab(Tab.Zones) })
         return
     }
     if (showAllAlerts) {
@@ -294,11 +468,11 @@ private fun ParentShell(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
-                Tab.entries.forEach { t ->
+                tabs.forEach { t ->
                     val label = stringResource(t.labelRes)
                     NavigationBarItem(
                         selected = tab == t,
-                        onClick = { tab = t },
+                        onClick = { openTab(t) },
                         icon = { Icon(t.icon, label) },
                         label = {
                             Text(
@@ -319,18 +493,131 @@ private fun ParentShell(
             }
         },
     ) { pad ->
-        Box(Modifier.padding(pad)) {
-            when (tab) {
-                Tab.Dashboard -> DashboardTab(vm, onTimeline = { tab = Tab.History }, onAlerts = { showAllAlerts = true }, onSettings = openSettings,
-                    onAppUsage = { id -> appUsageFor = id }, snackbar = snackbar)
-                Tab.Chat -> ChatTab(vm, onSettings = openSettings)
-                Tab.Map -> MapTab(vm, snackbar)
-                Tab.History -> HistoryTab(vm, onSettings = openSettings)
-                Tab.Zones -> ZonesTab(vm, onSettings = openSettings)
+        val logicalOffset = if (dragging) dragOffsetPx else sectionOffset.value
+        val visibleOffset = sectionDisplayOffset(logicalOffset, layoutDirection)
+        Box(
+            Modifier.padding(pad)
+                .fillMaxSize()
+                .clipToBounds()
+                .draggable(
+                    enabled = tab != Tab.Map,
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        if (screenWidthPx <= 0f) return@rememberDraggableState
+                        val rawOffset = dragOffsetPx + delta
+                        val target = dragTarget ?: sectionDragTarget(tab, rawOffset, layoutDirection)
+                        if (target == null) {
+                            dragTarget = null
+                            dragOffsetPx = 0f
+                        } else {
+                            dragTarget = target
+                            val dismissOffset = -sectionTargetBaseOffset(tab, target, screenWidthPx, layoutDirection)
+                            dragOffsetPx = rawOffset.coerceIn(min(0f, dismissOffset), max(0f, dismissOffset))
+                        }
+                    },
+                    onDragStarted = {
+                        scope.launch {
+                            sectionOffset.stop()
+                            sectionOffset.snapTo(0f)
+                        }
+                        dragging = true
+                        dragTarget = null
+                        dragOffsetPx = 0f
+                    },
+                    onDragStopped = {
+                        val target = dragTarget
+                        val endOffset = dragOffsetPx
+                        dragging = false
+                        scope.launch {
+                            sectionOffset.stop()
+                            sectionOffset.snapTo(endOffset)
+                            if (target != null && abs(endOffset) > screenWidthPx * 0.28f) {
+                                val baseOffset = sectionTargetBaseOffset(tab, target, screenWidthPx, layoutDirection)
+                                sectionOffset.animateTo(-baseOffset, tween(durationMillis = 220))
+                                tab = target
+                                dragTarget = null
+                                dragOffsetPx = 0f
+                                sectionOffset.snapTo(0f)
+                            } else {
+                                sectionOffset.animateTo(0f, tween(durationMillis = 220))
+                                dragTarget = null
+                                dragOffsetPx = 0f
+                            }
+                        }
+                    },
+                ),
+        ) {
+            SectionPage(
+                tab = tab,
+                active = true,
+                modifier = Modifier.offset { IntOffset(visibleOffset.roundToInt(), 0) },
+                vm = vm,
+                snackbar = snackbar,
+                onTimeline = { openTab(Tab.History) },
+                onAlerts = { showAllAlerts = true },
+                onSettings = openSettings,
+                onAppUsage = { id -> appUsageFor = id },
+            )
+            dragTarget?.let { target ->
+                val baseOffset = sectionTargetBaseOffset(tab, target, screenWidthPx, layoutDirection)
+                val visibleBaseOffset = sectionDisplayOffset(baseOffset, layoutDirection)
+                SectionPage(
+                    tab = target,
+                    active = false,
+                    modifier = Modifier.offset { IntOffset((visibleBaseOffset + visibleOffset).roundToInt(), 0) },
+                    vm = vm,
+                    snackbar = snackbar,
+                    onTimeline = { openTab(Tab.History) },
+                    onAlerts = { showAllAlerts = true },
+                    onSettings = openSettings,
+                    onAppUsage = { id -> appUsageFor = id },
+                )
             }
         }
     }
 }
+
+@Composable
+private fun SectionPage(
+    tab: Tab,
+    active: Boolean,
+    modifier: Modifier,
+    vm: ParentViewModel,
+    snackbar: SnackbarHostState,
+    onTimeline: () -> Unit,
+    onAlerts: () -> Unit,
+    onSettings: () -> Unit,
+    onAppUsage: (String) -> Unit,
+) {
+    Box(modifier.fillMaxSize()) {
+        when (tab) {
+            Tab.Dashboard -> DashboardTab(vm, onTimeline = onTimeline, onAlerts = onAlerts, onSettings = onSettings,
+                    onAppUsage = onAppUsage, snackbar = snackbar)
+            Tab.Chat -> ChatTab(vm, onSettings = onSettings, active = active)
+            Tab.Map -> MapTab(vm, snackbar, active = active)
+            Tab.History -> HistoryTab(vm, onSettings = onSettings)
+            Tab.Zones -> ZonesTab(vm, onSettings = onSettings)
+        }
+    }
+}
+
+private fun sectionDragTarget(current: Tab, offsetPx: Float, layoutDirection: LayoutDirection): Tab? {
+    if (offsetPx == 0f) return null
+    val movingForward = if (layoutDirection == LayoutDirection.Ltr) offsetPx < 0f else offsetPx > 0f
+    val targetIndex = current.ordinal + if (movingForward) 1 else -1
+    return Tab.entries.getOrNull(targetIndex)
+}
+
+private fun sectionTargetBaseOffset(current: Tab, target: Tab, widthPx: Float, layoutDirection: LayoutDirection): Float {
+    val targetAfterCurrent = target.ordinal > current.ordinal
+    return when (layoutDirection) {
+        LayoutDirection.Ltr -> if (targetAfterCurrent) widthPx else -widthPx
+        LayoutDirection.Rtl -> if (targetAfterCurrent) -widthPx else widthPx
+    }
+}
+
+private fun sectionDisplayOffset(offsetPx: Float, layoutDirection: LayoutDirection): Float =
+    if (layoutDirection == LayoutDirection.Rtl) -offsetPx else offsetPx
 
 @Composable
 private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
@@ -353,15 +640,38 @@ private fun ParentTopBar(vm: ParentViewModel, onSettings: () -> Unit) {
 private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones: () -> Unit) {
     BackHandler(onBack = onBack)
 
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var notificationsEnabled by remember { mutableStateOf(hasAppNotificationsEnabled(context)) }
     var addOpen by remember { mutableStateOf(false) }
     var showAddLimit by remember { mutableStateOf(false) }
     var permissionsFor by remember { mutableStateOf<Child?>(null) }
     var rename by remember { mutableStateOf<Child?>(null) }
     var pendingDelete by remember { mutableStateOf<Child?>(null) }
+    var lockMessage by remember { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
     val activeCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
+
+    LaunchedEffect(lockMessage) {
+        lockMessage?.let {
+            snackbar.showSnackbar(it)
+            lockMessage = null
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsEnabled = hasAppNotificationsEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) },
@@ -419,14 +729,39 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                             Text(stringResource(R.string.privacy_lock), style = MaterialTheme.typography.titleMedium, color = Color.White)
                             Text(stringResource(R.string.privacy_lock_body), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
                         }
-                        Switch(checked = vm.biometricLock, onCheckedChange = { vm.updateBiometricLock(it) })
+                        Switch(
+                            checked = vm.biometricLock,
+                            onCheckedChange = { enabled ->
+                                if (!enabled) {
+                                    vm.updateBiometricLock(false)
+                                    return@Switch
+                                }
+                                when (val availability = parentBiometricAvailability(context)) {
+                                    is ParentBiometricAvailability.Available -> {
+                                        showParentBiometricPrompt(
+                                            availability.activity,
+                                            onSuccess = { vm.updateBiometricLock(true) },
+                                            onCancelOrError = {},
+                                        )
+                                    }
+                                    ParentBiometricAvailability.NotEnrolled -> {
+                                        lockMessage = context.getString(R.string.parent_lock_setup_required)
+                                        openDeviceSecuritySettings(context)
+                                    }
+                                    ParentBiometricAvailability.Unavailable -> {
+                                        lockMessage = context.getString(R.string.parent_lock_unavailable)
+                                    }
+                                }
+                            },
+                        )
                     }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SettingMini(Modifier.weight(1f), Icons.Filled.Place, stringResource(R.string.settings_zones), stringResource(R.string.settings_zones_body, vm.zones.size), MaterialTheme.colorScheme.secondary, onOpenZones)
                     SettingMini(Modifier.weight(1f), Icons.Filled.NotificationsActive, stringResource(R.string.settings_alerts),
-                        stringResource(if (vm.alertsEnabled) R.string.alerts_on else R.string.alerts_off), MaterialTheme.colorScheme.tertiary) { vm.updateAlertsEnabled(!vm.alertsEnabled) }
+                        stringResource(if (notificationsEnabled) R.string.alerts_on else R.string.alerts_off),
+                        if (notificationsEnabled) Green else MaterialTheme.colorScheme.error) { openAppNotificationSettings(context) }
                 }
 
                 UrgentAlertsPermissionCard()
@@ -534,16 +869,20 @@ private fun UrgentAlertsPermissionCard() {
                     )
                 }
             }
-            ParentPermissionRow(Icons.Filled.NotificationsActive, stringResource(R.string.parent_permission_urgent_notifications), urgentEnabled, required = true)
-            ParentPermissionRow(Icons.Filled.Warning, stringResource(R.string.parent_permission_dnd_bypass), dndBypass, required = true)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = { openUrgentNotificationSettings(context) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.parent_urgent_notifications_action))
-                }
-                OutlinedButton(onClick = { openNotificationPolicyAccessSettings(context) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.parent_dnd_bypass_action))
-                }
-            }
+            ParentPermissionRow(
+                Icons.Filled.NotificationsActive,
+                stringResource(R.string.parent_permission_urgent_notifications),
+                urgentEnabled,
+                required = true,
+                onClick = { openUrgentNotificationSettings(context) },
+            )
+            ParentPermissionRow(
+                Icons.Filled.Warning,
+                stringResource(R.string.parent_permission_dnd_bypass),
+                dndBypass,
+                required = true,
+                onClick = { openNotificationPolicyAccessSettings(context) },
+            )
         }
     }
 }
@@ -693,7 +1032,7 @@ private fun PairingCodePanel(code: String) {
 @Composable
 private fun LanguageCard() {
     val context = LocalContext.current
-    val current = remember { Locales.saved(context) }   // "" = system, "en", "he"
+    val current = Locales.currentTag   // "" = system, "en", "he"
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -919,9 +1258,26 @@ private fun DashboardTab(
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PulsingDot(scopeStatusColor)
-                        Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            PulsingDot(scopeStatusColor)
+                            Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
+                        }
+                        if (focused != null && focusedDevice != null && !focusedDevice.isUnpaired()) {
+                            IconButton(
+                                onClick = { permissionsFor = focused },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                PermissionStatusIcon(
+                                    ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
+                                    contentDescription = stringResource(R.string.parent_permissions_action),
+                                )
+                            }
+                        }
                     }
                     Text(focused?.displayName ?: stringResource(R.string.family_network),
                         style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
@@ -937,7 +1293,6 @@ private fun DashboardTab(
                             OfflineBackgroundHelpText()
                         }
                         PermissionAttentionText(device)
-                        PermissionActionButton(device) { child?.let { permissionsFor = it } }
                     }
                     if (focused != null && focusedLocation != null) {
                         DirectionsActionButton(
@@ -1179,6 +1534,7 @@ private fun AllAlertsScreen(vm: ParentViewModel, onBack: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadAllFamilyAlerts() }
     val scopeId = vm.dashboardChildId
     val alerts = if (scopeId == null) vm.allFamilyAlerts else vm.allFamilyAlerts.filter { it.childId == scopeId }
+    val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
@@ -1198,7 +1554,8 @@ private fun AllAlertsScreen(vm: ParentViewModel, onBack: () -> Unit) {
             }
         }
         Column(
-            Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + navigationBottomPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (vm.loadingAllAlerts) {
@@ -1313,23 +1670,26 @@ private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, bg
 /* ----------------------------------- Chat ----------------------------------- */
 
 @Composable
-private fun ChatTab(vm: ParentViewModel, onSettings: () -> Unit) {
+private fun ChatTab(vm: ParentViewModel, onSettings: () -> Unit, active: Boolean) {
     val onlyChild = vm.children.singleOrNull()
-    LaunchedEffect(onlyChild?.id, vm.chatChildId) {
+    LaunchedEffect(active, onlyChild?.id, vm.chatChildId) {
+        if (!active) return@LaunchedEffect
         if (onlyChild != null && vm.chatChildId == null) vm.openChat(onlyChild.id)
     }
     when {
         onlyChild != null && vm.chatChildId == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-        vm.chatChildId == null -> ConversationList(vm, onSettings)
-        else -> ChatThread(vm, onSettings, showBack = onlyChild == null)
+        vm.chatChildId == null -> ConversationList(vm, onSettings, active)
+        else -> ChatThread(vm, onSettings, showBack = onlyChild == null, active = active)
     }
 }
 
 @Composable
-private fun ConversationList(vm: ParentViewModel, onSettings: () -> Unit) {
-    LaunchedEffect(Unit) { vm.loadConversations() }
+private fun ConversationList(vm: ParentViewModel, onSettings: () -> Unit, active: Boolean) {
+    LaunchedEffect(active) {
+        if (active) vm.loadConversations()
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         ParentTopBar(vm, onSettings)
         Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1369,7 +1729,7 @@ private fun ConversationRow(vm: ParentViewModel, child: Child, onClick: () -> Un
 }
 
 @Composable
-private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Boolean) {
+private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Boolean, active: Boolean) {
     val child = vm.chatChild
     val name = child?.displayName ?: stringResource(R.string.label_child)
     val device = child?.primaryDevice()
@@ -1379,10 +1739,11 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Bo
     val loc = vm.location
     val zoneName = if (vm.chatChildId == vm.selectedId)
         vm.zones.firstOrNull { z -> loc != null && distanceM(loc.lat, loc.lng, z.lat, z.lng) <= z.radiusM }?.name else null
-    if (showBack) BackHandler { vm.closeChat() }
+    if (showBack) BackHandler(enabled = active) { vm.closeChat() }
     // Only auto-scroll to the bottom when a NEWER message arrives (last id changes),
     // not when older history is prepended.
-    LaunchedEffect(vm.chatMessages.lastOrNull()?.id) {
+    LaunchedEffect(active, vm.chatMessages.lastOrNull()?.id) {
+        if (!active) return@LaunchedEffect
         if (vm.chatMessages.isNotEmpty()) listState.animateScrollToItem(vm.chatMessages.size - 1)
     }
     Column(Modifier.fillMaxSize()) {
@@ -1544,7 +1905,7 @@ private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolea
 private data class LocatedChild(val child: Child, val location: CurrentLocation)
 
 @Composable
-private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
+private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState, active: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val locatedChildren = remember(vm.children, vm.allLocations) {
@@ -1572,7 +1933,8 @@ private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
         if (grants.values.any { it }) loadParentLocation()
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(active) {
+        if (!active) return@LaunchedEffect
         vm.loadMapZones()
         if (ParentLocation.hasPermission(context)) {
             parentLocation = ParentLocation.currentOrLastKnown(context)
@@ -1580,10 +1942,12 @@ private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
             parentLocationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    LaunchedEffect(vm.children.map { it.id }.joinToString(separator = "|")) {
+    LaunchedEffect(active, vm.children.map { it.id }.joinToString(separator = "|")) {
+        if (!active) return@LaunchedEffect
         vm.loadMapZones()
     }
-    LaunchedEffect(locatedIds) {
+    LaunchedEffect(active, locatedIds) {
+        if (!active) return@LaunchedEffect
         val targetId = vm.ensureMapTargetChild()
         val page = locatedChildren.indexOfFirst { it.child.id == targetId }
         if (page >= 0) {
@@ -1592,13 +1956,15 @@ private fun MapTab(vm: ParentViewModel, snackbar: SnackbarHostState) {
             centerOn(MapPoint(loc.lat, loc.lng))
         }
     }
-    LaunchedEffect(vm.selectedId, locatedIds) {
+    LaunchedEffect(active, vm.selectedId, locatedIds) {
+        if (!active) return@LaunchedEffect
         val page = locatedChildren.indexOfFirst { it.child.id == vm.selectedId }
         if (page >= 0 && page != pagerState.currentPage && !pagerState.isScrollInProgress) {
             pagerState.animateScrollToPage(page)
         }
     }
-    LaunchedEffect(pagerState, locatedIds) {
+    LaunchedEffect(active, pagerState, locatedIds) {
+        if (!active) return@LaunchedEffect
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
@@ -1735,10 +2101,25 @@ private fun MapChildInfoCard(
 
 @Composable
 private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
-    val context = LocalContext.current
     val today = remember { LocalDate.now() }
-    val days = remember { (0..6).map { today.minusDays(it.toLong()) } }
     var selected by remember { mutableStateOf(today) }
+    var selectedRoute by remember { mutableStateOf<FrequentRoute?>(null) }
+    val switcherDays = remember(today, vm.historyDays) { historySwitcherDays(today, vm.historyDays) }
+    val routeDays = remember(vm.trips, selectedRoute) { selectedRoute?.let { routeOccurrenceDays(vm.trips, it) }.orEmpty() }
+
+    LaunchedEffect(vm.selectedId) {
+        selectedRoute = null
+    }
+    LaunchedEffect(selectedRoute, routeDays) {
+        if (selectedRoute != null) {
+            routeDays.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+                .maxOrNull()
+                ?.let { day ->
+                    selected = day
+                    vm.loadHistory(day.toString())
+                }
+        }
+    }
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         ParentTopBar(vm, onSettings)
@@ -1766,36 +2147,86 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
                 EmptyCard(Icons.AutoMirrored.Filled.DirectionsWalk, stringResource(R.string.empty_routes_title),
                     stringResource(R.string.empty_routes_body, vm.selected?.displayName ?: stringResource(R.string.label_your_child)))
             } else {
-                vm.frequentRoutes.forEach { r -> RouteCard(r) }
+                vm.frequentRoutes.forEach { r ->
+                    val selectedThisRoute = selectedRoute == r
+                    RouteCard(
+                        r = r,
+                        selected = selectedThisRoute,
+                        onClick = { selectedRoute = if (selectedThisRoute) null else r },
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Per-day timeline
             Text(stringResource(R.string.daily_timeline), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                days.reversed().forEach { d ->
-                    val sel = d == selected
-                    Surface(onClick = { selected = d; vm.loadHistory(d.toString()) },
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer,
-                        modifier = Modifier.weight(1f)) {
-                        Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(d.dayOfWeek.name.take(3), style = MaterialTheme.typography.labelSmall,
-                                color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${d.dayOfMonth}", style = MaterialTheme.typography.titleMedium,
-                                color = if (sel) Color.White else MaterialTheme.colorScheme.onSurface)
-                        }
+            HistoryDaySwitcher(
+                days = switcherDays,
+                selected = selected,
+                routeDays = routeDays,
+                routeFilterActive = selectedRoute != null,
+                onSelect = { d ->
+                    selected = d
+                    vm.loadHistory(d.toString())
+                },
+            )
+            val activities = remember(vm.history, vm.trips, vm.zones, selected, selectedRoute) {
+                buildHistoryActivities(vm.history, vm.trips, vm.zones, selected.toString(), selectedRoute)
+            }
+            if (activities.isEmpty()) {
+                EmptyCard(Icons.Filled.History, stringResource(R.string.empty_history_title), stringResource(R.string.empty_history_body))
+            } else {
+                activities.forEach { activity -> TimelineEntry(activity, vm.zones) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun HistoryDaySwitcher(
+    days: List<LocalDate>,
+    selected: LocalDate,
+    routeDays: Set<String>,
+    routeFilterActive: Boolean,
+    onSelect: (LocalDate) -> Unit,
+) {
+    val layoutDirection = LocalLayoutDirection.current
+    val scroll = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val dayWidth = (maxWidth - 36.dp) / 7
+        val visibleDays = if (layoutDirection == LayoutDirection.Rtl) days.asReversed() else days
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
+        ) {
+            visibleDays.forEach { d ->
+                val isSelected = d == selected
+                val enabled = !routeFilterActive || d.toString() in routeDays
+                val contentColor = when {
+                    isSelected -> Color.White
+                    enabled -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                }
+                Surface(
+                    onClick = { onSelect(d) },
+                    enabled = enabled,
+                    shape = MaterialTheme.shapes.medium,
+                    color = when {
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        enabled -> MaterialTheme.colorScheme.surfaceContainer
+                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+                    modifier = Modifier.width(dayWidth),
+                ) {
+                    Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(d.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()), style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) Color.White else contentColor)
+                        Text("${d.dayOfMonth}", style = MaterialTheme.typography.titleMedium, color = contentColor)
                     }
                 }
             }
-            if (vm.history.isEmpty()) {
-                EmptyCard(Icons.Filled.History, stringResource(R.string.empty_history_title), stringResource(R.string.empty_history_body))
-            } else {
-                val stays = remember(vm.history, vm.zones) { groupHistoryStays(vm.history, vm.zones) }
-                stays.forEach { stay -> TimelineEntry(stay) }
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -1816,17 +2247,23 @@ private fun ChildHistorySegment(child: Child, selected: Boolean, onClick: () -> 
 }
 
 @Composable
-private fun RouteCard(r: com.familyshield.mobile.net.FrequentRoute) {
+private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) {
     val fromPlace = rememberPlaceName(r.from.lat, r.from.lng)
     val toPlace = rememberPlaceName(r.to.lat, r.to.lng)
     var showMap by remember { mutableStateOf(false) }
     if (showMap) FullScreenMap(r.to.lat, r.to.lng, stringResource(R.string.return_point)) { showMap = false }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+        shadowElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    RouteEndpoint(Icons.Filled.TripOrigin, MaterialTheme.colorScheme.tertiary, fromPlace)
-                    RouteEndpoint(Icons.Filled.Place, MaterialTheme.colorScheme.primary, toPlace)
+                    Text("$fromPlace ⇄ $toPlace", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
                     Text(stringResource(R.string.route_count, r.count), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1853,7 +2290,15 @@ private fun RouteEndpoint(icon: ImageVector, tint: Color, place: String) {
 }
 
 @Composable
-private fun TimelineEntry(stay: HistoryStay) {
+private fun TimelineEntry(activity: HistoryActivity, zones: List<Zone>) {
+    when (activity) {
+        is HistoryStay -> StayTimelineEntry(activity)
+        is HistoryRouteActivity -> RouteTimelineEntry(activity, zones)
+    }
+}
+
+@Composable
+private fun StayTimelineEntry(stay: HistoryStay) {
     var showMap by remember { mutableStateOf(false) }
     val placeName = rememberGeocodedPlaceName(stay.lat, stay.lng, enabled = stay.zoneName == null)
     val title = stay.zoneName ?: placeName
@@ -1957,6 +2402,31 @@ private fun ZoneCard(z: Zone, onEdit: () -> Unit, onDelete: () -> Unit) {
             }
             if (z.lat != 0.0 || z.lng != 0.0) {
                 OsmMapZones(z.lat, z.lng, listOf(z), Modifier.fillMaxWidth().height(110.dp).clip(MaterialTheme.shapes.medium), zoom = 15.0)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteTimelineEntry(route: HistoryRouteActivity, zones: List<Zone>) {
+    var showMap by remember { mutableStateOf(false) }
+    val fromName = rememberNamedLocation(route.from.lat, route.from.lng, zones)
+    val toName = rememberNamedLocation(route.to.lat, route.to.lng, zones)
+    val title = "$fromName -> $toName"
+    val timeRange = timeRangeOf(route.startAt, route.endAt)
+    val mapPoints = remember(route.points) { route.points.map { MapPoint(it.lat, it.lng) } }
+    if (showMap) FullScreenRouteMap(mapPoints, title) { showMap = false }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(timeRange, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.history_route_start_coordinates, "%.4f, %.4f".format(route.from.lat, route.from.lng)),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.history_route_end_coordinates, "%.4f, %.4f".format(route.to.lat, route.to.lng)),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.Map, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.view_on_map))
             }
         }
     }
@@ -2206,28 +2676,17 @@ private fun Device.isConnected(): Boolean {
     }
 }
 
-private const val P_FOREGROUND_LOCATION = 1
-private const val P_BACKGROUND_LOCATION = 2
-private const val P_NOTIFICATIONS = 4
-private const val P_BATTERY_UNRESTRICTED = 8
-private const val P_APP_USAGE = 16
-private const val P_PHONE_BACKGROUND = 32
-private const val P_URGENT_NOTIFICATIONS = 64
-private const val P_DND_BYPASS = 128
-
 internal fun Device?.shouldShowBackgroundAccessHelp(): Boolean {
     val device = this ?: return false
     return device.revokedAt == null && device.lastSeenAt != null && !device.isConnected()
 }
 
 internal fun PermissionStatus?.hasMissingRequiredAccess(): Boolean =
-    this != null && (m and criticalRequiredMask()) != criticalRequiredMask()
-
-private fun PermissionStatus.criticalRequiredMask(): Int = r and P_APP_USAGE.inv()
+    this != null && !requiredPermissionsSatisfied()
 
 internal fun PermissionStatus?.hasMissingUrgentAccess(): Boolean =
-    this != null && ((r and P_URGENT_NOTIFICATIONS) != 0 && (m and P_URGENT_NOTIFICATIONS) == 0 ||
-        (r and P_DND_BYPASS) != 0 && (m and P_DND_BYPASS) == 0)
+    this != null && ((r and PERMISSION_URGENT_NOTIFICATIONS) != 0 && (m and PERMISSION_URGENT_NOTIFICATIONS) == 0 ||
+        (r and PERMISSION_DND_BYPASS) != 0 && (m and PERMISSION_DND_BYPASS) == 0)
 
 internal fun Device?.hasMissingPermissions(): Boolean =
     this?.permissionStatus.hasMissingRequiredAccess()
@@ -2266,7 +2725,7 @@ private fun ChildPermissionsDialog(child: Child, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.parent_permissions_title, child.displayName)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 when {
                     device == null -> Text(stringResource(R.string.parent_permissions_no_device), style = MaterialTheme.typography.bodyMedium)
                     status == null -> Text(stringResource(R.string.parent_permissions_pending), style = MaterialTheme.typography.bodyMedium)
@@ -2282,11 +2741,14 @@ private fun ChildPermissionsDialog(child: Child, onDismiss: () -> Unit) {
                     )
                 }
                 if (status != null) {
-                    ParentPermissionRows(status)
-                    device.permissionStatusCheckedAt?.let {
-                        Text(stringResource(R.string.parent_permissions_last_checked, ago(it)),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    MonitoredPermissionsContent(
+                        ready = status.requiredPermissionsSatisfied(),
+                        body = stringResource(R.string.parent_permissions_body),
+                        items = status.toMonitoredPermissionItems(),
+                        lastChecked = device.permissionStatusCheckedAt?.let {
+                            stringResource(R.string.parent_permissions_last_checked, ago(it))
+                        },
+                    )
                 }
             }
         },
@@ -2295,32 +2757,22 @@ private fun ChildPermissionsDialog(child: Child, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ParentPermissionRows(status: PermissionStatus) {
-    ParentPermissionRow(
-        Icons.Filled.LocationOn,
-        stringResource(R.string.parent_permission_location),
-        granted = (status.m and P_FOREGROUND_LOCATION) != 0 && (status.m and P_BACKGROUND_LOCATION) != 0,
-        required = (status.r and P_FOREGROUND_LOCATION) != 0 || (status.r and P_BACKGROUND_LOCATION) != 0,
-    )
-    ParentPermissionRow(Icons.Filled.Notifications, stringResource(R.string.parent_permission_notifications), status, P_NOTIFICATIONS)
-    ParentPermissionRow(Icons.Filled.NotificationsActive, stringResource(R.string.parent_permission_urgent_notifications), status, P_URGENT_NOTIFICATIONS)
-    ParentPermissionRow(Icons.Filled.Warning, stringResource(R.string.parent_permission_dnd_bypass), status, P_DND_BYPASS)
-    ParentPermissionRow(Icons.Filled.BatteryFull, stringResource(R.string.parent_permission_battery), status, P_BATTERY_UNRESTRICTED)
-    ParentPermissionRow(Icons.Filled.Apps, stringResource(R.string.parent_permission_app_usage), granted = (status.m and P_APP_USAGE) != 0, required = true)
-    if ((status.r and P_PHONE_BACKGROUND) != 0) {
-        ParentPermissionRow(Icons.Filled.PhoneAndroid, stringResource(R.string.parent_permission_phone_background), status, P_PHONE_BACKGROUND)
-    }
-}
-
-@Composable
-private fun ParentPermissionRow(icon: ImageVector, label: String, status: PermissionStatus, bit: Int) {
-    ParentPermissionRow(icon, label, granted = (status.m and bit) != 0, required = (status.r and bit) != 0)
-}
-
-@Composable
-private fun ParentPermissionRow(icon: ImageVector, label: String, granted: Boolean, required: Boolean) {
+private fun ParentPermissionRow(
+    icon: ImageVector,
+    label: String,
+    granted: Boolean,
+    required: Boolean,
+    onClick: (() -> Unit)? = null,
+) {
     if (!required) return
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Icon(
@@ -2385,6 +2837,15 @@ private fun rememberGeocodedPlaceName(lat: Double, lng: Double, enabled: Boolean
         name = if (enabled) com.familyshield.mobile.net.Geocoding.reverse(lat, lng) else null
     }
     return name
+}
+
+@Composable
+private fun rememberNamedLocation(lat: Double, lng: Double, zones: List<Zone>): String {
+    val zoneName = remember(lat, lng, zones) {
+        zones.firstOrNull { z -> distanceM(lat, lng, z.lat, z.lng) <= z.radiusM }?.name
+    }
+    val geocoded = rememberGeocodedPlaceName(lat, lng, enabled = zoneName == null)
+    return zoneName ?: geocoded ?: "%.4f, %.4f".format(lat, lng)
 }
 
 private fun millisUntilNextLocalMidnight(): Long {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectStops, buildTrips, frequentRoutes, analyzeRoutes, type GpsPoint } from '@/lib/routes';
+import { detectStops, buildTrips, frequentRoutes, analyzeRoutes, type GpsPoint, type Trip } from '@/lib/routes';
 
 const HOME = { lat: 32.000, lng: 34.000 };
 const SCHOOL = { lat: 32.020, lng: 34.020 }; // ~2.8 km from HOME
@@ -39,10 +39,11 @@ describe('route detection', () => {
   });
 
   it('builds trips and ignores staying in place', () => {
-    const trips = buildTrips(detectStops(twoDayHistory()));
+    const trips = buildTrips(detectStops(twoDayHistory()), twoDayHistory());
     expect(trips.length).toBeGreaterThanOrEqual(2);
     // Each trip moved a meaningful distance.
     expect(trips.every((t) => t.distanceKm > 0.25)).toBe(true);
+    expect(trips.some((t) => t.points.length > 2)).toBe(true);
   });
 
   it('surfaces the recurring home<->school route', () => {
@@ -54,7 +55,64 @@ describe('route detection', () => {
   });
 
   it('requires at least two occurrences to be "frequent"', () => {
-    const trips = buildTrips(detectStops(twoDayHistory()));
+    const trips = buildTrips(detectStops(twoDayHistory()), twoDayHistory());
     expect(frequentRoutes(trips, 300, 99)).toHaveLength(0);
   });
+
+  it('displays one bidirectional route when only one direction is frequent', () => {
+    const trips = [
+      trip(SCHOOL, HOME, '2026-06-20T08:00:00Z'),
+      trip(SCHOOL, HOME, '2026-06-21T08:00:00Z'),
+    ];
+
+    const frequent = frequentRoutes(trips);
+
+    expect(frequent).toHaveLength(1);
+    expect(frequent[0].count).toBe(2);
+    expect(frequent[0].from.lat).toBeCloseTo(SCHOOL.lat);
+    expect(frequent[0].to.lat).toBeCloseTo(HOME.lat);
+  });
+
+  it('does not make two opposite one-off trips frequent', () => {
+    const trips = [
+      trip(HOME, SCHOOL, '2026-06-20T08:00:00Z'),
+      trip(SCHOOL, HOME, '2026-06-20T15:00:00Z'),
+    ];
+
+    expect(frequentRoutes(trips)).toHaveLength(0);
+  });
+
+  it('limits frequent route summaries to the top five by count then recency', () => {
+    const routes = Array.from({ length: 6 }, (_, index) => {
+      const from = { lat: 32 + index * 0.02, lng: 34 };
+      const to = { lat: 32 + index * 0.02, lng: 34.03 };
+      return [
+        trip(from, to, `2026-06-${20 + index}T08:00:00Z`),
+        trip(from, to, `2026-06-${20 + index}T09:00:00Z`),
+      ];
+    }).flat();
+
+    const frequent = frequentRoutes(routes);
+
+    expect(frequent).toHaveLength(5);
+    expect(Date.parse(frequent[0].lastAt)).toBe(Date.parse('2026-06-25T09:20:00Z'));
+  });
 });
+
+function trip(from: typeof HOME, to: typeof HOME, departAt: string): Trip {
+  const depart = Date.parse(departAt);
+  const arriveAt = new Date(depart + 20 * 60_000).toISOString();
+  return {
+    from,
+    to,
+    departAt,
+    arriveAt,
+    durationMin: 20,
+    distanceKm: 1,
+    points: [
+      { ...from, at: departAt },
+      { lat: (from.lat + to.lat) / 2, lng: (from.lng + to.lng) / 2, at: new Date(depart + 10 * 60_000).toISOString() },
+      { ...to, at: arriveAt },
+    ],
+  };
+}

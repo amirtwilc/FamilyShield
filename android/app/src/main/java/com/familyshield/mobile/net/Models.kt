@@ -90,6 +90,9 @@ data class HistoryPoint(
 data class HistoryResponse(val points: List<HistoryPoint>, val nextCursor: String? = null)
 
 @Serializable
+data class HistoryDaysResponse(val days: List<String> = emptyList())
+
+@Serializable
 data class Geo(val lat: Double, val lng: Double)
 
 @Serializable
@@ -110,7 +113,11 @@ data class RouteTrip(
     val arriveAt: String,
     val durationMin: Double,
     val distanceKm: Double,
+    val points: List<RoutePoint> = emptyList(),
 )
+
+@Serializable
+data class RoutePoint(val lat: Double, val lng: Double, val at: String)
 
 @Serializable
 data class Stop(
@@ -232,6 +239,7 @@ data class UsageDay(val day: String, val dow: String, val min: Int, val hasData:
 
 @Serializable
 data class AppUsageSummary(
+    val selectedDay: String? = null,
     val totalTodayMin: Int = 0,
     val yesterdayMin: Int = 0,
     val yesterdayHasData: Boolean = false,

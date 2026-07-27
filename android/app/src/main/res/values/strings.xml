@@ -136,6 +136,8 @@
     <string name="route_summary">~%1$s km · ~%2$d min · last %3$s</string>
     <string name="open_return_point">Open return point</string>
     <string name="location_update">Location update</string>
+    <string name="history_route_start_coordinates">Start: %1$s</string>
+    <string name="history_route_end_coordinates">End: %1$s</string>
     <string name="view_on_map">View on Map</string>
     <string name="route_count">× %1$d</string>
 
@@ -174,11 +176,18 @@
     <string name="add_child">Add Child</string>
     <string name="privacy_lock">Privacy Lock</string>
     <string name="privacy_lock_body">Require device biometrics to open the app.</string>
+    <string name="parent_lock_title">FamilyShield is locked</string>
+    <string name="parent_lock_body">Unlock to view parent dashboard details.</string>
+    <string name="parent_lock_unlock">Unlock</string>
+    <string name="parent_lock_prompt_title">Unlock FamilyShield</string>
+    <string name="parent_lock_prompt_body">Confirm it is you before opening parent data.</string>
+    <string name="parent_lock_setup_required">Set up a screen lock, fingerprint, or face unlock before enabling Privacy Lock.</string>
+    <string name="parent_lock_unavailable">Privacy Lock is not available on this device.</string>
     <string name="settings_zones">Zones</string>
     <string name="settings_zones_body">Manage %1$d safe zones</string>
     <string name="settings_alerts">Alerts</string>
-    <string name="alerts_on">Push notifications ON</string>
-    <string name="alerts_off">Notifications off</string>
+    <string name="alerts_on">Push Notifications ON</string>
+    <string name="alerts_off">Push Notification OFF</string>
     <string name="firebase_default_notification_channel_id">familyshield_chat</string>
     <string name="notification_channel_chat_name">Chat messages</string>
     <string name="notification_channel_chat_description">New chat messages from your FamilyShield family.</string>
@@ -201,6 +210,7 @@
     <string name="parent_permissions_attention">Some permissions need attention on the child phone.</string>
     <string name="parent_permissions_action">Permissions</string>
     <string name="parent_permissions_title">%1$s permissions</string>
+    <string name="parent_permissions_body">These are the permissions last reported by the child phone. Tap the info button to understand why each permission or option matters.</string>
     <string name="parent_permissions_no_device">Pair a child device to see permission status.</string>
     <string name="parent_permissions_pending">Permission status will appear after the child phone sends its next update.</string>
     <string name="parent_permissions_all_enabled">All required permissions are enabled.</string>
@@ -229,6 +239,7 @@
     <string name="appusage_card_title">Screen Time</string>
     <string name="appusage_card_body">See time spent in each app</string>
     <string name="appusage_total_today">TOTAL USAGE TODAY</string>
+    <string name="appusage_total_usage">TOTAL USAGE</string>
     <string name="appusage_more">%1$d%% more than yesterday</string>
     <string name="appusage_less">%1$d%% less than yesterday</string>
     <string name="appusage_same">Same as yesterday</string>
