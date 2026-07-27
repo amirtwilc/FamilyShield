@@ -1,5 +1,6 @@
 package com.familyshield.mobile.parent
 
+import android.widget.NumberPicker
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,7 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.familyshield.mobile.R
@@ -124,7 +124,7 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    val totalLimit = usage.limits.firstOrNull { it.type == "total" }
+                    val totalLimit = usage.limits.firstOrNull { it.type == "total" && it.active }
                     val summaryLabel = if (isCurrentUsageDay) {
                         stringResource(R.string.appusage_total_today)
                     } else {
@@ -134,7 +134,6 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                     TotalLimitControl(
                         limit = totalLimit,
                         onEdit = { editingLimit = AppUsageLimitDraft.Total(totalLimit) },
-                        onToggle = { limit, active -> vm.updateAppUsageLimit(usageChildId, limit.id, UpdateAppUsageLimitBody(active = active)) },
                     )
                     selectedLastUpdatedAt?.let { LastUpdatedText(it) }
                     WeeklyTrend(
@@ -154,7 +153,6 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                             apps = selectedApps,
                             limits = usage.limits,
                             onEditLimit = { app, limit -> editingLimit = AppUsageLimitDraft.App(app, limit) },
-                            onToggleLimit = { limit, active -> vm.updateAppUsageLimit(usageChildId, limit.id, UpdateAppUsageLimitBody(active = active)) },
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -167,14 +165,14 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
         AppUsageLimitDialog(
             draft = draft,
             onDismiss = { editingLimit = null },
-            onSave = { minutes, active ->
+            onSave = { minutes ->
                 when (draft) {
                     is AppUsageLimitDraft.Total -> {
                         val existing = draft.limit
                         if (existing == null) {
-                            vm.saveAppUsageLimit(usageChildId, AppUsageLimitBody("total", minutes, active = active))
+                            vm.saveAppUsageLimit(usageChildId, AppUsageLimitBody("total", minutes, active = true))
                         } else {
-                            vm.updateAppUsageLimit(usageChildId, existing.id, UpdateAppUsageLimitBody(minutes, active))
+                            vm.updateAppUsageLimit(usageChildId, existing.id, UpdateAppUsageLimitBody(limitMinutes = minutes))
                         }
                     }
                     is AppUsageLimitDraft.App -> {
@@ -188,11 +186,11 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                                     packageName = draft.app.packageName,
                                     app = draft.app.app,
                                     category = draft.app.category,
-                                    active = active,
+                                    active = true,
                                 ),
                             )
                         } else {
-                            vm.updateAppUsageLimit(usageChildId, existing.id, UpdateAppUsageLimitBody(minutes, active))
+                            vm.updateAppUsageLimit(usageChildId, existing.id, UpdateAppUsageLimitBody(limitMinutes = minutes))
                         }
                     }
                 }
@@ -288,7 +286,7 @@ private fun SummaryCard(
 }
 
 @Composable
-private fun TotalLimitControl(limit: AppUsageLimit?, onEdit: () -> Unit, onToggle: (AppUsageLimit, Boolean) -> Unit) {
+private fun TotalLimitControl(limit: AppUsageLimit?, onEdit: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         shape = MaterialTheme.shapes.large,
@@ -310,13 +308,8 @@ private fun TotalLimitControl(limit: AppUsageLimit?, onEdit: () -> Unit, onToggl
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (limit != null) {
-                    Switch(checked = limit.active, onCheckedChange = { onToggle(limit, it) })
-                }
-                TextButton(onClick = onEdit) {
-                    Text(stringResource(if (limit == null) R.string.appusage_set_limit else R.string.appusage_edit_limit))
-                }
+            TextButton(onClick = onEdit) {
+                Text(stringResource(if (limit == null) R.string.appusage_set_alert else R.string.appusage_edit_alert))
             }
         }
     }
@@ -326,13 +319,12 @@ private fun TotalLimitControl(limit: AppUsageLimit?, onEdit: () -> Unit, onToggl
 private fun AppUsageLimitDialog(
     draft: AppUsageLimitDraft,
     onDismiss: () -> Unit,
-    onSave: (minutes: Int, active: Boolean) -> Unit,
+    onSave: (minutes: Int) -> Unit,
     onDelete: (AppUsageLimit) -> Unit,
 ) {
     val existing = draft.limit
-    var minutesText by remember(draft) { mutableStateOf(existing?.limitMinutes?.toString().orEmpty()) }
-    var active by remember(draft) { mutableStateOf(existing?.active ?: true) }
-    val minutes = minutesText.toIntOrNull()
+    val initialMinutes = existing?.limitMinutes ?: 60
+    var totalMinutes by remember(draft) { mutableStateOf(initialMinutes.coerceIn(1, 1440)) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -345,32 +337,22 @@ private fun AppUsageLimitDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(
-                    value = minutesText,
-                    onValueChange = { value -> minutesText = value.filter { it.isDigit() }.take(4) },
-                    label = { Text(stringResource(R.string.appusage_limit_minutes_label)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                DurationNumberPicker(
+                    totalMinutes = totalMinutes,
+                    onTotalMinutesChange = { totalMinutes = it },
                 )
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(stringResource(if (active) R.string.appusage_limit_enabled else R.string.appusage_limit_disabled))
-                    Switch(checked = active, onCheckedChange = { active = it })
-                }
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = minutes != null && minutes in 1..1440,
-                onClick = { onSave(minutes ?: return@TextButton, active) },
-            ) {
-                Text(stringResource(R.string.appusage_save_limit))
+            TextButton(onClick = { onSave(totalMinutes) }) {
+                Text(stringResource(R.string.appusage_save_alert))
             }
         },
         dismissButton = {
             Row {
                 existing?.let {
                     TextButton(onClick = { onDelete(it) }) {
-                        Text(stringResource(R.string.appusage_delete_limit), color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.appusage_delete_alert), color = MaterialTheme.colorScheme.error)
                     }
                 }
                 TextButton(onClick = onDismiss) {
@@ -379,6 +361,64 @@ private fun AppUsageLimitDialog(
             }
         },
     )
+}
+
+@Composable
+private fun DurationNumberPicker(totalMinutes: Int, onTotalMinutesChange: (Int) -> Unit) {
+    var hours by remember(totalMinutes) { mutableStateOf(totalMinutes / 60) }
+    var minutes by remember(totalMinutes) { mutableStateOf(totalMinutes % 60) }
+
+    fun applyDuration(newHours: Int, newMinutes: Int) {
+        val adjustedMinutes = when {
+            newHours <= 0 -> newMinutes.coerceIn(1, 59)
+            newHours >= 24 -> 0
+            else -> newMinutes.coerceIn(0, 59)
+        }
+        val adjustedHours = newHours.coerceIn(0, 24)
+        hours = adjustedHours
+        minutes = adjustedMinutes
+        onTotalMinutesChange((adjustedHours * 60 + adjustedMinutes).coerceIn(1, 1440))
+    }
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        DurationPickerColumn(
+            label = stringResource(R.string.appusage_alert_hours_label),
+            value = hours,
+            min = 0,
+            max = 24,
+            onValueChange = { applyDuration(it, minutes) },
+        )
+        Spacer(Modifier.width(20.dp))
+        DurationPickerColumn(
+            label = stringResource(R.string.appusage_alert_minutes_label),
+            value = minutes,
+            min = if (hours == 0) 1 else 0,
+            max = if (hours == 24) 0 else 59,
+            onValueChange = { applyDuration(hours, it) },
+        )
+    }
+}
+
+@Composable
+private fun DurationPickerColumn(label: String, value: Int, min: Int, max: Int, onValueChange: (Int) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        AndroidView(
+            modifier = Modifier.width(92.dp).height(132.dp),
+            factory = { context ->
+                NumberPicker(context).apply {
+                    wrapSelectorWheel = false
+                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    setOnValueChangedListener { _, _, newValue -> onValueChange(newValue) }
+                }
+            },
+            update = { picker ->
+                picker.minValue = min
+                picker.maxValue = max
+                picker.value = value.coerceIn(min, max)
+            },
+        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
@@ -423,21 +463,20 @@ private fun Breakdown(
     apps: List<AppUsageEntry>,
     limits: List<AppUsageLimit>,
     onEditLimit: (AppUsageEntry, AppUsageLimit?) -> Unit,
-    onToggleLimit: (AppUsageLimit, Boolean) -> Unit,
 ) {
     val maxApp = (apps.maxOfOrNull { it.min } ?: 1).coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.appusage_relevant_apps), style = MaterialTheme.typography.headlineSmall)
         apps.forEach { e ->
             val limit = findLimitForApp(limits, e)
-            AppRow(e, maxApp, limit, onLimitClick = { onEditLimit(e, limit) }, onToggleLimit = onToggleLimit)
+            AppRow(e, maxApp, limit, onLimitClick = { onEditLimit(e, limit) })
         }
     }
 }
 
 private fun findLimitForApp(limits: List<AppUsageLimit>, app: AppUsageEntry): AppUsageLimit? =
     limits.firstOrNull { limit ->
-        if (limit.type != "app") return@firstOrNull false
+        if (limit.type != "app" || !limit.active) return@firstOrNull false
         if (limit.packageName != null && app.packageName != null) {
             limit.packageName == app.packageName
         } else {
@@ -478,7 +517,6 @@ private fun AppRow(
     maxApp: Int,
     limit: AppUsageLimit?,
     onLimitClick: () -> Unit,
-    onToggleLimit: (AppUsageLimit, Boolean) -> Unit,
 ) {
     val v = appVisual(e.app)
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.large,
@@ -504,9 +542,8 @@ private fun AppRow(
                     Box(Modifier.fillMaxWidth((e.min.toFloat() / maxApp).coerceIn(0.05f, 1f)).fillMaxHeight().clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    limit?.let { Switch(checked = it.active, onCheckedChange = { active -> onToggleLimit(it, active) }, modifier = Modifier.height(28.dp)) }
                     TextButton(onClick = onLimitClick, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
-                        Text(stringResource(if (limit == null) R.string.appusage_set_limit else R.string.appusage_edit_limit))
+                        Text(stringResource(if (limit == null) R.string.appusage_set_alert else R.string.appusage_edit_alert))
                     }
                 }
             }

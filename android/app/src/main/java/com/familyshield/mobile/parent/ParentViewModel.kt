@@ -84,6 +84,8 @@ class ParentViewModel(
         private set
     var sosByChild by mutableStateOf<Map<String, SosState>>(emptyMap())
         private set
+    var acknowledgedSosEventIds by mutableStateOf<Set<String>>(emptySet())
+        private set
     var urgentSending by mutableStateOf(false)
         private set
     var loadingAllAlerts by mutableStateOf(false)
@@ -211,8 +213,8 @@ class ParentViewModel(
         if (token == null) return
         viewModelScope.launch(dispatcher) {
             try {
-                authed { api.saveAppUsageLimit(it, childId, body) }
-                loadAppUsage(childId, appUsageDate)
+                val limit = authed { api.saveAppUsageLimit(it, childId, body) }
+                applyAppUsageLimit(limit)
             } catch (e: Exception) { error = e.message }
         }
     }
@@ -221,8 +223,8 @@ class ParentViewModel(
         if (token == null) return
         viewModelScope.launch(dispatcher) {
             try {
-                authed { api.updateAppUsageLimit(it, childId, limitId, body) }
-                loadAppUsage(childId, appUsageDate)
+                val limit = authed { api.updateAppUsageLimit(it, childId, limitId, body) }
+                applyAppUsageLimit(limit)
             } catch (e: Exception) { error = e.message }
         }
     }
@@ -232,9 +234,16 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 authed { api.deleteAppUsageLimit(it, childId, limitId) }
-                loadAppUsage(childId, appUsageDate)
+                appUsage = appUsage?.copy(limits = appUsage?.limits.orEmpty().filterNot { it.id == limitId })
             } catch (e: Exception) { error = e.message }
         }
+    }
+
+    private fun applyAppUsageLimit(limit: AppUsageLimit) {
+        appUsage = appUsage?.let { usage ->
+            val limits = usage.limits.filterNot { existing -> existing.id == limit.id } + limit
+            usage.copy(limits = limits)
+        } ?: AppUsageSummary(limits = listOf(limit))
     }
 
     fun sendChat(body: String) {
@@ -293,6 +302,7 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 authed { api.acknowledgeSos(it, childId, eventId) }
+                acknowledgedSosEventIds = acknowledgedSosEventIds + eventId
                 loadSosStates(children)
             } catch (e: Exception) { error = e.message }
         }
@@ -508,6 +518,8 @@ class ParentViewModel(
             if (state.active) sos[c.id] = state
         }
         sosByChild = sos
+        val activeEventIds = sos.values.mapNotNull { it.event?.id }.toSet()
+        acknowledgedSosEventIds = acknowledgedSosEventIds.intersect(activeEventIds)
     }
 
     fun loadAllFamilyAlerts() {

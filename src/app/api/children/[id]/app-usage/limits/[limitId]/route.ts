@@ -41,7 +41,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     eq(appUsageLimits.childId, id),
   )).returning();
 
-  if (!updated) return err('not_found', 'Limit not found', 404);
+  if (!updated) return err('not_found', 'Alert not found', 404);
   return ok({ limit: serializeLimit(updated) });
 }
 
@@ -56,6 +56,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
     eq(appUsageLimits.childId, id),
   )).returning({ id: appUsageLimits.id });
 
-  if (!deleted) return err('not_found', 'Limit not found', 404);
+  if (!deleted) return err('not_found', 'Alert not found', 404);
   return ok({ deleted: true });
 }

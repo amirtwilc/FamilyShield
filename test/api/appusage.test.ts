@@ -139,7 +139,7 @@ describe('app usage', () => {
   });
 
   it('fires a total app-usage limit push once per day', async () => {
-    const p = await seedParent(); const c = await seedChild(p.id);
+    const p = await seedParent(); const c = await seedChild(p.id, 'Mia');
     const { token: dtok } = await seedDevice(c.id);
     const ptok = await signAccess(p.id);
     const ctx = { params: Promise.resolve({ id: c.id }) };
@@ -160,16 +160,18 @@ describe('app usage', () => {
     expect(pushes[0].data).toEqual(expect.objectContaining({
       type: 'app_usage_limit_exceeded',
       childId: c.id,
+      childName: 'Mia',
       limitType: 'total',
       usageMinutes: '70',
       limitMinutes: '60',
     }));
+    expect(pushes[0].body).toContain('Mia');
     expect(pushes[0].options?.includeNotification).toBe(false);
     expect((await db.select().from(alerts).where(eq(alerts.type, 'app_usage_limit_exceeded')))).toHaveLength(1);
   });
 
   it('fires an app-specific limit by package once per day', async () => {
-    const p = await seedParent(); const c = await seedChild(p.id);
+    const p = await seedParent(); const c = await seedChild(p.id, 'Noa');
     const { token: dtok } = await seedDevice(c.id);
     const ptok = await signAccess(p.id);
     const ctx = { params: Promise.resolve({ id: c.id }) };
@@ -187,6 +189,7 @@ describe('app usage', () => {
     expect(pushes).toHaveLength(1);
     expect(pushes[0].data).toEqual(expect.objectContaining({
       type: 'app_usage_limit_exceeded',
+      childName: 'Noa',
       limitType: 'app',
       app: 'YouTube',
       packageName: 'com.youtube',

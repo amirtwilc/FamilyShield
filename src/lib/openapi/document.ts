@@ -124,7 +124,7 @@ export function buildOpenApiDocument() {
       appUsageAccessGranted: z.union([z.boolean(), z.null()]),
     })) } } });
   registry.registerPath({ method: 'get', path: '/api/children/{id}/app-usage/limits', security: [{ parentJwt: [] }],
-    responses: { 200: { description: 'App usage limits' }, 404: { description: 'Child not found' } } });
+    responses: { 200: { description: 'App usage alerts' }, 404: { description: 'Child not found' } } });
   registry.registerPath({ method: 'post', path: '/api/children/{id}/app-usage/limits', security: [{ parentJwt: [] }],
     request: { body: json(appUsageLimitSchema) }, responses: { 201: { description: 'Limit created' }, 200: { description: 'Limit updated' }, 404: { description: 'Child not found' } } });
   registry.registerPath({ method: 'patch', path: '/api/children/{id}/app-usage/limits/{limitId}', security: [{ parentJwt: [] }],

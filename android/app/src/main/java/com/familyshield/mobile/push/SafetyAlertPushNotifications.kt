@@ -115,13 +115,18 @@ internal fun safetyAlertNotificationCopy(
             val usage = data["usageMinutes"]?.toIntOrNull()?.let(::formatLimitMinutes)
             val limit = data["limitMinutes"]?.toIntOrNull()?.let(::formatLimitMinutes)
             val app = data["app"]?.takeIf { it.isNotBlank() }
+            val childName = data["childName"]?.takeIf { it.isNotBlank() }
             PushNotificationCopy(
                 context.getString(R.string.alert_app_usage_limit),
                 when {
+                    usage != null && limit != null && app != null && childName != null ->
+                        context.getString(R.string.notification_app_usage_limit_app_body, childName, app, usage, limit)
+                    usage != null && limit != null && childName != null ->
+                        context.getString(R.string.notification_app_usage_limit_total_body, childName, usage, limit)
                     usage != null && limit != null && app != null ->
-                        context.getString(R.string.notification_app_usage_limit_app_body, app, usage, limit)
+                        context.getString(R.string.notification_app_usage_limit_app_legacy_body, app, usage, limit)
                     usage != null && limit != null ->
-                        context.getString(R.string.notification_app_usage_limit_total_body, usage, limit)
+                        context.getString(R.string.notification_app_usage_limit_total_legacy_body, usage, limit)
                     else -> context.getString(R.string.alert_app_usage_limit_body)
                 },
             )

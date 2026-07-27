@@ -457,12 +457,14 @@ class ParentViewModelTest {
     }
 
     @Test
-    fun `creates updates and deletes app usage limits`() = runTest(mainRule.dispatcher) {
+    fun `creates updates and deletes app usage alerts locally without refreshing usage`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         val vm = viewModel(api)
         vm.authenticate("usage-limits@x.com", "pw123456", register = true); advanceUntilIdle()
         vm.addChild("Mia"); advanceUntilIdle()
         val childId = vm.selectedId!!
+        vm.loadAppUsage(childId); advanceUntilIdle()
+        val requestsAfterLoad = api.appUsageRequests.size
 
         vm.saveAppUsageLimit(childId, AppUsageLimitBody(type = "total", limitMinutes = 60))
         advanceUntilIdle()
@@ -471,18 +473,20 @@ class ParentViewModelTest {
         assertNotNull(created)
         assertEquals("total", created!!.type)
         assertEquals(60, created.limitMinutes)
+        assertEquals(requestsAfterLoad, api.appUsageRequests.size)
 
-        vm.updateAppUsageLimit(childId, created.id, UpdateAppUsageLimitBody(limitMinutes = 90, active = false))
+        vm.updateAppUsageLimit(childId, created.id, UpdateAppUsageLimitBody(limitMinutes = 90))
         advanceUntilIdle()
 
         val updated = vm.appUsage?.limits?.single()
         assertEquals(90, updated?.limitMinutes)
-        assertFalse(updated?.active == true)
+        assertEquals(requestsAfterLoad, api.appUsageRequests.size)
 
         vm.deleteAppUsageLimit(childId, created.id)
         advanceUntilIdle()
 
         assertTrue(vm.appUsage?.limits.orEmpty().isEmpty())
+        assertEquals(requestsAfterLoad, api.appUsageRequests.size)
     }
 
     @Test

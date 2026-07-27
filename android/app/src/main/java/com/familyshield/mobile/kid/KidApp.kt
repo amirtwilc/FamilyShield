@@ -613,10 +613,7 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                 active = vm.sosState.active,
                 busy = vm.sosBusy,
                 onStart = { vm.startSos(context) },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp),
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }

@@ -1359,6 +1359,7 @@ private fun DashboardTab(
                             child = child,
                             state = state,
                             snackbar = snackbar,
+                            acknowledged = state.event?.id in vm.acknowledgedSosEventIds,
                             onAcknowledge = { eventId -> vm.acknowledgeSos(child.id, eventId) },
                         )
                     }
@@ -1441,13 +1442,14 @@ private fun ActiveSosCard(
     child: Child,
     state: SosState,
     snackbar: SnackbarHostState,
+    acknowledged: Boolean,
     onAcknowledge: (String) -> Unit,
 ) {
     val event = state.event ?: return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val remainingMinutes = ((state.remainingSeconds + 59) / 60).coerceAtLeast(0)
     val noDialerMsg = stringResource(R.string.ring_no_phone_app)
+    val childPhone = child.phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer,
@@ -1465,11 +1467,6 @@ private fun ActiveSosCard(
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                 }
             }
-            Text(
-                stringResource(R.string.parent_sos_remaining, remainingMinutes),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
             event.lastLocationAt?.let {
                 Text(
                     stringResource(R.string.parent_sos_location_age, ago(it)),
@@ -1494,8 +1491,9 @@ private fun ActiveSosCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                child.phoneNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { phone ->
+            if (childPhone != null || !acknowledged) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    childPhone?.let { phone ->
                     OutlinedButton(
                         onClick = {
                             if (!openDialer(context, phone)) {
@@ -1509,12 +1507,15 @@ private fun ActiveSosCard(
                         Text(stringResource(R.string.parent_sos_call_action))
                     }
                 }
-                Button(
-                    onClick = { onAcknowledge(event.id) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text(stringResource(R.string.parent_sos_ack_action), fontWeight = FontWeight.SemiBold)
+                    if (!acknowledged) {
+                        Button(
+                            onClick = { onAcknowledge(event.id) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        ) {
+                            Text(stringResource(R.string.parent_sos_ack_action), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         }

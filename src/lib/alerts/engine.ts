@@ -2,6 +2,7 @@ import { and, eq, gt, sql } from 'drizzle-orm';
 import { db } from '../../db/client';
 import {
   devices,
+  children,
   childParentLinks,
   parents,
   alerts,
@@ -40,6 +41,19 @@ async function sendToParents(childId: string, title: string, body: string, data:
 async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>, options?: PushOptions) {
   const [parent] = await db.select({ token: parents.fcmToken }).from(parents).where(eq(parents.id, parentId));
   return parent?.token ? getSender().send(parent.token, title, body, data, options) : false;
+}
+
+async function childDisplayNameForParent(parentId: string, childId: string): Promise<string> {
+  const [row] = await db.select({
+    linkName: childParentLinks.displayName,
+    childName: children.displayName,
+  }).from(children)
+    .leftJoin(childParentLinks, and(
+      eq(childParentLinks.childId, children.id),
+      eq(childParentLinks.parentId, parentId),
+    ))
+    .where(eq(children.id, childId));
+  return row?.linkName ?? row?.childName ?? 'Child';
 }
 
 type ZoneTransitionInput = {
@@ -221,8 +235,9 @@ export async function fireAppUsageLimitAlertsForDay(childId: string, day: string
     if (!event) continue;
 
     const isAppLimit = limit.type === 'app';
-    const title = isAppLimit ? `${limit.app ?? 'App'} limit reached` : 'Daily screen time limit reached';
-    const body = `${usageMin} minutes used of ${limit.limitMinutes} minutes allowed`;
+    const childName = await childDisplayNameForParent(limit.parentId, limit.childId);
+    const title = isAppLimit ? `${limit.app ?? 'App'} usage alert` : 'Daily screen time alert';
+    const body = `${childName} used ${usageMin} minutes; alert is set at ${limit.limitMinutes} minutes`;
     const [alert] = await db.insert(alerts).values({
       childId: limit.childId,
       parentId: limit.parentId,
@@ -234,6 +249,7 @@ export async function fireAppUsageLimitAlertsForDay(childId: string, day: string
         packageName: limit.packageName,
         usageMinutes: usageMin,
         limitMinutes: limit.limitMinutes,
+        childName,
         day,
       },
     }).returning();
@@ -242,6 +258,7 @@ export async function fireAppUsageLimitAlertsForDay(childId: string, day: string
     if (await sendToParent(limit.parentId, title, body, {
       type: 'app_usage_limit_exceeded',
       childId: limit.childId,
+      childName,
       limitId: limit.id,
       limitType: limit.type,
       usageMinutes: String(usageMin),
