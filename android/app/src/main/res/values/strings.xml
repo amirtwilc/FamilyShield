@@ -243,6 +243,9 @@
     <string name="appusage_more">%1$d%% more than yesterday</string>
     <string name="appusage_less">%1$d%% less than yesterday</string>
     <string name="appusage_same">Same as yesterday</string>
+    <string name="appusage_more_than_day">%1$d%% more than %2$s</string>
+    <string name="appusage_less_than_day">%1$d%% less than %2$s</string>
+    <string name="appusage_same_as_day">Same as %1$s</string>
     <string name="appusage_weekly_trend">Weekly Trend</string>
     <string name="appusage_avg">Avg: %1$s</string>
     <string name="appusage_breakdown">Breakdown</string>

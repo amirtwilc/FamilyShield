@@ -191,6 +191,10 @@ class ParentViewModel(
     var loadingUsage by mutableStateOf(false)
         private set
 
+    fun selectAppUsageDate(date: String) {
+        appUsageDate = date
+    }
+
     fun loadAppUsage(childId: String, date: String? = null) {
         appUsageChildId = childId
         appUsageDate = date

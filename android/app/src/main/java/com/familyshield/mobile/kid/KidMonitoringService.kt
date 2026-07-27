@@ -24,8 +24,37 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 private const val ACTION_STOP = "com.familyshield.mobile.kid.STOP_MONITORING"
-private const val APP_USAGE_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
+internal const val TELEMETRY_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
+internal const val APP_USAGE_UPLOAD_INTERVAL_MS = 30 * 60 * 1000L
+internal const val FCM_TOKEN_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000L
 private const val SOS_IDLE_CHECK_INTERVAL_MS = 60 * 1000L
+
+internal data class TelemetryOptionalFields(
+    val appUsage: Boolean,
+    val fcmToken: Boolean,
+)
+
+internal class TelemetryUploadPolicy(
+    private val appUsageIntervalMs: Long = APP_USAGE_UPLOAD_INTERVAL_MS,
+    private val fcmTokenRefreshIntervalMs: Long = FCM_TOKEN_REFRESH_INTERVAL_MS,
+) {
+    private var lastAppUsageUploadAtMs: Long? = null
+    private var lastFcmTokenUploadAtMs: Long? = null
+
+    fun optionalFields(nowMs: Long): TelemetryOptionalFields =
+        TelemetryOptionalFields(
+            appUsage = due(lastAppUsageUploadAtMs, appUsageIntervalMs, nowMs),
+            fcmToken = due(lastFcmTokenUploadAtMs, fcmTokenRefreshIntervalMs, nowMs),
+        )
+
+    fun markUploaded(fields: TelemetryOptionalFields, nowMs: Long) {
+        if (fields.appUsage) lastAppUsageUploadAtMs = nowMs
+        if (fields.fcmToken) lastFcmTokenUploadAtMs = nowMs
+    }
+
+    private fun due(lastUploadAtMs: Long?, intervalMs: Long, nowMs: Long): Boolean =
+        lastUploadAtMs == null || nowMs - lastUploadAtMs >= intervalMs
+}
 
 class KidMonitoringService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,20 +86,21 @@ class KidMonitoringService : Service() {
 
     private suspend fun monitorLoop() {
         val store = PrefsTokenStore(applicationContext)
+        val uploadPolicy = TelemetryUploadPolicy()
         while (scope.isActive) {
             val token = store.deviceToken
             if (token == null) {
                 stopSelf()
                 return
             }
-            val result = runCatching { uploadTick(token) }
+            val result = runCatching { uploadTick(token, uploadPolicy) }
             val error = result.exceptionOrNull()
             if (error is ApiException && error.status == 401) {
                 store.deviceToken = null
                 stopSelf()
                 return
             }
-            delay(APP_USAGE_UPLOAD_INTERVAL_MS)
+            delay(TELEMETRY_UPLOAD_INTERVAL_MS)
         }
     }
 
@@ -133,11 +163,20 @@ class KidMonitoringService : Service() {
         }
     }
 
-    private suspend fun uploadTick(token: String) {
+    private suspend fun uploadTick(token: String, uploadPolicy: TelemetryUploadPolicy) {
+        val nowMs = System.currentTimeMillis()
+        val optionalFields = uploadPolicy.optionalFields(nowMs)
         val telemetry = AndroidTelemetry.snapshot(this)
-        val appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(this)
-        val usage = if (appUsageAccessGranted) AppUsageTelemetry.todayUsage(this) else emptyList()
-        val fcmToken = kidFcmTokenOrNull()
+        val appUsage = if (optionalFields.appUsage) {
+            val appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(this)
+            AppUsageTelemetryBody(
+                accessGranted = appUsageAccessGranted,
+                items = if (appUsageAccessGranted) AppUsageTelemetry.todayUsage(this) else emptyList(),
+            )
+        } else {
+            null
+        }
+        val fcmToken = if (optionalFields.fcmToken) kidFcmTokenOrNull() else null
         val battery = telemetry.batteryLevel
         val loc = telemetry.location
         val status = StatusBody(battery, telemetry.isCharging, fcmToken, permissionStatusPayload(this))
@@ -146,9 +185,10 @@ class KidMonitoringService : Service() {
             DeviceTelemetryBody(
                 status = status,
                 location = if (loc != null) LocationPoint(loc.latitude, loc.longitude, nowIso(), battery) else null,
-                appUsage = AppUsageTelemetryBody(appUsageAccessGranted, usage),
+                appUsage = appUsage,
             ),
         )
+        uploadPolicy.markUploaded(optionalFields, nowMs)
     }
 
     private fun nowIso(): String {

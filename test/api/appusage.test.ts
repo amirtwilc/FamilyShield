@@ -29,6 +29,9 @@ describe('app usage', () => {
     expect(data.hiddenTodayMin).toBeUndefined();
     expect(data.week).toHaveLength(7);
     expect(data.week[6].min).toBe(155); // today is the last bar
+    expect(data.dayDetails).toHaveLength(7);
+    expect(data.dayDetails[6]).toMatchObject({ totalMin: 155 });
+    expect(data.dayDetails[6].apps[0]).toMatchObject({ app: 'YouTube', min: 80 });
   });
 
   it('re-reporting the same app/day upserts instead of duplicating', async () => {

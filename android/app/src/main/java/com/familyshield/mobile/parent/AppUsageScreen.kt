@@ -45,9 +45,12 @@ import com.familyshield.mobile.ui.theme.Navy
 import com.familyshield.mobile.ui.theme.SkyBright
 import com.familyshield.mobile.ui.theme.SkyTint
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.OffsetTime
+import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private fun fmtDur(min: Int): String {
     val h = min / 60; val m = min % 60
@@ -67,6 +70,14 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
     val usageChildId = vm.appUsageChildId ?: initialChildId
     val childConnected = vm.children.find { it.id == usageChildId }?.primaryDevice()?.isConnected() == true
     val selectedUsageDay = vm.appUsageDate ?: usage?.selectedDay ?: usage?.week?.lastOrNull()?.day
+    val selectedDayDetail = usage?.dayDetails?.find { it.day == selectedUsageDay }
+    val selectedApps = selectedDayDetail?.apps ?: usage?.apps.orEmpty()
+    val selectedTotalMin = selectedDayDetail?.totalMin ?: usage?.totalTodayMin ?: 0
+    val selectedPreviousMin = selectedDayDetail?.previousMin ?: usage?.yesterdayMin ?: 0
+    val selectedPreviousHasData = selectedDayDetail?.previousHasData ?: usage?.yesterdayHasData ?: false
+    val isCurrentUsageDay = selectedUsageDay == usage?.week?.lastOrNull()?.day
+    val selectedLastUpdatedAt = if (selectedDayDetail != null) selectedDayDetail.lastUpdatedAt else usage?.lastUpdatedAt
+    val comparisonDayLabel = if (isCurrentUsageDay) null else previousDayName(selectedUsageDay)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -107,25 +118,36 @@ fun AppUsageScreen(vm: ParentViewModel, initialChildId: String, onBack: () -> Un
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    val summaryLabel = if (selectedUsageDay == usage.week.lastOrNull()?.day) {
+                    val summaryLabel = if (isCurrentUsageDay) {
                         stringResource(R.string.appusage_total_today)
                     } else {
                         stringResource(R.string.appusage_total_usage)
                     }
-                    SummaryCard(summaryLabel, usage.totalTodayMin, usage.yesterdayMin, usage.yesterdayHasData)
-                    usage.lastUpdatedAt?.let { LastUpdatedText(it) }
+                    SummaryCard(summaryLabel, selectedTotalMin, selectedPreviousMin, selectedPreviousHasData, comparisonDayLabel)
+                    selectedLastUpdatedAt?.let { LastUpdatedText(it) }
                     WeeklyTrend(
                         days = usage.week,
                         avgMin = usage.avgWeekMin,
                         selectedDay = selectedUsageDay,
-                        onDaySelected = { day -> vm.loadAppUsage(usageChildId, day) },
+                        onDaySelected = { day -> vm.selectAppUsageDate(day) },
                     )
-                    Breakdown(usage.apps)
+                    Breakdown(selectedApps)
                     LimitsCard { scope.launch { snackbar.showSnackbar(limitsMsg) } }
                     Spacer(Modifier.height(8.dp))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun previousDayName(day: String?): String? {
+    if (day == null) return null
+    val locale = Locale.getDefault()
+    return remember(day, locale) {
+        runCatching {
+            LocalDate.parse(day).minusDays(1).dayOfWeek.getDisplayName(TextStyle.FULL, locale)
+        }.getOrNull()
     }
 }
 
@@ -156,23 +178,29 @@ private fun ChildSegment(child: Child, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SummaryCard(label: String, totalMin: Int, yesterdayMin: Int, yesterdayHasData: Boolean) {
-    val pct = if (yesterdayMin > 0) Math.round((totalMin - yesterdayMin) * 100f / yesterdayMin) else 0
+private fun SummaryCard(
+    label: String,
+    totalMin: Int,
+    previousMin: Int,
+    previousHasData: Boolean,
+    comparisonDayLabel: String?,
+) {
+    val pct = if (previousMin > 0) Math.round((totalMin - previousMin) * 100f / previousMin) else 0
     Surface(color = Navy, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(label, style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.75f), letterSpacing = 1.5.sp)
                 Text(fmtDur(totalMin), style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Bold)
-                if (yesterdayHasData) {
+                if (previousHasData && comparisonDayLabel != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (pct != 0) Icon(if (pct > 0) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown, null,
                             tint = SkyBright, modifier = Modifier.size(16.dp))
                         Text(
                             when {
-                                pct > 0 -> stringResource(R.string.appusage_more, pct)
-                                pct < 0 -> stringResource(R.string.appusage_less, -pct)
-                                else -> stringResource(R.string.appusage_same)
+                                pct > 0 -> stringResource(R.string.appusage_more_than_day, pct, comparisonDayLabel)
+                                pct < 0 -> stringResource(R.string.appusage_less_than_day, -pct, comparisonDayLabel)
+                                else -> stringResource(R.string.appusage_same_as_day, comparisonDayLabel)
                             },
                             style = MaterialTheme.typography.labelLarge, color = SkyBright,
                         )

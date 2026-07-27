@@ -60,6 +60,29 @@ export async function GET(req: Request, { params }: Ctx) {
     FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, interval '1 day') AS d(day)
     LEFT JOIN app_usage u ON u.child_id=${id} AND u.day = d.day::date AND u.is_relevant = true AND u.minutes >= ${MIN_VISIBLE_MINUTES}
     GROUP BY d.day ORDER BY d.day ASC`);
+  const previousTotalsR = await db.execute(sql`
+    SELECT
+      to_char(d.day::date, 'YYYY-MM-DD') AS day,
+      COALESCE(SUM(u.minutes),0)::int AS min,
+      COUNT(u.child_id)::int AS "dataPoints"
+    FROM generate_series(CURRENT_DATE - 7, CURRENT_DATE, interval '1 day') AS d(day)
+    LEFT JOIN app_usage u ON u.child_id=${id} AND u.day = d.day::date AND u.is_relevant = true AND u.minutes >= ${MIN_VISIBLE_MINUTES}
+    GROUP BY d.day ORDER BY d.day ASC`);
+  const weekAppsR = await db.execute(sql`
+    SELECT
+      to_char(day, 'YYYY-MM-DD') AS day,
+      package_name AS "packageName",
+      app,
+      category,
+      SUM(minutes)::int AS min,
+      MAX(last_reported_at) AS "lastUpdatedAt"
+    FROM app_usage
+    WHERE child_id=${id}
+      AND day BETWEEN CURRENT_DATE - 6 AND CURRENT_DATE
+      AND is_relevant = true
+      AND minutes >= ${MIN_VISIBLE_MINUTES}
+    GROUP BY day, package_name, app, category
+    ORDER BY day ASC, min DESC`);
 
   const totalTodayMin = (today.rows[0] as { m: number }).m;
   const yesterday = yest.rows[0] as { m: number; n: number };
@@ -68,6 +91,34 @@ export async function GET(req: Request, { params }: Ctx) {
   const week = (weekR.rows as { day: string; min: number; dataPoints: number }[]).map((r) => ({
     day: r.day, dow: DOW[new Date(r.day + 'T00:00:00Z').getUTCDay()], min: r.min, hasData: r.dataPoints > 0,
   }));
+  const totalsByDay = new Map(
+    (previousTotalsR.rows as { day: string; min: number; dataPoints: number }[])
+      .map((r) => [r.day, { min: r.min, hasData: r.dataPoints > 0 }] as const),
+  );
+  const appsByDay = new Map<string, { packageName: string; app: string; category: string; min: number }[]>();
+  const updatedByDay = new Map<string, Date | string | null>();
+  for (const row of weekAppsR.rows as { day: string; packageName: string; app: string; category: string; min: number; lastUpdatedAt: Date | string | null }[]) {
+    const appsForDay = appsByDay.get(row.day) ?? [];
+    appsForDay.push({ packageName: row.packageName, app: row.app, category: row.category, min: row.min });
+    appsByDay.set(row.day, appsForDay);
+    const previousUpdated = updatedByDay.get(row.day);
+    if (!previousUpdated || (row.lastUpdatedAt && new Date(row.lastUpdatedAt) > new Date(previousUpdated))) {
+      updatedByDay.set(row.day, row.lastUpdatedAt);
+    }
+  }
+  const dayDetails = week.map((r) => {
+    const previousDay = new Date(r.day + 'T00:00:00Z');
+    previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+    const previous = totalsByDay.get(previousDay.toISOString().slice(0, 10));
+    return {
+      day: r.day,
+      totalMin: r.min,
+      previousMin: previous?.min ?? 0,
+      previousHasData: previous?.hasData ?? false,
+      apps: appsByDay.get(r.day) ?? [],
+      lastUpdatedAt: updatedByDay.get(r.day) ?? null,
+    };
+  });
   const avgWeekMin = averageUsageMinutes(week);
   const apps = (appsR.rows as { packageName: string; app: string; category: string; min: number }[])
     .map((r) => ({ packageName: r.packageName, app: r.app, category: r.category, min: r.min }));
@@ -80,6 +131,7 @@ export async function GET(req: Request, { params }: Ctx) {
     yesterdayHasData,
     avgWeekMin,
     week,
+    dayDetails,
     apps,
     lastUpdatedAt,
     appUsageAccessGranted,

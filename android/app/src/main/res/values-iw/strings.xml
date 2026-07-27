@@ -245,6 +245,9 @@
     <string name="appusage_more">%1$d%% יותר מאתמול</string>
     <string name="appusage_less">%1$d%% פחות מאתמול</string>
     <string name="appusage_same">כמו אתמול</string>
+    <string name="appusage_more_than_day">%1$d%% יותר מיום %2$s</string>
+    <string name="appusage_less_than_day">%1$d%% פחות מיום %2$s</string>
+    <string name="appusage_same_as_day">כמו יום %1$s</string>
     <string name="appusage_weekly_trend">מגמה שבועית</string>
     <string name="appusage_avg">ממוצע: %1$s</string>
     <string name="appusage_breakdown">פירוט</string>

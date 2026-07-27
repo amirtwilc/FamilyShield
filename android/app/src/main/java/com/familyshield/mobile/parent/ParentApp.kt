@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
@@ -106,7 +107,9 @@ import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.FrequentRoute
+import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.PermissionStatus
+import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.SosState
 import com.familyshield.mobile.net.Zone
 import com.familyshield.mobile.permissions.MonitoredPermissionsContent
@@ -144,6 +147,7 @@ import com.familyshield.mobile.ui.theme.Green
 import com.familyshield.mobile.ui.theme.Navy
 import com.familyshield.mobile.ui.theme.Orange
 import com.familyshield.mobile.ui.theme.SkyBright
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -177,6 +181,7 @@ fun ParentApp(
 @Composable
 private fun ParentLockGate(vm: ParentViewModel, content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val activity = LocalActivityResultRegistryOwner.current as? FragmentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
     var unlocked by remember(vm.biometricLock) { mutableStateOf(!vm.biometricLock) }
     var promptActive by remember { mutableStateOf(false) }
@@ -185,7 +190,7 @@ private fun ParentLockGate(vm: ParentViewModel, content: @Composable () -> Unit)
 
     fun requestUnlock() {
         if (!vm.biometricLock || unlocked || promptActive) return
-        when (val availability = parentBiometricAvailability(context)) {
+        when (val availability = parentBiometricAvailability(context, activity)) {
             is ParentBiometricAvailability.Available -> {
                 promptActive = true
                 showParentBiometricPrompt(
@@ -547,31 +552,32 @@ private fun ParentShell(
                     },
                 ),
         ) {
-            SectionPage(
-                tab = tab,
-                active = true,
-                modifier = Modifier.offset { IntOffset(visibleOffset.roundToInt(), 0) },
-                vm = vm,
-                snackbar = snackbar,
-                onTimeline = { openTab(Tab.History) },
-                onAlerts = { showAllAlerts = true },
-                onSettings = openSettings,
-                onAppUsage = { id -> appUsageFor = id },
-            )
-            dragTarget?.let { target ->
-                val baseOffset = sectionTargetBaseOffset(tab, target, screenWidthPx, layoutDirection)
-                val visibleBaseOffset = sectionDisplayOffset(baseOffset, layoutDirection)
-                SectionPage(
-                    tab = target,
-                    active = false,
-                    modifier = Modifier.offset { IntOffset((visibleBaseOffset + visibleOffset).roundToInt(), 0) },
-                    vm = vm,
-                    snackbar = snackbar,
-                    onTimeline = { openTab(Tab.History) },
-                    onAlerts = { showAllAlerts = true },
-                    onSettings = openSettings,
-                    onAppUsage = { id -> appUsageFor = id },
-                )
+            val hiddenOffsetWidth = screenWidthPx.takeIf { it > 0f } ?: 10_000f
+            tabs.forEach { pageTab ->
+                key(pageTab) {
+                    val pageOffset = when {
+                        pageTab == tab -> visibleOffset
+                        pageTab == dragTarget -> {
+                            val baseOffset = sectionTargetBaseOffset(tab, pageTab, screenWidthPx, layoutDirection)
+                            sectionDisplayOffset(baseOffset, layoutDirection) + visibleOffset
+                        }
+                        else -> {
+                            val hiddenDirection = if (pageTab.ordinal > tab.ordinal) 1f else -1f
+                            sectionDisplayOffset(hiddenDirection * hiddenOffsetWidth * 2f, layoutDirection)
+                        }
+                    }
+                    SectionPage(
+                        tab = pageTab,
+                        active = pageTab == tab,
+                        modifier = Modifier.offset { IntOffset(pageOffset.roundToInt(), 0) },
+                        vm = vm,
+                        snackbar = snackbar,
+                        onTimeline = { openTab(Tab.History) },
+                        onAlerts = { showAllAlerts = true },
+                        onSettings = openSettings,
+                        onAppUsage = { id -> appUsageFor = id },
+                    )
+                }
             }
         }
     }
@@ -641,6 +647,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     BackHandler(onBack = onBack)
 
     val context = LocalContext.current
+    val activity = LocalActivityResultRegistryOwner.current as? FragmentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
     var notificationsEnabled by remember { mutableStateOf(hasAppNotificationsEnabled(context)) }
     var addOpen by remember { mutableStateOf(false) }
@@ -736,7 +743,7 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                                     vm.updateBiometricLock(false)
                                     return@Switch
                                 }
-                                when (val availability = parentBiometricAvailability(context)) {
+                                when (val availability = parentBiometricAvailability(context, activity)) {
                                     is ParentBiometricAvailability.Available -> {
                                         showParentBiometricPrompt(
                                             availability.activity,
@@ -2294,13 +2301,14 @@ private fun TimelineEntry(activity: HistoryActivity, zones: List<Zone>) {
     when (activity) {
         is HistoryStay -> StayTimelineEntry(activity)
         is HistoryRouteActivity -> RouteTimelineEntry(activity, zones)
+        is HistoryMovementActivity -> MovementTimelineEntry(activity, zones)
     }
 }
 
 @Composable
 private fun StayTimelineEntry(stay: HistoryStay) {
     var showMap by remember { mutableStateOf(false) }
-    val placeName = rememberGeocodedPlaceName(stay.lat, stay.lng, enabled = stay.zoneName == null)
+    val placeName = rememberBestGeocodedPlaceName(stay.lat, stay.lng, stay.nameCandidates, enabled = stay.zoneName == null)
     val title = stay.zoneName ?: placeName
     val timeRange = timeRangeOf(stay.startAt, stay.endAt)
     if (showMap) FullScreenMap(stay.lat, stay.lng, title ?: timeRange) { showMap = false }
@@ -2409,20 +2417,51 @@ private fun ZoneCard(z: Zone, onEdit: () -> Unit, onDelete: () -> Unit) {
 
 @Composable
 private fun RouteTimelineEntry(route: HistoryRouteActivity, zones: List<Zone>) {
+    PathTimelineEntry(
+        from = route.from,
+        to = route.to,
+        startAt = route.startAt,
+        endAt = route.endAt,
+        points = route.points,
+        zones = zones,
+    )
+}
+
+@Composable
+private fun MovementTimelineEntry(movement: HistoryMovementActivity, zones: List<Zone>) {
+    PathTimelineEntry(
+        from = movement.from,
+        to = movement.to,
+        startAt = movement.startAt,
+        endAt = movement.endAt,
+        points = movement.points,
+        zones = zones,
+    )
+}
+
+@Composable
+private fun PathTimelineEntry(
+    from: Geo,
+    to: Geo,
+    startAt: String,
+    endAt: String,
+    points: List<RoutePoint>,
+    zones: List<Zone>,
+) {
     var showMap by remember { mutableStateOf(false) }
-    val fromName = rememberNamedLocation(route.from.lat, route.from.lng, zones)
-    val toName = rememberNamedLocation(route.to.lat, route.to.lng, zones)
+    val fromName = rememberNamedLocation(from.lat, from.lng, zones)
+    val toName = rememberNamedLocation(to.lat, to.lng, zones)
     val title = "$fromName -> $toName"
-    val timeRange = timeRangeOf(route.startAt, route.endAt)
-    val mapPoints = remember(route.points) { route.points.map { MapPoint(it.lat, it.lng) } }
+    val timeRange = timeRangeOf(startAt, endAt)
+    val mapPoints = remember(points) { points.map { MapPoint(it.lat, it.lng) } }
     if (showMap) FullScreenRouteMap(mapPoints, title) { showMap = false }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(timeRange, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.history_route_start_coordinates, "%.4f, %.4f".format(route.from.lat, route.from.lng)),
+            Text(stringResource(R.string.history_route_start_coordinates, "%.4f, %.4f".format(from.lat, from.lng)),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.history_route_end_coordinates, "%.4f, %.4f".format(route.to.lat, route.to.lng)),
+            Text(stringResource(R.string.history_route_end_coordinates, "%.4f, %.4f".format(to.lat, to.lng)),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {
@@ -2832,9 +2871,24 @@ private fun dateTimeOf(iso: String): String = try {
 
 @Composable
 private fun rememberGeocodedPlaceName(lat: Double, lng: Double, enabled: Boolean): String? {
-    var name by remember(lat, lng, enabled) { mutableStateOf<String?>(null) }
-    LaunchedEffect(lat, lng, enabled) {
-        name = if (enabled) com.familyshield.mobile.net.Geocoding.reverse(lat, lng) else null
+    return rememberBestGeocodedPlaceName(lat, lng, emptyList(), enabled)
+}
+
+@Composable
+private fun rememberBestGeocodedPlaceName(lat: Double, lng: Double, candidates: List<Geo>, enabled: Boolean): String? {
+    var name by remember(lat, lng, candidates, enabled) { mutableStateOf<String?>(null) }
+    LaunchedEffect(lat, lng, candidates, enabled) {
+        name = null
+        if (!enabled) return@LaunchedEffect
+        val points = (listOf(Geo(lat, lng)) + candidates)
+            .distinctBy { "%.6f,%.6f".format(it.lat, it.lng) }
+        for (point in points) {
+            val resolved = com.familyshield.mobile.net.Geocoding.reverse(point.lat, point.lng)
+            if (!resolved.isNullOrBlank()) {
+                name = resolved
+                break
+            }
+        }
     }
     return name
 }

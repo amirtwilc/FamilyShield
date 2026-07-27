@@ -4,6 +4,7 @@ import com.familyshield.mobile.MainDispatcherRule
 import com.familyshield.mobile.fakes.FakeApiClient
 import com.familyshield.mobile.fakes.InMemoryTokenStore
 import com.familyshield.mobile.net.ApiClient
+import com.familyshield.mobile.net.AppUsageDayDetail
 import com.familyshield.mobile.net.AppUsageEntry
 import com.familyshield.mobile.net.AppUsageSummary
 import com.familyshield.mobile.net.Device
@@ -424,6 +425,33 @@ class ParentViewModelTest {
         assertEquals(childId to "2026-06-23", api.appUsageRequests.last())
         assertEquals("2026-06-23", vm.appUsage?.selectedDay)
         assertEquals("Video", vm.appUsage?.apps?.single()?.app)
+    }
+
+    @Test
+    fun `selecting an app usage day is local after weekly details load`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        api.appUsageResult = AppUsageSummary(
+            totalTodayMin = 25,
+            week = listOf(
+                UsageDay("2026-06-22", "Mon", 10, hasData = true),
+                UsageDay("2026-06-23", "Tue", 25, hasData = true),
+            ),
+            dayDetails = listOf(
+                AppUsageDayDetail("2026-06-22", totalMin = 10, apps = listOf(AppUsageEntry("Chat", "Social", 10))),
+                AppUsageDayDetail("2026-06-23", totalMin = 25, apps = listOf(AppUsageEntry("Video", "Entertainment", 25))),
+            ),
+        )
+        val vm = viewModel(api)
+        vm.authenticate("usage-local@x.com", "pw123456", register = true); advanceUntilIdle()
+        vm.addChild("Mia"); advanceUntilIdle()
+        val childId = vm.selectedId!!
+
+        vm.loadAppUsage(childId); advanceUntilIdle()
+        val requestCount = api.appUsageRequests.size
+        vm.selectAppUsageDate("2026-06-22")
+
+        assertEquals("2026-06-22", vm.appUsageDate)
+        assertEquals(requestCount, api.appUsageRequests.size)
     }
 
     @Test

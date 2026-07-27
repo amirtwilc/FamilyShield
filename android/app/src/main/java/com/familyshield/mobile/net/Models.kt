@@ -238,6 +238,16 @@ data class AppUsageEntry(
 data class UsageDay(val day: String, val dow: String, val min: Int, val hasData: Boolean = false)
 
 @Serializable
+data class AppUsageDayDetail(
+    val day: String,
+    val totalMin: Int = 0,
+    val previousMin: Int = 0,
+    val previousHasData: Boolean = false,
+    val apps: List<AppUsageEntry> = emptyList(),
+    val lastUpdatedAt: String? = null,
+)
+
+@Serializable
 data class AppUsageSummary(
     val selectedDay: String? = null,
     val totalTodayMin: Int = 0,
@@ -245,6 +255,7 @@ data class AppUsageSummary(
     val yesterdayHasData: Boolean = false,
     val avgWeekMin: Int = 0,
     val week: List<UsageDay> = emptyList(),
+    val dayDetails: List<AppUsageDayDetail> = emptyList(),
     val apps: List<AppUsageEntry> = emptyList(),
     val lastUpdatedAt: String? = null,
     val appUsageAccessGranted: Boolean? = null,

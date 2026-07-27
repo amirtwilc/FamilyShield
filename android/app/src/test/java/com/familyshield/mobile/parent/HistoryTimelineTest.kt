@@ -8,6 +8,7 @@ import com.familyshield.mobile.net.RouteTrip
 import com.familyshield.mobile.net.Zone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
@@ -29,6 +30,7 @@ class HistoryTimelineTest {
         assertEquals("2026-07-26T12:00:00Z", stays.single().endAt)
         assertEquals(3, stays.single().pointCount)
         assertEquals("Home", stays.single().zoneName)
+        assertEquals(listOf(Geo(32.0, 34.0), Geo(32.00015, 34.0001), Geo(32.0002, 34.0002)), stays.single().nameCandidates)
     }
 
     @Test
@@ -102,6 +104,29 @@ class HistoryTimelineTest {
             lastAt = "2026-07-26T09:20:00Z", avgMinutes = 20.0, avgKm = 2.8)
 
         assertEquals(setOf("2026-07-26"), routeOccurrenceDays(listOf(trip(Geo(32.02, 34.02), Geo(32.0, 34.0), "2026-07-26T09:00:00Z")), route))
+    }
+
+    @Test
+    fun `walk loop without a five minute pause becomes movement but not a filtered route`() {
+        val points = listOf(
+            point(32.0000, 34.0000, "2026-07-26T08:00:00Z"),
+            point(32.0001, 34.0001, "2026-07-26T08:06:00Z"),
+            point(32.0020, 34.0020, "2026-07-26T08:08:00Z"),
+            point(32.0040, 34.0040, "2026-07-26T08:10:00Z"),
+            point(32.0020, 34.0020, "2026-07-26T08:12:00Z"),
+            point(32.0001, 34.0001, "2026-07-26T08:15:00Z"),
+            point(32.0000, 34.0000, "2026-07-26T08:21:00Z"),
+        )
+
+        val activities = buildHistoryActivities(points, trips = emptyList(), zones = emptyList(), selectedDate = "2026-07-26")
+        val routeFilter = FrequentRoute(Geo(32.0, 34.0), Geo(32.02, 34.02), count = 2,
+            lastAt = "2026-07-26T09:20:00Z", avgMinutes = 20.0, avgKm = 2.8)
+        val filteredActivities = buildHistoryActivities(points, trips = emptyList(), zones = emptyList(), selectedDate = "2026-07-26", selectedRoute = routeFilter)
+
+        assertEquals(3, activities.size)
+        assertEquals(1, activities.count { it is HistoryMovementActivity })
+        assertTrue((activities.first { it is HistoryMovementActivity } as HistoryMovementActivity).points.size >= 3)
+        assertEquals(emptyList<HistoryActivity>(), filteredActivities)
     }
 
     private fun point(lat: Double, lng: Double, recordedAt: String) =

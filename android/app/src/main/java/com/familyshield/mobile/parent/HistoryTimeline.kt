@@ -12,6 +12,8 @@ import kotlin.math.cos
 internal const val HISTORY_DAY_RANGE_DAYS = 14
 internal const val HISTORY_SIMILAR_LOCATION_RADIUS_M = 75.0
 internal const val HISTORY_ROUTE_MATCH_PROXIMITY_M = 300.0
+internal const val HISTORY_MOVEMENT_PAUSE_MIN = 5.0
+internal const val HISTORY_MOVEMENT_MIN_DISTANCE_M = 250.0
 
 sealed interface HistoryActivity {
     val startAt: String
@@ -25,6 +27,7 @@ data class HistoryStay(
     override val endAt: String,
     val pointCount: Int,
     val zoneName: String? = null,
+    val nameCandidates: List<Geo> = emptyList(),
 ) : HistoryActivity
 
 data class HistoryRouteActivity(
@@ -36,6 +39,25 @@ data class HistoryRouteActivity(
     val points: List<RoutePoint>,
 ) : HistoryActivity
 
+data class HistoryMovementActivity(
+    val from: Geo,
+    val to: Geo,
+    override val startAt: String,
+    override val endAt: String,
+    val points: List<RoutePoint>,
+) : HistoryActivity
+
+private data class HistoryPointGroup(
+    val points: List<HistoryPoint>,
+    val lat: Double,
+    val lng: Double,
+    val startAt: String,
+    val endAt: String,
+) {
+    val dwellMin: Double get() = minutesBetween(startAt, endAt)
+    val isResting: Boolean get() = dwellMin >= HISTORY_MOVEMENT_PAUSE_MIN
+}
+
 fun groupHistoryStays(
     points: List<HistoryPoint>,
     zones: List<Zone>,
@@ -43,39 +65,9 @@ fun groupHistoryStays(
 ): List<HistoryStay> {
     if (points.isEmpty()) return emptyList()
 
-    val groups = mutableListOf<MutableList<HistoryPoint>>()
-    points.sortedBy { it.recordedAt }.forEach { point ->
-        val current = groups.lastOrNull()
-        if (current == null) {
-            groups += mutableListOf(point)
-            return@forEach
-        }
-
-        val centerLat = current.sumOf { it.lat } / current.size
-        val centerLng = current.sumOf { it.lng } / current.size
-        if (distanceMeters(centerLat, centerLng, point.lat, point.lng) <= similarLocationRadiusM) {
-            current += point
-        } else {
-            groups += mutableListOf(point)
-        }
-    }
-
-    return groups.map { group ->
-        val lat = group.sumOf { it.lat } / group.size
-        val lng = group.sumOf { it.lng } / group.size
-        val zoneName = zones
-            .filter { distanceMeters(lat, lng, it.lat, it.lng) <= it.radiusM }
-            .minByOrNull { it.radiusM }
-            ?.name
-        HistoryStay(
-            lat = lat,
-            lng = lng,
-            startAt = group.first().recordedAt,
-            endAt = group.last().recordedAt,
-            pointCount = group.size,
-            zoneName = zoneName,
-        )
-    }.asReversed()
+    return buildHistoryPointGroups(points, similarLocationRadiusM)
+        .map { it.toStay(zones) }
+        .asReversed()
 }
 
 fun buildHistoryActivities(
@@ -92,10 +84,106 @@ fun buildHistoryActivities(
 
     val tripIntervals = dayTrips.map { it.departAt to it.arriveAt }
     val stayPoints = points.filterNot { point -> tripIntervals.any { (start, end) -> point.recordedAt >= start && point.recordedAt <= end } }
-    val stays: List<HistoryActivity> = groupHistoryStays(stayPoints, zones)
+    val stays: List<HistoryActivity> = buildStayAndMovementActivities(stayPoints, zones)
     val routes: List<HistoryActivity> = dayTrips.map { it.toActivity() }
     return (stays + routes)
         .sortedByDescending { it.endAt }
+}
+
+private fun buildStayAndMovementActivities(points: List<HistoryPoint>, zones: List<Zone>): List<HistoryActivity> {
+    val groups = buildHistoryPointGroups(points, HISTORY_SIMILAR_LOCATION_RADIUS_M)
+    if (groups.isEmpty()) return emptyList()
+    val activities = mutableListOf<HistoryActivity>()
+    val movement = mutableListOf<HistoryPointGroup>()
+
+    fun flushMovement() {
+        if (movement.isEmpty()) return
+        val movementActivity = movement.toMovementActivity()
+        if (movementActivity != null) {
+            activities += movementActivity
+        } else {
+            activities += movement.map { it.toStay(zones) }
+        }
+        movement.clear()
+    }
+
+    groups.forEach { group ->
+        if (group.isResting) {
+            flushMovement()
+            activities += group.toStay(zones)
+        } else {
+            movement += group
+        }
+    }
+    flushMovement()
+    return activities.sortedByDescending { it.endAt }
+}
+
+private fun buildHistoryPointGroups(points: List<HistoryPoint>, similarLocationRadiusM: Double): List<HistoryPointGroup> {
+    val groups = mutableListOf<MutableList<HistoryPoint>>()
+    points.sortedBy { it.recordedAt }.forEach { point ->
+        val current = groups.lastOrNull()
+        if (current == null) {
+            groups += mutableListOf(point)
+            return@forEach
+        }
+
+        val centerLat = current.sumOf { it.lat } / current.size
+        val centerLng = current.sumOf { it.lng } / current.size
+        if (distanceMeters(centerLat, centerLng, point.lat, point.lng) <= similarLocationRadiusM) {
+            current += point
+        } else {
+            groups += mutableListOf(point)
+        }
+    }
+    return groups.map { group ->
+        HistoryPointGroup(
+            points = group,
+            lat = group.sumOf { it.lat } / group.size,
+            lng = group.sumOf { it.lng } / group.size,
+            startAt = group.first().recordedAt,
+            endAt = group.last().recordedAt,
+        )
+    }
+}
+
+private fun HistoryPointGroup.toStay(zones: List<Zone>): HistoryStay {
+    val zoneName = zones
+        .filter { distanceMeters(lat, lng, it.lat, it.lng) <= it.radiusM }
+        .minByOrNull { it.radiusM }
+        ?.name
+    return HistoryStay(
+        lat = lat,
+        lng = lng,
+        startAt = startAt,
+        endAt = endAt,
+        pointCount = points.size,
+        zoneName = zoneName,
+        nameCandidates = points.nameCandidates(),
+    )
+}
+
+private fun List<HistoryPointGroup>.toMovementActivity(): HistoryMovementActivity? {
+    val movementPoints = flatMap { it.points }.sortedBy { it.recordedAt }
+    if (movementPoints.size < 2) return null
+    val distanceM = pathDistanceMeters(movementPoints)
+    if (distanceM < HISTORY_MOVEMENT_MIN_DISTANCE_M) return null
+    val first = movementPoints.first()
+    val last = movementPoints.last()
+    return HistoryMovementActivity(
+        from = Geo(first.lat, first.lng),
+        to = Geo(last.lat, last.lng),
+        startAt = first.recordedAt,
+        endAt = last.recordedAt,
+        points = movementPoints.map { RoutePoint(it.lat, it.lng, it.recordedAt) },
+    )
+}
+
+private fun List<HistoryPoint>.nameCandidates(): List<Geo> {
+    if (isEmpty()) return emptyList()
+    return listOf(first(), this[size / 2], last())
+        .distinctBy { "%.6f,%.6f".format(it.lat, it.lng) }
+        .map { Geo(it.lat, it.lng) }
 }
 
 fun routeMatchesFrequentRoute(trip: RouteTrip, route: FrequentRoute, proximityM: Double = HISTORY_ROUTE_MATCH_PROXIMITY_M): Boolean {
@@ -138,6 +226,15 @@ private fun RouteTrip.toActivity(): HistoryRouteActivity {
 
 private fun LocalDate.coerceAtLeast(minimum: LocalDate): LocalDate =
     if (isBefore(minimum)) minimum else this
+
+private fun pathDistanceMeters(points: List<HistoryPoint>): Double {
+    if (points.size < 2) return 0.0
+    return points.zipWithNext().sumOf { (a, b) -> distanceMeters(a.lat, a.lng, b.lat, b.lng) }
+}
+
+private fun minutesBetween(startAt: String, endAt: String): Double =
+    (java.time.OffsetDateTime.parse(endAt).toInstant().toEpochMilli() -
+        java.time.OffsetDateTime.parse(startAt).toInstant().toEpochMilli()) / 60_000.0
 
 private fun distanceMeters(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
     val dLat = Math.toRadians(bLat - aLat)
