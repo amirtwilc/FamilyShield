@@ -34,8 +34,8 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
         if (data["type"] != CHAT_PUSH_TYPE) return
         showChatPushNotification(
             this,
-            message.notification?.title,
-            message.notification?.body,
+            chatPushTitle(data, message.notification?.title),
+            chatPushBody(data, message.notification?.body),
             data,
         )
     }
@@ -58,3 +58,9 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
         }
     }
 }
+
+internal fun chatPushTitle(data: Map<String, String>, notificationTitle: String?): String? =
+    data["title"]?.takeIf { it.isNotBlank() } ?: notificationTitle
+
+internal fun chatPushBody(data: Map<String, String>, notificationBody: String?): String? =
+    data["body"]?.takeIf { it.isNotBlank() } ?: notificationBody

@@ -96,4 +96,29 @@ describe('locations ingestion', () => {
     const parentAlerts = await listAlerts(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
     expect((await parentAlerts.json()).alerts).toHaveLength(0);
   });
+
+  it('does not send opposite safe-zone notifications from one location batch', async () => {
+    const p = await seedParent();
+    const c = await seedChild(p.id);
+    const { token } = await seedDevice(c.id);
+    const ptok = await signAccess(p.id);
+    const ctx = { params: Promise.resolve({ id: c.id }) };
+
+    await createZone(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${ptok}` },
+      body: JSON.stringify({ name: 'Home', lat: 32.0, lng: 34.0, radiusM: 500 }),
+    }), ctx);
+
+    const at = (min: number) => recordedAt(60 + min);
+    await upload(post(token, {
+      points: [
+        { lat: 32.01, lng: 34.0, recorded_at: at(0) },
+        { lat: 32.001, lng: 34.0, recorded_at: at(5) },
+        { lat: 32.01, lng: 34.0, recorded_at: at(10) },
+      ],
+    }));
+
+    const parentAlerts = await listAlerts(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
+    expect((await parentAlerts.json()).alerts).toHaveLength(0);
+  });
 });

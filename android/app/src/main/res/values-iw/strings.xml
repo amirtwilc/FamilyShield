@@ -298,12 +298,15 @@
     <string name="kid_edit_parent_name_save">שמירת השם</string>
     <string name="kid_find_code">איפה מוצאים את הקוד?</string>
     <string name="kid_monitoring_disclosure_title">המכשיר הזה יהיה במעקב</string>
-    <string name="kid_monitoring_disclosure_body">הורים מקושרים יכולים לראות את מיקום הטלפון, הסוללה/המצב, השימוש באפליקציות וההודעות.</string>
+    <string name="kid_monitoring_disclosure_body">הורים מקושרים יכולים לראות את מיקום הטלפון ואת מצב הסוללה.</string>
     <string name="kid_monitored_by">במעקב של</string>
     <string name="kid_monitors_loading">טוען פרטי מעקב...</string>
     <string name="kid_pair_another_parent">צימוד הורה נוסף</string>
     <string name="kid_monitoring_notification_title">מעקב FamilyShield פעיל</string>
-    <string name="kid_monitoring_notification_body">הורים מקושרים יכולים לראות את מיקום המכשיר, הסוללה/המצב, השימוש באפליקציות וההודעות.</string>
+    <string name="kid_monitoring_notification_body">הורים מקושרים יכולים לראות את מיקום הטלפון ואת מצב הסוללה.</string>
+    <string name="kid_monitoring_notification_body_app_usage">הורים מקושרים יכולים לראות את מיקום הטלפון, את מצב הסוללה ואת השימוש באפליקציות.</string>
+    <string name="kid_monitoring_notification_body_dnd">הורים מקושרים יכולים לראות את מיקום הטלפון ואת מצב הסוללה, ויכולים לעקוף את מצב ״נא לא להפריע״.</string>
+    <string name="kid_monitoring_notification_body_app_usage_dnd">הורים מקושרים יכולים לראות את מיקום הטלפון, את מצב הסוללה ואת השימוש באפליקציות, ויכולים לעקוף את מצב ״נא לא להפריע״.</string>
     <string name="kid_privacy_label">פרטיות</string>
     <string name="kid_privacy_title">מנהרה מאובטחת פעילה</string>
     <string name="kid_sync_label">סנכרון</string>

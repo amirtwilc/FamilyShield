@@ -69,6 +69,11 @@ object Locales {
     }
 }
 
+internal fun localeChangeRequiresActivityRecreation(
+    attachedLanguageTag: String,
+    selectedLanguageTag: String,
+): Boolean = attachedLanguageTag != selectedLanguageTag
+
 fun Context.findActivity(): Activity? {
     var ctx: Context? = this
     while (ctx is ContextWrapper) {

@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import { devices } from '@/db/schema';
 import { ensureLocationPartition } from '@/db/partitions';
 import { requireDevice } from '@/lib/auth/device';
-import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
+import { fireLowBatteryIfNeeded, fireSafeZoneTransitionsForBatch } from '@/lib/alerts/engine';
 import { ok } from '@/lib/http';
 import { parseBody } from '@/lib/validate';
 import { deviceTelemetrySchema } from '@/lib/schemas/telemetry';
@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     const months = new Set(locationPoints.map((pt) => pt.recorded_at.slice(0, 7)));
     for (const ym of months) await ensureLocationPartition(new Date(`${ym}-01T00:00:00Z`));
 
+    const insertedPoints: Array<{ lat: number; lng: number; recordedAt: string }> = [];
     for (const pt of locationPoints) {
       const r = await db.execute(sql`
         INSERT INTO locations (device_id, geom, speed, accuracy, battery_level, recorded_at)
@@ -50,9 +51,10 @@ export async function POST(req: Request) {
         ON CONFLICT (device_id, recorded_at) DO NOTHING`);
       locationInserted += r.rowCount ?? 0;
       if ((r.rowCount ?? 0) > 0) {
-        await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+        insertedPoints.push({ lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
       }
     }
+    await fireSafeZoneTransitionsForBatch({ device: a.device, points: insertedPoints });
 
     const latest = locationPoints.reduce((a, b) => (a.recorded_at >= b.recorded_at ? a : b));
     await db.execute(sql`

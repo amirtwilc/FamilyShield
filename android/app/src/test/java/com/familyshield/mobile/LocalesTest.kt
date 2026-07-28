@@ -15,4 +15,19 @@ class LocalesTest {
     fun englishLocaleIsLtr() {
         assertFalse(Locales.isRtl(Locale.forLanguageTag("en")))
     }
+
+    @Test
+    fun switchingFromEnglishToHebrewRequiresActivityRecreation() {
+        assertTrue(localeChangeRequiresActivityRecreation("en", "he"))
+    }
+
+    @Test
+    fun switchingFromHebrewToEnglishRequiresActivityRecreation() {
+        assertTrue(localeChangeRequiresActivityRecreation("he", "en"))
+    }
+
+    @Test
+    fun keepingTheAttachedLanguageDoesNotRecreateActivity() {
+        assertFalse(localeChangeRequiresActivityRecreation("he", "he"))
+    }
 }

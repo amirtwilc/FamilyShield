@@ -41,10 +41,12 @@ import java.io.File
 
 class MainActivity : FragmentActivity() {
     private val pendingChatDestination = mutableStateOf<ChatPushDestination?>(null)
+    private var attachedLanguageTag = ""
 
     // Apply the saved language (English/Hebrew) before any resources are resolved.
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(Locales.wrap(newBase))
+        attachedLanguageTag = Locales.saved(newBase)
+        super.attachBaseContext(Locales.wrap(newBase, attachedLanguageTag))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +65,11 @@ class MainActivity : FragmentActivity() {
         configureOpenStreetMap()
         setContent {
             val languageTag = Locales.currentTag
+            LaunchedEffect(languageTag) {
+                if (localeChangeRequiresActivityRecreation(attachedLanguageTag, languageTag)) {
+                    recreate()
+                }
+            }
             val localizedContext = remember(languageTag) { Locales.wrap(this@MainActivity, languageTag) }
             val layoutDirection = if (Locales.isRtl(Locales.resolveLocale(this@MainActivity, languageTag))) {
                 LayoutDirection.Rtl

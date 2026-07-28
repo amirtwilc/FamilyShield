@@ -14,6 +14,8 @@ class ChatPushNotificationsTest {
                 "childId" to "child-1",
                 "parentId" to "parent-1",
                 "messageId" to "message-1",
+                "title" to "New message from Mia",
+                "body" to "I am on the bus",
             ),
         )
 
@@ -37,6 +39,23 @@ class ChatPushNotificationsTest {
     @Test
     fun `ignores non-chat push data`() {
         assertEquals(null, chatPushDestinationFromData(mapOf("type" to "low_battery")))
+    }
+
+    @Test
+    fun `uses title and message text from a data-only chat push`() {
+        val data = mapOf(
+            "title" to "New message from Mia",
+            "body" to "I am on the bus",
+        )
+
+        assertEquals("New message from Mia", chatPushTitle(data, null))
+        assertEquals("I am on the bus", chatPushBody(data, null))
+    }
+
+    @Test
+    fun `falls back to notification content for legacy chat pushes`() {
+        assertEquals("Legacy title", chatPushTitle(emptyMap(), "Legacy title"))
+        assertEquals("Legacy body", chatPushBody(emptyMap(), "Legacy body"))
     }
 
     @Test

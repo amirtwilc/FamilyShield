@@ -296,12 +296,15 @@
     <string name="kid_edit_parent_name_save">Save name</string>
     <string name="kid_find_code">Where do I find the code?</string>
     <string name="kid_monitoring_disclosure_title">This device will be monitored</string>
-    <string name="kid_monitoring_disclosure_body">Linked parents can see this phone\'s location, battery/status, app usage, and messages.</string>
+    <string name="kid_monitoring_disclosure_body">Linked parents can see this phone\'s location and battery status.</string>
     <string name="kid_monitored_by">Monitored by</string>
     <string name="kid_monitors_loading">Loading monitoring details...</string>
     <string name="kid_pair_another_parent">Pair another parent</string>
     <string name="kid_monitoring_notification_title">FamilyShield monitoring active</string>
-    <string name="kid_monitoring_notification_body">Linked parents can see this device\'s location, battery/status, app usage, and messages.</string>
+    <string name="kid_monitoring_notification_body">Linked parents can see this phone\'s location and battery status.</string>
+    <string name="kid_monitoring_notification_body_app_usage">Linked parents can see this phone\'s location, battery status, and app usage.</string>
+    <string name="kid_monitoring_notification_body_dnd">Linked parents can see this phone\'s location and battery status, and can bypass Do Not Disturb mode.</string>
+    <string name="kid_monitoring_notification_body_app_usage_dnd">Linked parents can see this phone\'s location, battery status, and app usage, and can bypass Do Not Disturb mode.</string>
     <string name="kid_privacy_label">PRIVACY</string>
     <string name="kid_privacy_title">Secure Tunnel Enabled</string>
     <string name="kid_sync_label">SYNC</string>

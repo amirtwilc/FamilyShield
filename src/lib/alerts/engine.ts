@@ -63,6 +63,12 @@ type ZoneTransitionInput = {
   recordedAt: string;
 };
 
+type ZoneTransitionPoint = {
+  lat: number;
+  lng: number;
+  recordedAt: string;
+};
+
 type ZoneProbeRow = {
   id: string;
   parent_id: string;
@@ -71,6 +77,13 @@ type ZoneProbeRow = {
   notify_on_enter: boolean;
   notify_on_exit: boolean;
   is_inside: boolean;
+};
+
+type ZoneObservation = ZoneProbeRow & ZoneTransitionPoint;
+
+type ZoneTransition = {
+  type: 'safe_zone_enter' | 'safe_zone_exit';
+  observation: ZoneObservation;
 };
 
 async function fireSafeZoneAlert(
@@ -99,39 +112,72 @@ async function fireSafeZoneAlert(
   }
 }
 
-export async function fireSafeZoneTransitions({ device, lat, lng, recordedAt }: ZoneTransitionInput): Promise<void> {
+async function probeSafeZoneObservations(device: Device, point: ZoneTransitionPoint): Promise<ZoneObservation[]> {
   const probe = await db.execute(sql`
     SELECT z.id, z.parent_id, z.name, z.radius_m, z.notify_on_enter, z.notify_on_exit,
       ST_DWithin(
         z.center::geography,
-        ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
+        ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography,
         z.radius_m
       ) AS is_inside
     FROM safe_zones z
     INNER JOIN child_parent_links l ON l.parent_id = z.parent_id AND l.child_id = ${device.childId}
     WHERE z.active = true`);
 
-  const transitionAt = new Date(recordedAt);
-  for (const row of probe.rows as ZoneProbeRow[]) {
+  return (probe.rows as ZoneProbeRow[]).map((row) => ({ ...row, ...point }));
+}
+
+export async function fireSafeZoneTransitions({ device, lat, lng, recordedAt }: ZoneTransitionInput): Promise<void> {
+  await fireSafeZoneTransitionsForBatch({ device, points: [{ lat, lng, recordedAt }] });
+}
+
+export async function fireSafeZoneTransitionsForBatch({
+  device,
+  points,
+}: {
+  device: Device;
+  points: ZoneTransitionPoint[];
+}): Promise<void> {
+  const orderedPoints = [...points].sort((left, right) =>
+    Date.parse(left.recordedAt) - Date.parse(right.recordedAt));
+  if (orderedPoints.length === 0) return;
+
+  const observationsByZone = new Map<string, ZoneObservation[]>();
+  for (const point of orderedPoints) {
+    for (const observation of await probeSafeZoneObservations(device, point)) {
+      const key = `${observation.parent_id}:${observation.id}`;
+      const observations = observationsByZone.get(key) ?? [];
+      observations.push(observation);
+      observationsByZone.set(key, observations);
+    }
+  }
+
+  const transitions: ZoneTransition[] = [];
+  for (const observations of observationsByZone.values()) {
+    const first = observations[0]!;
     const transition = await db.transaction(async (tx) => {
+      const latest = observations[observations.length - 1]!;
+      const latestAt = new Date(latest.recordedAt);
       const inserted = await tx.insert(safeZoneStates).values({
-        parentId: row.parent_id,
+        parentId: first.parent_id,
         childId: device.childId,
-        zoneId: row.id,
-        isInside: row.is_inside,
-        lastTransitionAt: row.is_inside ? transitionAt : null,
-        lastObservedAt: transitionAt,
+        zoneId: first.id,
+        isInside: latest.is_inside,
+        lastTransitionAt: latest.is_inside ? latestAt : null,
+        lastObservedAt: latestAt,
       }).onConflictDoNothing().returning({ id: safeZoneStates.id });
       if (inserted.length > 0) {
-        return row.is_inside && row.notify_on_enter ? 'safe_zone_enter' as const : null;
+        return latest.is_inside && latest.notify_on_enter
+          ? { type: 'safe_zone_enter' as const, observation: latest }
+          : null;
       }
 
       const locked = await tx.execute(sql`
         SELECT id, is_inside, last_observed_at
         FROM safe_zone_states
-        WHERE parent_id = ${row.parent_id}
+        WHERE parent_id = ${first.parent_id}
           AND child_id = ${device.childId}
-          AND zone_id = ${row.id}
+          AND zone_id = ${first.id}
         FOR UPDATE`);
       const state = locked.rows[0] as {
         id: string;
@@ -139,33 +185,71 @@ export async function fireSafeZoneTransitions({ device, lat, lng, recordedAt }: 
         last_observed_at: Date | string | null;
       };
       const lastObservedAt = state.last_observed_at ? new Date(state.last_observed_at) : null;
-      if (lastObservedAt && transitionAt <= lastObservedAt) return null;
+      const newObservations = lastObservedAt
+        ? observations.filter((observation) => new Date(observation.recordedAt) > lastObservedAt)
+        : observations;
+      if (newObservations.length === 0) return null;
 
-      if (state.is_inside === row.is_inside) {
+      const newLatest = newObservations[newObservations.length - 1]!;
+      const newLatestAt = new Date(newLatest.recordedAt);
+
+      if (state.is_inside === newLatest.is_inside) {
         await tx.update(safeZoneStates).set({
-          lastObservedAt: transitionAt,
+          lastObservedAt: newLatestAt,
           updatedAt: new Date(),
         }).where(eq(safeZoneStates.id, state.id));
         return null;
       }
 
       await tx.update(safeZoneStates).set({
-        isInside: row.is_inside,
-        lastTransitionAt: transitionAt,
-        lastObservedAt: transitionAt,
+        isInside: newLatest.is_inside,
+        lastTransitionAt: newLatestAt,
+        lastObservedAt: newLatestAt,
         updatedAt: new Date(),
       }).where(eq(safeZoneStates.id, state.id));
-      if (row.is_inside && row.notify_on_enter) return 'safe_zone_enter' as const;
-      if (!row.is_inside && row.notify_on_exit) return 'safe_zone_exit' as const;
+      if (newLatest.is_inside && newLatest.notify_on_enter) {
+        return { type: 'safe_zone_enter' as const, observation: newLatest };
+      }
+      if (!newLatest.is_inside && newLatest.notify_on_exit) {
+        return { type: 'safe_zone_exit' as const, observation: newLatest };
+      }
       return null;
     });
 
-    if (transition === 'safe_zone_enter') {
-      await fireSafeZoneAlert(device, row, 'safe_zone_enter', lat, lng);
-    } else if (transition === 'safe_zone_exit') {
-      await fireSafeZoneAlert(device, row, 'safe_zone_exit', lat, lng);
-    }
+    if (transition) transitions.push(transition);
   }
+
+  for (const transition of resolveSafeZoneBatchNotifications(transitions)) {
+    await fireSafeZoneAlert(
+      device,
+      transition.observation,
+      transition.type,
+      transition.observation.lat,
+      transition.observation.lng,
+    );
+  }
+}
+
+function resolveSafeZoneBatchNotifications(transitions: ZoneTransition[]): ZoneTransition[] {
+  const byParent = new Map<string, ZoneTransition[]>();
+  for (const transition of transitions) {
+    const parentTransitions = byParent.get(transition.observation.parent_id) ?? [];
+    parentTransitions.push(transition);
+    byParent.set(transition.observation.parent_id, parentTransitions);
+  }
+
+  const resolved: ZoneTransition[] = [];
+  for (const parentTransitions of byParent.values()) {
+    const hasEnter = parentTransitions.some((transition) => transition.type === 'safe_zone_enter');
+    const hasExit = parentTransitions.some((transition) => transition.type === 'safe_zone_exit');
+    // A single uploaded batch can include locally sampled points from both sides of
+    // a trip. When that creates opposite zone notifications for the same parent,
+    // prefer the final entered zone(s) so the parent sees where the child ended up.
+    resolved.push(...(hasEnter && hasExit
+      ? parentTransitions.filter((transition) => transition.type === 'safe_zone_enter')
+      : parentTransitions));
+  }
+  return resolved;
 }
 
 export async function fireLowBatteryIfNeeded(device: Device): Promise<void> {

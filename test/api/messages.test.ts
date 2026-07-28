@@ -155,6 +155,8 @@ describe('parent ⇄ kid chat', () => {
         parentId: p.id,
         messageId: sent.id,
         parentName: 'Mom',
+        title: 'New message from Mom',
+        body: 'Please call me',
       }),
     })]);
   });
@@ -184,6 +186,9 @@ describe('parent ⇄ kid chat', () => {
         childId: c.id,
         parentId: p.id,
         messageId: sent.id,
+        childName: 'Liam',
+        title: 'New message from Liam',
+        body: 'I am on the bus',
       }),
     })]);
   });

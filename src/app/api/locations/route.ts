@@ -6,7 +6,7 @@ import { requireDevice } from '@/lib/auth/device';
 import { parseBody } from '@/lib/validate';
 import { ok } from '@/lib/http';
 import { ensureLocationPartition } from '@/db/partitions';
-import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
+import { fireLowBatteryIfNeeded, fireSafeZoneTransitionsForBatch } from '@/lib/alerts/engine';
 import { locationBatch } from '@/lib/schemas/locations';
 
 export const runtime = 'nodejs';
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
   let inserted = 0;
   const points = [...p.data.points].sort((left, right) =>
     Date.parse(left.recorded_at) - Date.parse(right.recorded_at));
+  const insertedPoints: Array<{ lat: number; lng: number; recordedAt: string }> = [];
   for (const pt of points) {
     const r = await db.execute(sql`
       INSERT INTO locations (device_id, geom, speed, accuracy, battery_level, recorded_at)
@@ -31,9 +32,10 @@ export async function POST(req: Request) {
       ON CONFLICT (device_id, recorded_at) DO NOTHING`);
     inserted += r.rowCount ?? 0;
     if ((r.rowCount ?? 0) > 0) {
-      await fireSafeZoneTransitions({ device: a.device, lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
+      insertedPoints.push({ lat: pt.lat, lng: pt.lng, recordedAt: pt.recorded_at });
     }
   }
+  await fireSafeZoneTransitionsForBatch({ device: a.device, points: insertedPoints });
 
   // denormalize latest point
   const latest = points[points.length - 1]!;

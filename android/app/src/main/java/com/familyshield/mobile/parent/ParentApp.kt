@@ -70,6 +70,7 @@ import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -397,12 +398,12 @@ private fun ParentShell(
     LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     val scope = rememberCoroutineScope()
     val tabs = Tab.entries
-    var tab by remember { mutableStateOf(Tab.Dashboard) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Dashboard) }
     var dragTarget by remember { mutableStateOf<Tab?>(null) }
     var dragging by remember { mutableStateOf(false) }
     var dragOffsetPx by remember { mutableStateOf(0f) }
     val sectionOffset = remember { Animatable(0f) }
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var appUsageFor by remember { mutableStateOf<String?>(null) }
     var showAllAlerts by remember { mutableStateOf(false) }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
@@ -450,8 +451,15 @@ private fun ParentShell(
         showSettings = false
         appUsageFor = null
         showAllAlerts = false
+        dragging = false
+        dragOffsetPx = 0f
+        dragTarget = null
+        sectionOffset.snapTo(0f)
+        // A notification destination must become visible synchronously. Going
+        // through openTab's animation left the old Dashboard state active long
+        // enough for the chat lifecycle effect to close the new conversation.
+        tab = Tab.Chat
         vm.openChat(destination.childId)
-        openTab(Tab.Chat)
         onChatDestinationConsumed(destination)
     }
 

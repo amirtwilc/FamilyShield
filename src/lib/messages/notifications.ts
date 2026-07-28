@@ -26,14 +26,18 @@ function pushError(error: unknown): Record<string, string | undefined> {
 
 async function sendSafely(token: string, title: string, body: string, data: Record<string, string>): Promise<boolean> {
   try {
-    const sent = await getSender().send(token, title, notificationBody(body), data, CHAT_PUSH_OPTIONS);
+    const displayBody = notificationBody(body);
+    // Chat pushes are data-only so Android can always build the notification and
+    // attach the correct conversation intent, including while the app is backgrounded.
+    const pushData: Record<string, string> = { ...data, title, body: displayBody };
+    const sent = await getSender().send(token, title, displayBody, pushData, CHAT_PUSH_OPTIONS);
     if (!sent) {
       console.warn('[push] Chat notification was not sent', {
-        type: data.type,
-        recipient: data.recipient,
-        childId: data.childId,
-        parentId: data.parentId,
-        messageId: data.messageId,
+        type: pushData.type,
+        recipient: pushData.recipient,
+        childId: pushData.childId,
+        parentId: pushData.parentId,
+        messageId: pushData.messageId,
       });
     }
     return sent;
@@ -105,5 +109,6 @@ export async function notifyParentMessageFromChild(
     parentId,
     messageId,
     recipient: 'parent',
+    childName: row.childName,
   });
 }

@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -123,7 +124,7 @@ fun KidApp(
 ) {
     val context = LocalContext.current
     var hadDeviceToken by remember { mutableStateOf(vm.deviceToken != null) }
-    var settingsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var chatMonitor by remember { mutableStateOf<Monitor?>(null) }
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val backgroundLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
