@@ -2913,11 +2913,17 @@ private fun millisUntilNextLocalMidnight(): Long {
 }
 
 private fun openDialer(context: Context, phoneNumber: String): Boolean {
-    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(phoneNumber)}"))
-    return runCatching {
-        context.startActivity(intent)
-        true
-    }.getOrDefault(false)
+    val phoneUri = Uri.fromParts("tel", phoneNumber.trim(), null)
+    val candidates = listOf(
+        Intent(Intent.ACTION_DIAL, phoneUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        Intent(Intent.ACTION_VIEW, phoneUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+    return candidates.any { intent ->
+        runCatching {
+            context.startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
 }
 
 private fun ago(iso: String): String = try {
