@@ -5,7 +5,7 @@ import { POST as sosLocation } from '@/app/api/device/sos/location/route';
 import { GET as parentCurrentSos } from '@/app/api/children/[id]/sos/current/route';
 import { POST as urgentAlert } from '@/app/api/children/[id]/urgent-alert/route';
 import { db } from '@/db/client';
-import { alerts, childParentLinks, devices, messages, parents } from '@/db/schema';
+import { alerts, childParentLinks, devices, messages, parents, sosDailyUsage, sosEvents } from '@/db/schema';
 import { setSender, resetSender, type PushOptions } from '@/lib/alerts/fcm';
 import { signAccess } from '@/lib/auth/jwt';
 import { resetDb } from '../helpers/db';
@@ -41,14 +41,14 @@ describe('kid SOS and urgent alerts', () => {
     const p1 = await seedParent('sos-p1@test.io');
     const p2 = await seedParent('sos-p2@test.io');
     const c = await seedChild(p1.id, 'Mia');
-    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mia', role: 'caregiver' });
+    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mia' });
     const { token: deviceToken } = await seedDevice(c.id);
     const parentToken = await signAccess(p1.id);
 
     const r = await startSos(postDevice(deviceToken, {
       timezone: 'Asia/Jerusalem',
       local_day: '2026-07-26',
-      location: { lat: 32.1, lng: 34.8, recorded_at: '2026-07-26T09:00:00Z', battery_level: 77 },
+      location: { lat: 32.1, lng: 34.8, recorded_at: new Date(Date.now() - 60_000).toISOString(), battery_level: 77 },
     }));
 
     expect(r.status).toBe(201);
@@ -74,6 +74,22 @@ describe('kid SOS and urgent alerts', () => {
     expect(rows.filter((a) => a.type === 'kid_sos_started')).toHaveLength(2);
   });
 
+  it('creates only one active SOS under concurrent start requests', async () => {
+    const p = await seedParent('sos-concurrent@test.io');
+    const c = await seedChild(p.id, 'Mia');
+    const { token } = await seedDevice(c.id);
+    const body = { timezone: 'UTC', local_day: '2026-07-28' };
+
+    const responses = await Promise.all([
+      startSos(postDevice(token, body)),
+      startSos(postDevice(token, body)),
+    ]);
+
+    expect(responses.every((response) => response.status === 201)).toBe(true);
+    expect(await db.select().from(sosEvents).where(eq(sosEvents.childId, c.id))).toHaveLength(1);
+    expect(pushes).toHaveLength(1);
+  });
+
   it('charges SOS high-rate location in 60 second units and caps daily use', async () => {
     process.env.SOS_HIGH_RATE_DAILY_SECONDS = '120';
     process.env.SOS_HIGH_RATE_INTERVAL_SECONDS = '60';
@@ -85,7 +101,12 @@ describe('kid SOS and urgent alerts', () => {
     const point = (minute: number) => ({
       timezone: 'UTC',
       local_day: '2026-07-26',
-      location: { lat: 31 + minute, lng: 35, recorded_at: `2026-07-26T09:0${minute}:00Z`, battery_level: 80 },
+      location: {
+        lat: 31 + minute,
+        lng: 35,
+        recorded_at: new Date(Date.now() - (10 - minute) * 60_000).toISOString(),
+        battery_level: 80,
+      },
     });
 
     const first = await (await sosLocation(postDevice(deviceToken, point(1)))).json();
@@ -98,6 +119,34 @@ describe('kid SOS and urgent alerts', () => {
     expect(second.state.remainingSeconds).toBe(0);
     expect(third.accepted).toBe(false);
     expect(third.reason).toBe('quota_exhausted');
+  });
+
+  it('serializes concurrent SOS quota charges', async () => {
+    process.env.SOS_HIGH_RATE_DAILY_SECONDS = '60';
+    process.env.SOS_HIGH_RATE_INTERVAL_SECONDS = '60';
+    const p = await seedParent('sos-concurrent-quota@test.io');
+    const c = await seedChild(p.id, 'Liam');
+    const { token } = await seedDevice(c.id);
+    await startSos(postDevice(token, { timezone: 'UTC', local_day: '2026-07-28' }));
+    const request = (minute: number) => postDevice(token, {
+      timezone: 'UTC',
+      local_day: '2026-07-28',
+      location: {
+        lat: 31 + minute,
+        lng: 35,
+        recorded_at: new Date(Date.now() - minute * 60_000).toISOString(),
+        battery_level: 80,
+      },
+    });
+
+    const results = await Promise.all([
+      sosLocation(request(1)).then((response) => response.json()),
+      sosLocation(request(2)).then((response) => response.json()),
+    ]);
+
+    expect(results.filter((result) => result.accepted)).toHaveLength(1);
+    const [usage] = await db.select().from(sosDailyUsage).where(eq(sosDailyUsage.childId, c.id));
+    expect(usage.usedSeconds).toBe(60);
   });
 
   it('stores urgent parent alerts as urgent messages and applies cooldown', async () => {

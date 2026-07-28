@@ -21,7 +21,9 @@ export async function POST(req: Request) {
   for (const ym of months) await ensureLocationPartition(new Date(`${ym}-01T00:00:00Z`));
 
   let inserted = 0;
-  for (const pt of p.data.points) {
+  const points = [...p.data.points].sort((left, right) =>
+    Date.parse(left.recorded_at) - Date.parse(right.recorded_at));
+  for (const pt of points) {
     const r = await db.execute(sql`
       INSERT INTO locations (device_id, geom, speed, accuracy, battery_level, recorded_at)
       VALUES (${deviceId}, ST_SetSRID(ST_MakePoint(${pt.lng}, ${pt.lat}), 4326),
@@ -34,13 +36,21 @@ export async function POST(req: Request) {
   }
 
   // denormalize latest point
-  const latest = p.data.points.reduce((a, b) => (a.recorded_at >= b.recorded_at ? a : b));
+  const latest = points[points.length - 1]!;
   await db.execute(sql`
     UPDATE devices SET
-      last_location = ST_SetSRID(ST_MakePoint(${latest.lng}, ${latest.lat}), 4326),
-      last_location_at = ${latest.recorded_at},
+      last_location = CASE
+        WHEN last_location_at IS NULL OR last_location_at < ${latest.recorded_at}
+          THEN ST_SetSRID(ST_MakePoint(${latest.lng}, ${latest.lat}), 4326)
+        ELSE last_location
+      END,
+      last_location_at = GREATEST(last_location_at, ${latest.recorded_at}),
       last_seen_at = now(),
-      battery_level = COALESCE(${latest.battery_level ?? null}, battery_level)
+      battery_level = CASE
+        WHEN last_location_at IS NULL OR last_location_at < ${latest.recorded_at}
+          THEN COALESCE(${latest.battery_level ?? null}, battery_level)
+        ELSE battery_level
+      END
     WHERE id = ${deviceId}`);
 
   const [fresh] = await db.select().from(devices).where(eq(devices.id, deviceId));

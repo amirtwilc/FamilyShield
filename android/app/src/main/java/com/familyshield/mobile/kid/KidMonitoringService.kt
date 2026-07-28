@@ -65,7 +65,7 @@ class KidMonitoringService : Service() {
     private var monitorJob: Job? = null
     private var sosJob: Job? = null
     private var movementLocationUpdates: AndroidTelemetry.LocationUpdatesHandle? = null
-    private val bufferedLocations = mutableListOf<LocationPoint>()
+    private val pendingLocations = PendingLocationBuffer()
 
     override fun onCreate() {
         super.onCreate()
@@ -192,7 +192,7 @@ class KidMonitoringService : Service() {
         val fcmToken = if (optionalFields.fcmToken) kidFcmTokenOrNull() else null
         val battery = telemetry.batteryLevel
         val currentLocation = telemetry.location?.toLocationPoint(battery)
-        val locations = drainBufferedLocations(currentLocation)
+        val locations = pendingLocations.batch(currentLocation)
         val latestLocation = locations.lastOrNull()
         val status = StatusBody(battery, telemetry.isCharging, fcmToken, permissionStatusPayload(this))
         api.sendTelemetry(
@@ -204,6 +204,7 @@ class KidMonitoringService : Service() {
                 appUsage = appUsage,
             ),
         )
+        pendingLocations.acknowledge(locations)
         uploadPolicy.markUploaded(optionalFields, nowMs)
     }
 
@@ -214,27 +215,8 @@ class KidMonitoringService : Service() {
             MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS,
             MOVEMENT_LOCATION_MIN_DISTANCE_M,
         ) { location ->
-            location.toLocationPoint(batteryLevel = null)?.let { bufferLocation(it) }
+            location.toLocationPoint(batteryLevel = null)?.let { pendingLocations.add(it) }
         }
-    }
-
-    private fun bufferLocation(location: LocationPoint) {
-        synchronized(bufferedLocations) {
-            if (bufferedLocations.none { it.recordedAt == location.recordedAt }) {
-                bufferedLocations += location
-            }
-        }
-    }
-
-    private fun drainBufferedLocations(currentLocation: LocationPoint?): List<LocationPoint> {
-        val points = synchronized(bufferedLocations) {
-            val buffered = bufferedLocations.toList()
-            bufferedLocations.clear()
-            buffered
-        } + listOfNotNull(currentLocation)
-        return points
-            .distinctBy { it.recordedAt }
-            .sortedBy { it.recordedAt }
     }
 
     private fun android.location.Location.toLocationPoint(batteryLevel: Int?): LocationPoint? {

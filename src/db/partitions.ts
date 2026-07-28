@@ -1,8 +1,12 @@
 import { sql } from 'drizzle-orm';
 import { db } from './client';
+import { isAcceptableLocationTimestamp } from '../lib/schemas/locations';
 
 /** Creates the monthly partition covering `date` if it does not exist. */
 export async function ensureLocationPartition(date: Date): Promise<void> {
+  if (!Number.isFinite(date.getTime()) || !isAcceptableLocationTimestamp(date.toISOString())) {
+    throw new Error('Refusing to create a location partition outside the accepted telemetry window');
+  }
   const y = date.getUTCFullYear();
   const m = date.getUTCMonth(); // 0-based
   const start = new Date(Date.UTC(y, m, 1));

@@ -5,15 +5,15 @@ import { parseBody } from '@/lib/validate';
 import { ok, err } from '@/lib/http';
 import { bearer, createDeviceToken, deviceFromToken } from '@/lib/auth/device';
 import { pairSchema } from '@/lib/schemas/pair';
-import { memoryLimiter, clientKey, tooMany } from '@/lib/ratelimit';
+import { databaseLimiter, clientKey, tooMany } from '@/lib/ratelimit';
 import { monitoringInfo } from '@/lib/monitoring';
 
 export const runtime = 'nodejs';
 
-const pairLimiter = memoryLimiter(10, 60_000);
+const pairLimiter = databaseLimiter(10, 60_000);
 
 export async function POST(req: Request) {
-  if (!pairLimiter.check(clientKey(req, 'pair')).allowed) return tooMany();
+  if (!(await pairLimiter.check(clientKey(req, 'pair'))).allowed) return tooMany();
   const p = await parseBody(req, pairSchema); if ('response' in p) return p.response;
 
   const existingToken = bearer(req);
@@ -27,6 +27,8 @@ export async function POST(req: Request) {
       WHERE code = ${p.data.code}
         AND consumed_at IS NULL
         AND expires_at > now()
+      ORDER BY expires_at DESC, id DESC
+      LIMIT 1
       FOR UPDATE`);
     const claimed = locked.rows[0] as { id: string; child_id: string; created_by_parent_id: string | null } | undefined;
     if (!claimed) return null;
@@ -72,7 +74,6 @@ export async function POST(req: Request) {
       parentId: sourceLink.parentId,
       displayName: sourceLink.displayName,
       parentDisplayName: p.data.parentDisplayName,
-      role: 'caregiver',
     });
     if (claimed.child_id !== existingDevice.childId) {
       await tx.delete(children).where(eq(children.id, claimed.child_id));

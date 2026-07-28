@@ -2182,8 +2182,8 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
                     vm.loadHistory(d.toString())
                 },
             )
-            val activities = remember(vm.history, vm.trips, vm.zones, selected, selectedRoute) {
-                buildHistoryActivities(vm.history, vm.trips, vm.zones, selected.toString(), selectedRoute)
+            val activities = remember(vm.history, vm.trips, vm.stops, vm.zones, selected, selectedRoute) {
+                buildHistoryActivities(vm.history, vm.trips, vm.stops, vm.zones, selected.toString(), selectedRoute)
             }
             if (activities.isEmpty()) {
                 EmptyCard(Icons.Filled.History, stringResource(R.string.empty_history_title), stringResource(R.string.empty_history_body))

@@ -10,7 +10,6 @@ export async function assertChildOwned(parentId: string, childId: string) {
   if (!UUID_RE.test(childId)) return null;
   const [c] = await db.select({
     id: children.id,
-    parentId: children.parentId,
     displayName: childParentLinks.displayName,
     avatar: children.avatar,
     phoneNumber: children.phoneNumber,

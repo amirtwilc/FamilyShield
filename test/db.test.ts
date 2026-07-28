@@ -14,11 +14,13 @@ describe('db', () => {
   });
 
   it('creates a month partition idempotently', async () => {
-    await ensureLocationPartition(new Date('2026-06-15T00:00:00Z'));
-    await ensureLocationPartition(new Date('2026-06-20T00:00:00Z')); // same month, no error
+    const now = new Date();
+    await ensureLocationPartition(now);
+    await ensureLocationPartition(new Date(now.getTime() + 60_000)); // same month, no error
+    const partition = `locations_${now.getUTCFullYear()}_${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     const r = await db.execute(
-      sql`SELECT to_regclass('public.locations_2026_06') AS t`);
-    expect((r.rows[0] as any).t).toBe('locations_2026_06');
+      sql`SELECT to_regclass(${`public.${partition}`}) AS t`);
+    expect((r.rows[0] as any).t).toBe(partition);
   });
 
   it('seeds a parent', async () => {

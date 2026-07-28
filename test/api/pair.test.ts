@@ -58,6 +58,18 @@ describe('pairing', () => {
     expect(r.status).toBe(400);
   });
 
+  it('enforces uniqueness for all active pairing codes', async () => {
+    const first = await seedParent('unique-code-1@test.io');
+    const second = await seedParent('unique-code-2@test.io');
+    const firstChild = await seedChild(first.id);
+    const secondChild = await seedChild(second.id);
+    await makeCode(firstChild.id, '212121');
+
+    await expect(makeCode(secondChild.id, '212121')).rejects.toMatchObject({
+      cause: { code: '23505' },
+    });
+  });
+
   it('adds a second parent to an already paired child and removes the placeholder child', async () => {
     const p1 = await seedParent('p1_pair@test.io');
     const realChild = await seedChild(p1.id, 'Mia');
@@ -119,7 +131,7 @@ describe('pairing', () => {
     const p1 = await seedParent('remove_p1@test.io');
     const p2 = await seedParent('remove_p2@test.io');
     const c = await seedChild(p1.id, 'Mia');
-    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mimi', role: 'caregiver' });
+    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mimi' });
     const { token: deviceToken } = await seedDevice(c.id);
 
     const removeP2 = await removeMonitor(new Request('http://t/', { method: 'DELETE', headers: { authorization: `Bearer ${deviceToken}` } }),

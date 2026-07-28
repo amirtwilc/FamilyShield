@@ -12,5 +12,6 @@ describe('schema', () => {
     expect(schema.locations).toBeDefined();
     expect(schema.safeZones).toBeDefined();
     expect(schema.alerts).toBeDefined();
+    expect(schema.rateLimitBuckets).toBeDefined();
   });
 });

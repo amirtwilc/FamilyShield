@@ -52,12 +52,11 @@ export const parents = pgTable('parents', {
 
 export const children = pgTable('children', {
   id: uuid('id').primaryKey().defaultRandom(),
-  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
   avatar: text('avatar').notNull().default('fox'),
   phoneNumber: text('phone_number'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({ byParent: index('children_parent_idx').on(t.parentId) }));
+});
 
 export const childParentLinks = pgTable('child_parent_links', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -65,7 +64,6 @@ export const childParentLinks = pgTable('child_parent_links', {
   parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
   parentDisplayName: text('parent_display_name'),
-  role: text('role').notNull().default('caregiver'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   byParent: index('child_parent_links_parent_idx').on(t.parentId),
@@ -101,8 +99,12 @@ export const pairingCodes = pgTable('pairing_codes', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  // Replaced in drizzle/0005 by a partial index on (code) WHERE consumed_at IS NULL.
-}, (t) => ({ activeCode: index('pairing_codes_active_idx').on(t.code) }));
+}, (t) => ({
+  activeCode: uniqueIndex('pairing_codes_active_unique_idx').on(t.code)
+    .where(sql`${t.consumedAt} IS NULL`),
+  byExpiry: index('pairing_codes_expiry_idx').on(t.expiresAt)
+    .where(sql`${t.consumedAt} IS NULL`),
+}));
 
 // NOTE: created as a partitioned table via raw SQL in Task 2's migration.
 // Drizzle definition is for query typing only.
@@ -141,6 +143,7 @@ export const safeZoneStates = pgTable('safe_zone_states', {
   zoneId: uuid('zone_id').notNull().references(() => safeZones.id, { onDelete: 'cascade' }),
   isInside: boolean('is_inside').notNull(),
   lastTransitionAt: timestamp('last_transition_at', { withTimezone: true }),
+  lastObservedAt: timestamp('last_observed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   uniqChildZone: uniqueIndex('safe_zone_states_child_zone_idx').on(t.parentId, t.childId, t.zoneId),
@@ -193,6 +196,8 @@ export const sosEvents = pgTable('sos_events', {
 }, (t) => ({
   byChildStatus: index('sos_events_child_status_idx').on(t.childId, t.status),
   byChildStarted: index('sos_events_child_started_idx').on(t.childId, t.startedAt),
+  oneActivePerChild: uniqueIndex('sos_events_one_active_child_idx').on(t.childId)
+    .where(sql`${t.status} = 'active'`),
 }));
 
 export const sosDailyUsage = pgTable('sos_daily_usage', {
@@ -266,4 +271,13 @@ export const appUsageLimitEvents = pgTable('app_usage_limit_events', {
 }, (t) => ({
   uniqLimitDay: uniqueIndex('app_usage_limit_events_limit_day_idx').on(t.limitId, t.day),
   byParentChild: index('app_usage_limit_events_parent_child_idx').on(t.parentId, t.childId, t.day),
+}));
+
+export const rateLimitBuckets = pgTable('rate_limit_buckets', {
+  keyHash: text('key_hash').primaryKey(),
+  count: integer('count').notNull(),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (t) => ({
+  byExpiry: index('rate_limit_buckets_expiry_idx').on(t.expiresAt),
 }));

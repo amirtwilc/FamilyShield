@@ -22,10 +22,13 @@ export async function POST(req: Request) {
     .innerJoin(children, eq(childParentLinks.childId, children.id))
     .where(eq(childParentLinks.parentId, a.parentId));
   const avatar = p.data.avatar ?? nextAvailableAvatar(existing.map((c) => c.avatar), p.data.displayName);
-  const [row] = await db.insert(children)
-    .values({ parentId: a.parentId, displayName: p.data.displayName, avatar, phoneNumber: p.data.phoneNumber ?? null }).returning();
-  await db.insert(childParentLinks).values({
-    childId: row.id, parentId: a.parentId, displayName: p.data.displayName, role: 'owner',
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(children)
+      .values({ displayName: p.data.displayName, avatar, phoneNumber: p.data.phoneNumber ?? null }).returning();
+    await tx.insert(childParentLinks).values({
+      childId: created.id, parentId: a.parentId, displayName: p.data.displayName,
+    });
+    return created;
   });
   return ok({ ...row, displayName: p.data.displayName }, 201);
 }
@@ -34,7 +37,6 @@ export async function GET(req: Request) {
   const a = await requireParent(req); if ('response' in a) return a.response;
   const kids = await db.select({
     id: children.id,
-    parentId: children.parentId,
     displayName: childParentLinks.displayName,
     avatar: children.avatar,
     phoneNumber: children.phoneNumber,

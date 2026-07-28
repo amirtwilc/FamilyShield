@@ -111,7 +111,7 @@ describe('app usage', () => {
 
   it('creates lists updates and deletes parent-scoped usage limits', async () => {
     const p1 = await seedParent(); const p2 = await seedParent(); const c = await seedChild(p1.id);
-    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Kid', role: 'caregiver' });
+    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Kid' });
     const t1 = await signAccess(p1.id); const t2 = await signAccess(p2.id);
     const ctx = { params: Promise.resolve({ id: c.id }) };
 

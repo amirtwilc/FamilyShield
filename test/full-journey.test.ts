@@ -73,7 +73,7 @@ describe('full parent + kid journey (all features)', () => {
     expect((await pair(post({ code, platform: 'android', parentDisplayName: 'Mom' }))).status).toBe(400);
 
     // 4) LOCATION — kid reports a home→school path (Map + History + Routes screens)
-    const base = new Date(); base.setUTCHours(12, 0, 0, 0);
+    const base = new Date(Date.now() - 30 * 60_000); base.setUTCSeconds(0, 0);
     const at = (min: number) => new Date(base.getTime() + min * 60_000).toISOString();
     const day = base.toISOString().slice(0, 10);
     const HOME = { lat: 32.00, lng: 34.00 }; const SCHOOL = { lat: 32.02, lng: 34.00 };

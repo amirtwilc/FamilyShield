@@ -5,6 +5,7 @@ import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.RouteTrip
+import com.familyshield.mobile.net.Stop
 import com.familyshield.mobile.net.Zone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -121,6 +122,39 @@ class HistoryTimelineTest {
     }
 
     @Test
+    fun `daily timeline uses backend stops as stay rows`() {
+        val home = Geo(50.93009, 6.94149)
+        val gym = Geo(50.934953, 6.974577)
+        val activities = buildHistoryActivities(
+            points = listOf(
+                point(home.lat, home.lng, "2026-07-27T17:05:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T17:24:00Z"),
+                point(gym.lat + 0.002, gym.lng, "2026-07-27T17:38:00Z"),
+                point(gym.lat, gym.lng, "2026-07-27T18:14:00Z"),
+                point(home.lat, home.lng, "2026-07-27T19:20:00Z"),
+            ),
+            trips = listOf(
+                trip(home, gym, "2026-07-27T17:05:00Z"),
+                trip(gym, home, "2026-07-27T19:05:00Z"),
+            ),
+            stops = listOf(
+                stop(home, "2026-07-27T16:00:00Z", "2026-07-27T17:05:00Z"),
+                stop(gym, "2026-07-27T17:24:00Z", "2026-07-27T19:05:00Z"),
+                stop(home, "2026-07-27T19:20:00Z", "2026-07-27T20:06:00Z"),
+            ),
+            zones = listOf(Zone("home", "Home", home.lat, home.lng, radiusM = 100)),
+            selectedDate = "2026-07-27",
+        )
+
+        val stays = activities.filterIsInstance<HistoryStay>()
+
+        assertEquals(3, stays.size)
+        assertTrue(stays.any { it.zoneName == "Home" && it.startAt == "2026-07-27T19:20:00Z" && it.endAt == "2026-07-27T20:06:00Z" })
+        assertTrue(stays.any { abs(it.lat - gym.lat) < 0.001 && it.startAt == "2026-07-27T17:24:00Z" && it.endAt == "2026-07-27T19:05:00Z" })
+        assertEquals(2, activities.count { it is HistoryRouteActivity })
+    }
+
+    @Test
     fun `history switcher includes last seven days and older data within the fourteen day cap`() {
         val days = historySwitcherDays(
             today = LocalDate.of(2026, 7, 27),
@@ -167,7 +201,11 @@ class HistoryTimelineTest {
         HistoryPoint(lat = lat, lng = lng, recordedAt = recordedAt)
 
     private fun trip(from: Geo, to: Geo, departAt: String): RouteTrip {
-        val arriveAt = departAt.replace("09:00", "09:20").replace("10:00", "10:20")
+        val arriveAt = departAt
+            .replace("09:00", "09:20")
+            .replace("10:00", "10:20")
+            .replace("17:05", "17:24")
+            .replace("19:05", "19:20")
         return RouteTrip(
             from = from,
             to = to,
@@ -178,4 +216,7 @@ class HistoryTimelineTest {
             points = listOf(RoutePoint(from.lat, from.lng, departAt), RoutePoint(to.lat, to.lng, arriveAt)),
         )
     }
+
+    private fun stop(place: Geo, arriveAt: String, departAt: String): Stop =
+        Stop(place.lat, place.lng, arriveAt, departAt, dwellMin = 0.0)
 }

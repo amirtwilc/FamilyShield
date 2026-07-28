@@ -113,40 +113,56 @@ export async function fireSafeZoneTransitions({ device, lat, lng, recordedAt }: 
 
   const transitionAt = new Date(recordedAt);
   for (const row of probe.rows as ZoneProbeRow[]) {
-    const [state] = await db.select().from(safeZoneStates).where(and(
-      eq(safeZoneStates.parentId, row.parent_id),
-      eq(safeZoneStates.childId, device.childId),
-      eq(safeZoneStates.zoneId, row.id),
-    ));
-
-    if (!state) {
-      await db.insert(safeZoneStates).values({
+    const transition = await db.transaction(async (tx) => {
+      const inserted = await tx.insert(safeZoneStates).values({
         parentId: row.parent_id,
         childId: device.childId,
         zoneId: row.id,
         isInside: row.is_inside,
         lastTransitionAt: row.is_inside ? transitionAt : null,
-      });
-      if (row.is_inside && row.notify_on_enter) {
-        await fireSafeZoneAlert(device, row, 'safe_zone_enter', lat, lng);
+        lastObservedAt: transitionAt,
+      }).onConflictDoNothing().returning({ id: safeZoneStates.id });
+      if (inserted.length > 0) {
+        return row.is_inside && row.notify_on_enter ? 'safe_zone_enter' as const : null;
       }
-      continue;
-    }
 
-    if (state.isInside === row.is_inside) {
-      await db.update(safeZoneStates).set({ updatedAt: new Date() }).where(eq(safeZoneStates.id, state.id));
-      continue;
-    }
+      const locked = await tx.execute(sql`
+        SELECT id, is_inside, last_observed_at
+        FROM safe_zone_states
+        WHERE parent_id = ${row.parent_id}
+          AND child_id = ${device.childId}
+          AND zone_id = ${row.id}
+        FOR UPDATE`);
+      const state = locked.rows[0] as {
+        id: string;
+        is_inside: boolean;
+        last_observed_at: Date | string | null;
+      };
+      const lastObservedAt = state.last_observed_at ? new Date(state.last_observed_at) : null;
+      if (lastObservedAt && transitionAt <= lastObservedAt) return null;
 
-    await db.update(safeZoneStates).set({
-      isInside: row.is_inside,
-      lastTransitionAt: transitionAt,
-      updatedAt: new Date(),
-    }).where(eq(safeZoneStates.id, state.id));
+      if (state.is_inside === row.is_inside) {
+        await tx.update(safeZoneStates).set({
+          lastObservedAt: transitionAt,
+          updatedAt: new Date(),
+        }).where(eq(safeZoneStates.id, state.id));
+        return null;
+      }
 
-    if (row.is_inside && row.notify_on_enter) {
+      await tx.update(safeZoneStates).set({
+        isInside: row.is_inside,
+        lastTransitionAt: transitionAt,
+        lastObservedAt: transitionAt,
+        updatedAt: new Date(),
+      }).where(eq(safeZoneStates.id, state.id));
+      if (row.is_inside && row.notify_on_enter) return 'safe_zone_enter' as const;
+      if (!row.is_inside && row.notify_on_exit) return 'safe_zone_exit' as const;
+      return null;
+    });
+
+    if (transition === 'safe_zone_enter') {
       await fireSafeZoneAlert(device, row, 'safe_zone_enter', lat, lng);
-    } else if (!row.is_inside && row.notify_on_exit) {
+    } else if (transition === 'safe_zone_exit') {
       await fireSafeZoneAlert(device, row, 'safe_zone_exit', lat, lng);
     }
   }

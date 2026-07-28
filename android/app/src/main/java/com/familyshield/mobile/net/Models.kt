@@ -340,7 +340,6 @@ data class Monitor(
     val parentId: String,
     val email: String,
     val displayName: String,
-    val role: String,
     val parentDisplayName: String? = null,
 ) {
     val childFacingName: String get() = parentDisplayName?.takeIf { it.isNotBlank() } ?: email

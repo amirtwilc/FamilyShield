@@ -8,7 +8,6 @@ export async function monitoringInfo(childId: string) {
     email: parents.email,
     displayName: childParentLinks.displayName,
     parentDisplayName: childParentLinks.parentDisplayName,
-    role: childParentLinks.role,
   }).from(childParentLinks)
     .innerJoin(parents, eq(childParentLinks.parentId, parents.id))
     .where(eq(childParentLinks.childId, childId));
@@ -21,7 +20,6 @@ export async function monitorLink(childId: string, parentId: string) {
     parentId: childParentLinks.parentId,
     displayName: childParentLinks.displayName,
     parentDisplayName: childParentLinks.parentDisplayName,
-    role: childParentLinks.role,
   }).from(childParentLinks)
     .where(and(eq(childParentLinks.childId, childId), eq(childParentLinks.parentId, parentId)));
   return link ?? null;

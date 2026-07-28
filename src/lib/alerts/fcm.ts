@@ -53,9 +53,12 @@ class FirebaseSender implements PushSender {
       console.warn('[push] FCM_SERVICE_ACCOUNT_JSON is not set; skipping push send');
       return false;
     }
-    const admin = await import('firebase-admin');
-    if (!admin.apps.length) {
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    const [app, messaging] = await Promise.all([
+      import('firebase-admin/app'),
+      import('firebase-admin/messaging'),
+    ]);
+    if (!app.getApps().length) {
+      app.initializeApp({ credential: app.cert(serviceAccount) });
     }
     const includeNotification = options?.includeNotification ?? true;
     const android = options?.android ? {
@@ -67,7 +70,7 @@ class FirebaseSender implements PushSender {
         ...(options.android.tag ? { tag: options.android.tag } : {}),
       } } : {}),
     } : undefined;
-    await admin.messaging().send({
+    await messaging.getMessaging().send({
       token: fcmToken,
       ...(includeNotification ? { notification: { title, body } } : {}),
       data,

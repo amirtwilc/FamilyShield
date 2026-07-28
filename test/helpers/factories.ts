@@ -9,9 +9,9 @@ export async function seedParent(email = `p${Date.now()}@t.io`) {
 }
 export async function seedChild(parentId: string, displayName = 'Kid') {
   const [c] = await db.insert(children)
-    .values({ parentId, displayName }).returning();
+    .values({ displayName }).returning();
   await db.insert(childParentLinks)
-    .values({ childId: c.id, parentId, displayName, role: 'owner' })
+    .values({ childId: c.id, parentId, displayName })
     .onConflictDoNothing();
   return c;
 }

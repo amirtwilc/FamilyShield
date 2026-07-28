@@ -486,7 +486,7 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun monitoring(token: String): MonitoringInfo {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val monitors = childParents[childId].orEmpty().map { (email, displayName) ->
-            Monitor("parent:$email", email, displayName, "caregiver", childParentNames[childId]?.get(email))
+            Monitor("parent:$email", email, displayName, childParentNames[childId]?.get(email))
         }
         return MonitoringInfo(childId, monitors)
     }

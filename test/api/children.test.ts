@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedDevice, seedParent } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks, children, devices } from '@/db/schema';
+import { childParentLinks, children, devices, parents } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { signAccess } from '@/lib/auth/jwt';
 import { POST as createChild, GET as listChildren } from '@/app/api/children/route';
@@ -49,7 +49,7 @@ describe('children api', () => {
     const created = await createChild(auth(t1, { displayName: 'Mia' }));
     const child = await created.json();
     await db.insert(childParentLinks).values({
-      childId: child.id, parentId: p2.id, displayName: 'Mimi', role: 'caregiver',
+      childId: child.id, parentId: p2.id, displayName: 'Mimi',
     });
 
     expect((await (await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${t1}` } }))).json()).children[0].displayName).toBe('Mia');
@@ -122,6 +122,34 @@ describe('children api', () => {
     const listed = await listChildren(new Request('http://t/', { headers: { authorization: `Bearer ${tok}` } }));
     expect((await listed.json()).children).toHaveLength(0);
     expect(await db.select().from(children)).not.toContainEqual(expect.objectContaining({ id: child.id }));
+  });
+
+  it('keeps a shared child paired when either equal guardian account is deleted', async () => {
+    const first = await seedParent('guardian-delete-1@test.io');
+    const second = await seedParent('guardian-delete-2@test.io');
+    const created = await createChild(auth(await signAccess(first.id), { displayName: 'Mia' }));
+    const child = await created.json();
+    await db.insert(childParentLinks).values({
+      childId: child.id,
+      parentId: second.id,
+      displayName: 'Mia',
+    });
+    const { device } = await seedDevice(child.id);
+
+    await db.delete(parents).where(eq(parents.id, first.id));
+
+    expect(await db.select().from(children).where(eq(children.id, child.id))).toHaveLength(1);
+    expect(await db.select().from(childParentLinks).where(eq(childParentLinks.childId, child.id)))
+      .toEqual([expect.objectContaining({ parentId: second.id })]);
+    expect(await db.select().from(devices).where(eq(devices.id, device.id)))
+      .toEqual([expect.objectContaining({ revokedAt: null })]);
+
+    const listed = await listChildren(new Request('http://t/', {
+      headers: { authorization: `Bearer ${await signAccess(second.id)}` },
+    }));
+    expect((await listed.json()).children).toEqual([
+      expect.objectContaining({ id: child.id, displayName: 'Mia' }),
+    ]);
   });
 
   it('returns child device permission status', async () => {

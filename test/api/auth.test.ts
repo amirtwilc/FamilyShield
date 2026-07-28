@@ -2,6 +2,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { POST as register } from '@/app/api/auth/register/route';
 import { POST as login } from '@/app/api/auth/login/route';
+import { POST as refresh } from '@/app/api/auth/refresh/route';
+import { db } from '@/db/client';
+import { parents } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 beforeAll(async () => { await resetDb(); });
 const post = (body: unknown) => new Request('http://t/', { method: 'POST', body: JSON.stringify(body) });
@@ -29,5 +33,15 @@ describe('auth api', () => {
   it('rejects short password', async () => {
     const r = await register(post({ email: 'x@b.io', password: 'short' }));
     expect(r.status).toBe(400);
+  });
+
+  it('does not refresh tokens after the parent account is deleted', async () => {
+    const registered = await register(post({ email: 'deleted@b.io', password: 'password123' }));
+    const tokens = await registered.json();
+    await db.delete(parents).where(eq(parents.email, 'deleted@b.io'));
+
+    const response = await refresh(post({ refreshToken: tokens.refreshToken }));
+
+    expect(response.status).toBe(401);
   });
 });

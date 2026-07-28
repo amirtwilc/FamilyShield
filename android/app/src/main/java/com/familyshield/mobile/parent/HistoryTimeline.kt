@@ -5,6 +5,7 @@ import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.HistoryPoint
 import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.RouteTrip
+import com.familyshield.mobile.net.Stop
 import com.familyshield.mobile.net.Zone
 import java.time.LocalDate
 import kotlin.math.cos
@@ -77,6 +78,7 @@ fun groupHistoryStays(
 fun buildHistoryActivities(
     points: List<HistoryPoint>,
     trips: List<RouteTrip>,
+    stops: List<Stop> = emptyList(),
     zones: List<Zone>,
     selectedDate: String,
     selectedRoute: FrequentRoute? = null,
@@ -87,10 +89,18 @@ fun buildHistoryActivities(
     if (selectedRoute != null) return dayTrips.map { it.toActivity() }.sortedByDescending { it.endAt }
 
     val tripIntervals = dayTrips.map { it.departAt to it.arriveAt }
-    val stayPoints = points.filterNot { point -> tripIntervals.any { (start, end) -> point.recordedAt >= start && point.recordedAt <= end } }
-    val stays: List<HistoryActivity> = buildStayAndMovementActivities(stayPoints, zones)
+    val dayStops = stops.filter { it.overlapsDate(selectedDate) }
+    val stays: List<HistoryActivity> = if (dayStops.isNotEmpty()) {
+        dayStops.map { it.toStay(points, zones) }
+    } else {
+        buildStayAndMovementActivities(points.filterNot { point -> tripIntervals.any { (start, end) -> point.recordedAt >= start && point.recordedAt <= end } }, zones)
+    }
+    val classifiedIntervals = tripIntervals + dayStops.map { it.arriveAt to it.departAt }
+    val movementPoints = points.filterNot { point -> classifiedIntervals.any { (start, end) -> point.recordedAt >= start && point.recordedAt <= end } }
+    val movement: List<HistoryActivity> = if (dayStops.isNotEmpty()) buildStayAndMovementActivities(movementPoints, zones)
+        .filterIsInstance<HistoryMovementActivity>() else emptyList()
     val routes: List<HistoryActivity> = dayTrips.map { it.toActivity() }
-    return (stays + routes)
+    return (stays + movement + routes)
         .sortedByDescending { it.endAt }
 }
 
@@ -207,6 +217,25 @@ private fun HistoryPointGroup.toStay(zones: List<Zone>): HistoryStay {
     )
 }
 
+private fun Stop.toStay(points: List<HistoryPoint>, zones: List<Zone>): HistoryStay {
+    val matchingPoints = points
+        .filter { it.recordedAt >= arriveAt && it.recordedAt <= departAt }
+        .sortedBy { it.recordedAt }
+    val zoneName = zones
+        .filter { distanceMeters(lat, lng, it.lat, it.lng) <= it.radiusM }
+        .minByOrNull { it.radiusM }
+        ?.name
+    return HistoryStay(
+        lat = lat,
+        lng = lng,
+        startAt = arriveAt,
+        endAt = departAt,
+        pointCount = matchingPoints.size,
+        zoneName = zoneName,
+        nameCandidates = matchingPoints.nameCandidates().ifEmpty { listOf(Geo(lat, lng)) },
+    )
+}
+
 private fun List<HistoryPointGroup>.toMovementActivity(): HistoryMovementActivity? {
     val movementPoints = flatMap { it.points }.sortedBy { it.recordedAt }
     if (movementPoints.size < 2) return null
@@ -257,6 +286,9 @@ fun routeOccurrenceDays(trips: List<RouteTrip>, route: FrequentRoute): Set<Strin
 
 private fun RouteTrip.overlapsDate(date: String): Boolean =
     departAt.take(10) == date || arriveAt.take(10) == date || points.any { it.at.take(10) == date }
+
+private fun Stop.overlapsDate(date: String): Boolean =
+    arriveAt.take(10) == date || departAt.take(10) == date
 
 private fun RouteTrip.toActivity(): HistoryRouteActivity {
     val routePoints = points.ifEmpty {

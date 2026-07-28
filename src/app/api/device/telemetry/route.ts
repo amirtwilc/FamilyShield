@@ -57,9 +57,17 @@ export async function POST(req: Request) {
     const latest = locationPoints.reduce((a, b) => (a.recorded_at >= b.recorded_at ? a : b));
     await db.execute(sql`
       UPDATE devices SET
-        last_location = ST_SetSRID(ST_MakePoint(${latest.lng}, ${latest.lat}), 4326),
-        last_location_at = ${latest.recorded_at},
-        battery_level = COALESCE(${latest.battery_level ?? null}, battery_level)
+        last_location = CASE
+          WHEN last_location_at IS NULL OR last_location_at < ${latest.recorded_at}
+            THEN ST_SetSRID(ST_MakePoint(${latest.lng}, ${latest.lat}), 4326)
+          ELSE last_location
+        END,
+        last_location_at = GREATEST(last_location_at, ${latest.recorded_at}),
+        battery_level = CASE
+          WHEN last_location_at IS NULL OR last_location_at < ${latest.recorded_at}
+            THEN COALESCE(${latest.battery_level ?? null}, battery_level)
+          ELSE battery_level
+        END
       WHERE id = ${deviceId}`);
   }
 

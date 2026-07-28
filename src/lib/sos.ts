@@ -145,10 +145,18 @@ async function insertLocation(device: Device, location: LocationInput): Promise<
 
   await db.execute(sql`
     UPDATE devices SET
-      last_location = ST_SetSRID(ST_MakePoint(${location.lng}, ${location.lat}), 4326),
-      last_location_at = ${location.recorded_at},
+      last_location = CASE
+        WHEN last_location_at IS NULL OR last_location_at < ${location.recorded_at}
+          THEN ST_SetSRID(ST_MakePoint(${location.lng}, ${location.lat}), 4326)
+        ELSE last_location
+      END,
+      last_location_at = GREATEST(last_location_at, ${location.recorded_at}),
       last_seen_at = now(),
-      battery_level = COALESCE(${location.battery_level ?? null}, battery_level)
+      battery_level = CASE
+        WHEN last_location_at IS NULL OR last_location_at < ${location.recorded_at}
+          THEN COALESCE(${location.battery_level ?? null}, battery_level)
+        ELSE battery_level
+      END
     WHERE id = ${device.id}`);
 
   const [fresh] = await db.select().from(devices).where(eq(devices.id, device.id));
@@ -232,31 +240,33 @@ async function chargeHighRateUsage(
   limitSeconds: number,
   intervalSeconds: number,
 ): Promise<{ accepted: boolean; chargedSeconds: number; usedSeconds: number; remainingSeconds: number }> {
-  const [usage] = await db.insert(sosDailyUsage)
-    .values({ childId, day: localDay, timezone, usedSeconds: 0 })
-    .onConflictDoUpdate({
-      target: [sosDailyUsage.childId, sosDailyUsage.day],
-      set: { timezone, updatedAt: new Date() },
-    })
-    .returning();
+  return db.transaction(async (tx) => {
+    await tx.insert(sosDailyUsage)
+      .values({ childId, day: localDay, timezone, usedSeconds: 0 })
+      .onConflictDoNothing();
 
-  const used = usage.usedSeconds;
-  if (used >= limitSeconds) {
-    return { accepted: false, chargedSeconds: 0, usedSeconds: used, remainingSeconds: 0 };
-  }
+    const locked = await tx.execute(sql`
+      SELECT used_seconds
+      FROM sos_daily_usage
+      WHERE child_id = ${childId} AND day = ${localDay}::date
+      FOR UPDATE`);
+    const used = Number((locked.rows[0] as { used_seconds: number }).used_seconds);
+    if (used >= limitSeconds) {
+      return { accepted: false, chargedSeconds: 0, usedSeconds: used, remainingSeconds: 0 };
+    }
 
-  const chargedSeconds = Math.min(intervalSeconds, limitSeconds - used);
-  const [updated] = await db.update(sosDailyUsage)
-    .set({ usedSeconds: used + chargedSeconds, timezone, updatedAt: new Date() })
-    .where(and(eq(sosDailyUsage.childId, childId), eq(sosDailyUsage.day, localDay)))
-    .returning();
-  const nextUsed = updated?.usedSeconds ?? used + chargedSeconds;
-  return {
-    accepted: true,
-    chargedSeconds,
-    usedSeconds: nextUsed,
-    remainingSeconds: Math.max(0, limitSeconds - nextUsed),
-  };
+    const chargedSeconds = Math.min(intervalSeconds, limitSeconds - used);
+    const nextUsed = used + chargedSeconds;
+    await tx.update(sosDailyUsage)
+      .set({ usedSeconds: nextUsed, timezone, updatedAt: new Date() })
+      .where(and(eq(sosDailyUsage.childId, childId), eq(sosDailyUsage.day, localDay)));
+    return {
+      accepted: true,
+      chargedSeconds,
+      usedSeconds: nextUsed,
+      remainingSeconds: Math.max(0, limitSeconds - nextUsed),
+    };
+  });
 }
 
 async function usageFor(childId: string, localDay: string | null | undefined): Promise<number> {
@@ -320,7 +330,8 @@ export async function startSos(device: Device, input: { timezone?: string; local
     localDay: input.local_day,
     highRateLimitSeconds: sosHighRateLimitSeconds(),
     highRateIntervalSeconds: sosHighRateIntervalSeconds(),
-  }).returning();
+  }).onConflictDoNothing().returning();
+  if (!event) return sosStateForChild(device.childId, input.local_day);
 
   if (input.location) {
     await insertLocation(device, input.location);
@@ -329,7 +340,8 @@ export async function startSos(device: Device, input: { timezone?: string; local
         last_location = ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326),
         last_location_at = ${input.location.recorded_at},
         last_battery_level = ${input.location.battery_level ?? null}
-      WHERE id = ${event.id}`);
+      WHERE id = ${event.id}
+        AND (last_location_at IS NULL OR last_location_at < ${input.location.recorded_at})`);
   } else {
     await db.update(devices).set({ lastSeenAt: new Date() }).where(eq(devices.id, device.id));
   }
@@ -362,7 +374,8 @@ export async function recordSosLocation(device: Device, input: { timezone?: stri
       last_location = ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326),
       last_location_at = ${input.location.recorded_at},
       last_battery_level = ${input.location.battery_level ?? null}
-    WHERE id = ${event.id}`);
+    WHERE id = ${event.id}
+      AND (last_location_at IS NULL OR last_location_at < ${input.location.recorded_at})`);
   return { active: true, accepted: true, chargedSeconds: usage.chargedSeconds, state: await sosStateForChild(device.childId, input.local_day) };
 }
 

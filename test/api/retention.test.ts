@@ -8,6 +8,7 @@ import { signAccess } from '@/lib/auth/jwt';
 import { POST as upload } from '@/app/api/locations/route';
 import { GET as current } from '@/app/api/children/[id]/location/current/route';
 import { GET as history } from '@/app/api/children/[id]/location/history/route';
+import { GET as routes } from '@/app/api/children/[id]/routes/route';
 import { sweepLocationRetention } from '@/lib/retention';
 
 beforeAll(async () => { await resetDb(); });
@@ -43,6 +44,9 @@ describe('tier-based location retention', () => {
     expect(await (await current(get(parentToken), ctx(c.id))).json()).toBeNull();
     const hist = await history(get(parentToken, `?date=${old.toISOString().slice(0, 10)}`), ctx(c.id));
     expect((await hist.json()).points).toHaveLength(0);
+
+    const routeResult = await routes(get(parentToken), ctx(c.id));
+    expect((await routeResult.json()).stops).toHaveLength(0);
   });
 
   it('deletes expired rows and clears stale denormalized current location', async () => {
@@ -81,7 +85,7 @@ describe('tier-based location retention', () => {
     });
     await db.update(parents).set({ tierCode: 'pro_test' }).where(eq(parents.id, p2.id));
     const c = await seedChild(p1.id, 'Shared');
-    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Shared', role: 'caregiver' });
+    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Shared' });
     const { token, device } = await seedDevice(c.id);
     const oldForFree = daysAgo(3);
     await upload(post(token, { points: [{ lat: 5, lng: 6, recorded_at: oldForFree.toISOString() }] }));

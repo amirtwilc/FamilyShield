@@ -102,7 +102,7 @@ describe('parent ⇄ kid chat', () => {
     const p1 = await seedParent('chat_p1@test.io');
     const p2 = await seedParent('chat_p2@test.io');
     const c = await seedChild(p1.id, 'Mia');
-    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mimi', role: 'caregiver' });
+    await db.insert(childParentLinks).values({ childId: c.id, parentId: p2.id, displayName: 'Mimi' });
     const { token: dtok } = await seedDevice(c.id);
     const t1 = await signAccess(p1.id);
     const t2 = await signAccess(p2.id);
