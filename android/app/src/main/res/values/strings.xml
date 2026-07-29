@@ -130,14 +130,18 @@
     <!-- History -->
     <string name="history_title">Routes &amp; History</string>
     <string name="frequent_routes">Frequent routes</string>
+    <string name="frequent_locations">Frequent locations</string>
     <string name="empty_routes_title">No recurring routes yet</string>
     <string name="empty_routes_body">Once %1$s travels the same path a few times, it\'ll appear here.</string>
+    <string name="empty_frequent_locations_title">No recurring locations yet</string>
+    <string name="empty_frequent_locations_body">Once %1$s visits the same place a few times, it\'ll appear here.</string>
     <string name="daily_timeline">Daily timeline</string>
     <string name="empty_history_title">No history</string>
     <string name="empty_history_body">No location updates recorded on this day.</string>
-    <string name="return_point">Return point</string>
     <string name="route_summary">~%1$s km · ~%2$d min · last %3$s</string>
-    <string name="open_return_point">Open return point</string>
+    <string name="frequent_location_last_visited">Last visited %1$s</string>
+    <string name="add_as_zone">Add as zone</string>
+    <string name="add_location_zone_title">Add location as zone</string>
     <string name="location_update">Location update</string>
     <string name="history_route_start_coordinates">Start: %1$s</string>
     <string name="history_route_end_coordinates">End: %1$s</string>

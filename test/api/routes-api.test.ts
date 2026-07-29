@@ -45,6 +45,7 @@ describe('route analysis API', () => {
     expect(response.status).toBe(200);
     expect(body.stops).toHaveLength(2);
     expect(body.trips).toHaveLength(1);
+    expect(body.frequentLocations).toEqual([]);
     expect(body.trips[0].to.lat).toBeCloseTo(50.95);
     expect(body.trips[0].to.lng).toBeCloseTo(6.98);
   });

@@ -38,6 +38,6 @@ export async function GET(req: Request, { params }: Ctx) {
   const points: GpsPoint[] = (r.rows as any[]).map((x) => ({
     lat: x.lat, lng: x.lng, at: new Date(x.recorded_at).toISOString(),
   }));
-  const { stops, trips, frequent } = analyzeRoutes(points);
-  return ok({ frequent, trips, stops });
+  const { stops, trips, frequent, frequentLocations } = analyzeRoutes(points);
+  return ok({ frequent, frequentLocations, trips, stops });
 }

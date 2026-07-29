@@ -14,6 +14,7 @@ import com.familyshield.mobile.net.UpdateAppUsageLimitBody
 import com.familyshield.mobile.net.UsageDay
 import com.familyshield.mobile.permissions.requiredPermissionsSatisfied
 import com.familyshield.mobile.net.FrequentRoute
+import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.LocationPoint
 import com.familyshield.mobile.net.RoutesResponse
@@ -157,6 +158,14 @@ class ParentViewModelTest {
         api.routesResult = RoutesResponse(
             frequent = listOf(FrequentRoute(Geo(32.0, 34.0), Geo(32.02, 34.02), count = 3,
                 lastAt = "2026-06-20T08:00:00Z", avgMinutes = 20.0, avgKm = 2.8)),
+            frequentLocations = listOf(
+                FrequentLocation(
+                    lat = 32.0,
+                    lng = 34.0,
+                    count = 4,
+                    lastAt = "2026-06-20T08:00:00Z",
+                ),
+            ),
         )
         val vm = viewModel(api)
         vm.authenticate("parent@x.com", "pw123456", register = true)
@@ -166,6 +175,8 @@ class ParentViewModelTest {
 
         assertEquals(1, vm.frequentRoutes.size)
         assertEquals(3, vm.frequentRoutes[0].count)
+        assertEquals(1, vm.frequentLocations.size)
+        assertEquals(4, vm.frequentLocations[0].count)
     }
 
     @Test

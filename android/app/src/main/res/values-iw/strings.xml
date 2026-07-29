@@ -132,14 +132,18 @@
     <!-- History -->
     <string name="history_title">מסלולים והיסטוריה</string>
     <string name="frequent_routes">מסלולים תכופים</string>
+    <string name="frequent_locations">מיקומים תכופים</string>
     <string name="empty_routes_title">אין מסלולים חוזרים עדיין</string>
     <string name="empty_routes_body">לאחר ש%1$s יחזור על אותו מסלול כמה פעמים, הוא יופיע כאן.</string>
+    <string name="empty_frequent_locations_title">אין מיקומים חוזרים עדיין</string>
+    <string name="empty_frequent_locations_body">לאחר ש%1$s יבקר באותו מקום כמה פעמים, הוא יופיע כאן.</string>
     <string name="daily_timeline">ציר זמן יומי</string>
     <string name="empty_history_title">אין היסטוריה</string>
     <string name="empty_history_body">לא נרשמו עדכוני מיקום ביום זה.</string>
-    <string name="return_point">נקודת חזרה</string>
     <string name="route_summary">~%1$s ק\"מ · ~%2$d דק\' · אחרון %3$s</string>
-    <string name="open_return_point">פתיחת נקודת החזרה</string>
+    <string name="frequent_location_last_visited">ביקור אחרון %1$s</string>
+    <string name="add_as_zone">הוספה כאזור</string>
+    <string name="add_location_zone_title">הוספת מיקום כאזור</string>
     <string name="location_update">עדכון מיקום</string>
     <string name="history_route_start_coordinates">התחלה: %1$s</string>
     <string name="history_route_end_coordinates">סיום: %1$s</string>

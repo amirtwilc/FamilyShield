@@ -2,6 +2,7 @@ package com.familyshield.mobile.parent
 
 import com.familyshield.mobile.net.HistoryPoint
 import com.familyshield.mobile.net.FrequentRoute
+import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.RouteTrip
@@ -145,6 +146,38 @@ class HistoryTimelineTest {
 
         assertEquals(1, activities.size)
         assertEquals(direct.departAt, activities.single().startAt)
+    }
+
+    @Test
+    fun `location filter shows only exact recurring stop occurrences`() {
+        val home = Geo(32.0, 34.0)
+        val selectedStop = stop(home, "2026-07-26T08:00:00Z", "2026-07-26T09:00:00Z")
+        val nearbyButDifferentStop = stop(
+            Geo(32.0001, 34.0001),
+            "2026-07-26T10:00:00Z",
+            "2026-07-26T11:00:00Z",
+        )
+        val location = FrequentLocation(
+            lat = home.lat,
+            lng = home.lng,
+            count = 2,
+            lastAt = selectedStop.departAt,
+            occurrenceKeys = listOf("${selectedStop.arriveAt}|${selectedStop.departAt}"),
+        )
+
+        val activities = buildHistoryActivities(
+            points = emptyList(),
+            trips = emptyList(),
+            stops = listOf(selectedStop, nearbyButDifferentStop),
+            zones = listOf(Zone("home", "Home", home.lat, home.lng, radiusM = 100)),
+            selectedDate = "2026-07-26",
+            selectedLocation = location,
+        )
+
+        assertEquals(1, activities.size)
+        assertEquals("2026-07-26T08:00:00Z", activities.single().startAt)
+        assertEquals("Home", (activities.single() as HistoryStay).zoneName)
+        assertEquals(setOf("2026-07-26"), locationOccurrenceDays(listOf(selectedStop), location))
     }
 
     @Test

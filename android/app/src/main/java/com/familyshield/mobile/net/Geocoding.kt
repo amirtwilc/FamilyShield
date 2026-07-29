@@ -2,7 +2,14 @@ package com.familyshield.mobile.net
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import com.familyshield.mobile.BuildConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,9 +46,28 @@ internal const val GEOCODING_CACHE_COORDINATE_DECIMALS = 4
  * safe to reuse even when a recomputed stop center lands in a different grid key. */
 internal const val GEOCODING_CACHE_REUSE_RADIUS_M = 75.0
 
+internal data class SharedLookup<T>(val deferred: Deferred<T>, val shared: Boolean)
+
+internal class IndependentLookupPool<T>(private val scope: CoroutineScope) {
+    private val inFlight = mutableMapOf<String, Deferred<T>>()
+
+    fun getOrStart(key: String, lookup: suspend () -> T): SharedLookup<T> =
+        synchronized(inFlight) {
+            inFlight[key]?.let { return@synchronized SharedLookup(it, shared = true) }
+            val created = scope.async(start = CoroutineStart.LAZY) { lookup() }
+            inFlight[key] = created
+            created.invokeOnCompletion {
+                synchronized(inFlight) { inFlight.remove(key, created) }
+            }
+            created.start()
+            SharedLookup(created, shared = false)
+        }
+}
+
 /** Reverse geocoding via OpenStreetMap Nominatim, with a persistent successful-
  * result cache and serialized requests to keep names stable and avoid bursts. */
 object Geocoding {
+    private const val LOG_TAG = "FS-Geocoding"
     private const val CACHE_PREFS = "geocoding_names"
     private const val MIN_REQUEST_INTERVAL_MS = 1_100L
     private const val FAILURE_RETRY_MS = 5 * 60_000L
@@ -54,6 +80,8 @@ object Geocoding {
     private val names = ConcurrentHashMap<String, String>()
     private val failedAt = ConcurrentHashMap<String, Long>()
     private val lookupMutex = Mutex()
+    private val lookupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lookupPool = IndependentLookupPool<String?>(lookupScope)
 
     @Volatile private var preferences: SharedPreferences? = null
     @Volatile private var languageTag: String = Locale.getDefault().toLanguageTag()
@@ -67,6 +95,7 @@ object Geocoding {
         prefs.all.forEach { (key, value) ->
             (value as? String)?.takeIf { it.isNotBlank() }?.let { names[key] = it }
         }
+        debug("initialized language=$languageTag cachedNames=${names.size}")
     }
 
     fun cached(lat: Double, lng: Double): String? {
@@ -86,31 +115,67 @@ object Geocoding {
     }
 
     suspend fun reverse(lat: Double, lng: Double): String? {
-        if (!lat.isFinite() || !lng.isFinite()) return null
+        if (!lat.isFinite() || !lng.isFinite()) {
+            warn("ignored invalid coordinates lat=$lat lng=$lng")
+            return null
+        }
         val key = cacheKey(lat, lng)
-        cached(lat, lng)?.let { return it }
-        if (recentlyFailed(key)) return null
+        val point = coordinateKey(lat, lng)
+        cached(lat, lng)?.let {
+            debug("cache hit point=$point name=${it.logValue()}")
+            return it
+        }
+        if (recentlyFailed(key)) {
+            debug("failure cooldown point=$point")
+            return null
+        }
 
-        return lookupMutex.withLock {
-            cached(lat, lng)?.let { return@withLock it }
-            if (recentlyFailed(key)) return@withLock null
+        val lookup = lookupPool.getOrStart(key) {
+            resolveAndCache(key, lat, lng)
+        }
+        if (!lookup.shared) {
+            lookup.deferred.invokeOnCompletion { cause ->
+                if (cause != null) {
+                    warn("lookup failed point=$point cause=${cause.javaClass.simpleName}: ${cause.message}")
+                }
+            }
+        }
+        debug("${if (lookup.shared) "joined" else "started"} lookup point=$point")
+        return lookup.deferred.await()
+    }
+
+    private suspend fun resolveAndCache(key: String, lat: Double, lng: Double): String? =
+        lookupMutex.withLock {
+            val point = coordinateKey(lat, lng)
+            cached(lat, lng)?.let {
+                debug("queued cache hit point=$point name=${it.logValue()}")
+                return@withLock it
+            }
+            if (recentlyFailed(key)) {
+                debug("queued failure cooldown point=$point")
+                return@withLock null
+            }
 
             val waitMs = MIN_REQUEST_INTERVAL_MS - (System.currentTimeMillis() - lastRequestStartedAt)
-            if (waitMs > 0) delay(waitMs)
+            if (waitMs > 0) {
+                debug("rate-limit wait point=$point waitMs=$waitMs")
+                delay(waitMs)
+            }
             lastRequestStartedAt = System.currentTimeMillis()
 
             val resolved = requestName(lat, lng)
             if (resolved.isNullOrBlank()) {
                 failedAt[key] = System.currentTimeMillis()
+                warn("no name resolved point=$point; retryInMs=$FAILURE_RETRY_MS")
                 null
             } else {
                 names[key] = resolved
                 failedAt.remove(key)
                 preferences?.edit()?.putString(key, resolved)?.apply()
+                debug("cached point=$point name=${resolved.logValue()}")
                 resolved
             }
         }
-    }
 
     private fun recentlyFailed(key: String): Boolean =
         System.currentTimeMillis() - (failedAt[key] ?: 0L) < FAILURE_RETRY_MS
@@ -124,20 +189,46 @@ object Geocoding {
                 .header("Accept-Language", languageTag)
                 .build()
             http.newCall(request).execute().use { response ->
+                val point = coordinateKey(lat, lng)
+                debug("response point=$point http=${response.code}")
                 if (!response.isSuccessful) return@withContext null
-                val result = json.decodeFromString<NominatimResult>(response.body?.string().orEmpty())
+                val body = response.body?.string().orEmpty()
+                val result = json.decodeFromString<NominatimResult>(body)
                 val address = result.address
-                address?.road ?: address?.pedestrian ?: address?.suburb ?: address?.neighbourhood
+                val name = address?.road ?: address?.pedestrian ?: address?.suburb ?: address?.neighbourhood
                     ?: address?.city ?: address?.town ?: address?.village
                     ?: result.displayName?.substringBefore(",")
+                if (name.isNullOrBlank()) {
+                    warn(
+                        "empty parsed result point=$point bodyBytes=${body.toByteArray().size} " +
+                            "hasAddress=${address != null} hasDisplayName=${!result.displayName.isNullOrBlank()}",
+                    )
+                }
+                name
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            error(
+                "request exception point=${coordinateKey(lat, lng)} " +
+                    "type=${error.javaClass.simpleName}: ${error.message}",
+            )
             null
         }
     }
 
     private fun cacheKey(lat: Double, lng: Double): String =
         "$languageTag|${coordinateKey(lat, lng)}"
+
+    private fun debug(message: String) {
+        if (BuildConfig.DEBUG) Log.d(LOG_TAG, message)
+    }
+
+    private fun warn(message: String) {
+        if (BuildConfig.DEBUG) Log.w(LOG_TAG, message)
+    }
+
+    private fun error(message: String) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, message)
+    }
 }
 
 internal fun coordinateKey(lat: Double, lng: Double): String =
@@ -160,3 +251,6 @@ private fun distanceMeters(aLat: Double, aLng: Double, bLat: Double, bLng: Doubl
         Math.sin(dLng / 2) * Math.sin(dLng / 2)
     return 6_371_000.0 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
 }
+
+private fun String.logValue(): String =
+    replace('\n', ' ').take(80)

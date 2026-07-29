@@ -23,6 +23,14 @@ export type FrequentRoute = {
   avgMinutes: number;
   avgKm: number;
   occurrenceKeys: string[];
+  points: GpsPoint[];
+};
+export type FrequentLocation = {
+  lat: number;
+  lng: number;
+  count: number;
+  lastAt: string;
+  occurrenceKeys: string[];
 };
 
 /** Tunable route-analysis defaults. ROUTE_STOP_RADIUS_M is the maximum jitter
@@ -36,6 +44,11 @@ export const ROUTE_CONTINUATION_PAUSE_MIN = 5;
 export const FREQUENT_ROUTE_ENDPOINT_RADIUS_M = 150;
 export const FREQUENT_ROUTE_MIN_COUNT = 2;
 export const FREQUENT_ROUTE_LIMIT = 5;
+/** Frequent locations are recurring detected stops, never route or movement
+ * points. The radius absorbs ordinary GPS drift around the same place. */
+export const FREQUENT_LOCATION_RADIUS_M = 150;
+export const FREQUENT_LOCATION_MIN_COUNT = 2;
+export const FREQUENT_LOCATION_LIMIT = 5;
 /** A short-lived GPS cluster can be noise even when it is farther than the stop
  *  radius. If stable clusters before and after it are within this distance,
  *  route detection treats the noisy middle cluster as part of the same stop. */
@@ -222,7 +235,7 @@ function undirectedKey(fromCluster: number, toCluster: number): string {
 function orientClusteredTrip(entry: ClusteredTrip, fromCluster: number): Trip {
   return entry.fromCluster === fromCluster
     ? entry.trip
-    : { ...entry.trip, from: entry.trip.to, to: entry.trip.from };
+    : { ...entry.trip, from: entry.trip.to, to: entry.trip.from, points: [...entry.trip.points].reverse() };
 }
 
 /** Cluster trips by similar endpoints and surface the recurring routes. Recurrence
@@ -262,6 +275,9 @@ export function frequentRoutes(
           ).slice(0, 1);
     const fromCluster = preferred[0].fromCluster;
     const matching = matchingEntries.map((entry) => orientClusteredTrip(entry, fromCluster));
+    const representative = [...matching].sort((a, b) =>
+      +new Date(b.arriveAt) - +new Date(a.arriveAt),
+    )[0];
 
     summaries.push({
       from: { lat: avg(matching.map((t) => t.from.lat)), lng: avg(matching.map((t) => t.from.lng)) },
@@ -271,6 +287,7 @@ export function frequentRoutes(
       avgMinutes: avg(matching.map((t) => t.durationMin)),
       avgKm: avg(matching.map((t) => t.distanceKm)),
       occurrenceKeys: matching.map(tripOccurrenceKey),
+      points: representative.points,
     });
   }
   return summaries
@@ -278,10 +295,57 @@ export function frequentRoutes(
     .slice(0, limit);
 }
 
+export function stopOccurrenceKey(stop: Pick<Stop, 'arriveAt' | 'departAt'>): string {
+  return `${stop.arriveAt}|${stop.departAt}`;
+}
+
+export function frequentLocations(
+  stops: Stop[],
+  radiusM = FREQUENT_LOCATION_RADIUS_M,
+  minCount = FREQUENT_LOCATION_MIN_COUNT,
+  limit = FREQUENT_LOCATION_LIMIT,
+): FrequentLocation[] {
+  const clusters: Array<{ lat: number; lng: number; stops: Stop[] }> = [];
+  [...stops]
+    .sort((a, b) => +new Date(a.arriveAt) - +new Date(b.arriveAt))
+    .forEach((stop) => {
+      const nearest = clusters
+        .map((cluster, index) => ({ index, distance: haversineM(cluster, stop) }))
+        .filter(({ distance }) => distance <= radiusM)
+        .sort((a, b) => a.distance - b.distance)[0];
+      if (!nearest) {
+        clusters.push({ lat: stop.lat, lng: stop.lng, stops: [stop] });
+        return;
+      }
+      const cluster = clusters[nearest.index];
+      const count = cluster.stops.length + 1;
+      cluster.lat = (cluster.lat * cluster.stops.length + stop.lat) / count;
+      cluster.lng = (cluster.lng * cluster.stops.length + stop.lng) / count;
+      cluster.stops.push(stop);
+    });
+
+  return clusters
+    .filter((cluster) => cluster.stops.length >= minCount)
+    .map((cluster) => ({
+      lat: cluster.lat,
+      lng: cluster.lng,
+      count: cluster.stops.length,
+      lastAt: cluster.stops.map((stop) => stop.departAt).sort().at(-1)!,
+      occurrenceKeys: cluster.stops.map(stopOccurrenceKey),
+    }))
+    .sort((a, b) => b.count - a.count || +new Date(b.lastAt) - +new Date(a.lastAt))
+    .slice(0, limit);
+}
+
 const avg = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
 
-export function analyzeRoutes(points: GpsPoint[]): { stops: Stop[]; trips: Trip[]; frequent: FrequentRoute[] } {
+export function analyzeRoutes(points: GpsPoint[]): {
+  stops: Stop[];
+  trips: Trip[];
+  frequent: FrequentRoute[];
+  frequentLocations: FrequentLocation[];
+} {
   const stops = detectStops(points);
   const trips = buildTrips(stops, points);
-  return { stops, trips, frequent: frequentRoutes(trips) };
+  return { stops, trips, frequent: frequentRoutes(trips), frequentLocations: frequentLocations(stops) };
 }

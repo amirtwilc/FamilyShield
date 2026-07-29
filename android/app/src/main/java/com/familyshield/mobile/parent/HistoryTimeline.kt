@@ -1,6 +1,7 @@
 package com.familyshield.mobile.parent
 
 import com.familyshield.mobile.net.FrequentRoute
+import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.HistoryPoint
 import com.familyshield.mobile.net.RoutePoint
@@ -84,7 +85,15 @@ fun buildHistoryActivities(
     zones: List<Zone>,
     selectedDate: String,
     selectedRoute: FrequentRoute? = null,
+    selectedLocation: FrequentLocation? = null,
 ): List<HistoryActivity> {
+    if (selectedLocation != null) {
+        return stops
+            .filter { it.overlapsDate(selectedDate) }
+            .filter { locationMatchesFrequentLocation(it, selectedLocation) }
+            .map { it.toStay(points, zones) }
+            .sortedByDescending { it.endAt }
+    }
     val dayTrips = trips
         .filter { it.overlapsDate(selectedDate) }
         .filter { selectedRoute == null || routeMatchesFrequentRoute(it, selectedRoute) }
@@ -275,6 +284,20 @@ fun routeMatchesFrequentRoute(trip: RouteTrip, route: FrequentRoute, proximityM:
 private fun tripOccurrenceKey(trip: RouteTrip): String =
     "${trip.departAt}|${trip.arriveAt}"
 
+fun locationMatchesFrequentLocation(
+    stop: Stop,
+    location: FrequentLocation,
+    proximityM: Double = HISTORY_ROUTE_MATCH_PROXIMITY_M,
+): Boolean {
+    if (location.occurrenceKeys.isNotEmpty()) {
+        return stopOccurrenceKey(stop) in location.occurrenceKeys
+    }
+    return distanceMeters(stop.lat, stop.lng, location.lat, location.lng) <= proximityM
+}
+
+private fun stopOccurrenceKey(stop: Stop): String =
+    "${stop.arriveAt}|${stop.departAt}"
+
 fun historySwitcherDays(today: LocalDate, historyDays: List<String>, rangeDays: Int = HISTORY_DAY_RANGE_DAYS): List<LocalDate> {
     val oldestAllowed = today.minusDays((rangeDays - 1).toLong())
     val oldestVisible = historyDays
@@ -290,6 +313,11 @@ fun historySwitcherDays(today: LocalDate, historyDays: List<String>, rangeDays: 
 fun routeOccurrenceDays(trips: List<RouteTrip>, route: FrequentRoute): Set<String> =
     trips.filter { routeMatchesFrequentRoute(it, route) }
         .flatMap { listOf(it.departAt.take(10), it.arriveAt.take(10)) }
+        .toSet()
+
+fun locationOccurrenceDays(stops: List<Stop>, location: FrequentLocation): Set<String> =
+    stops.filter { locationMatchesFrequentLocation(it, location) }
+        .flatMap { listOf(it.arriveAt.take(10), it.departAt.take(10)) }
         .toSet()
 
 private fun RouteTrip.overlapsDate(date: String): Boolean =

@@ -104,6 +104,16 @@ data class FrequentRoute(
     val avgMinutes: Double,
     val avgKm: Double,
     val occurrenceKeys: List<String> = emptyList(),
+    val points: List<RoutePoint> = emptyList(),
+)
+
+@Serializable
+data class FrequentLocation(
+    val lat: Double,
+    val lng: Double,
+    val count: Int,
+    val lastAt: String,
+    val occurrenceKeys: List<String> = emptyList(),
 )
 
 @Serializable
@@ -132,6 +142,7 @@ data class Stop(
 @Serializable
 data class RoutesResponse(
     val frequent: List<FrequentRoute> = emptyList(),
+    val frequentLocations: List<FrequentLocation> = emptyList(),
     val trips: List<RouteTrip> = emptyList(),
     val stops: List<Stop> = emptyList(),
 )

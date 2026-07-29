@@ -84,6 +84,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -108,6 +109,7 @@ import com.familyshield.mobile.net.Child
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.FrequentRoute
+import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.RoutePoint
@@ -2125,20 +2127,31 @@ private fun MapChildInfoCard(
 
 /* --------------------------------- History --------------------------------- */
 
+private enum class HistoryFrequentMode { Routes, Locations }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
     val today = remember { LocalDate.now() }
     var selected by remember { mutableStateOf(today) }
+    var frequentMode by rememberSaveable { mutableStateOf(HistoryFrequentMode.Routes) }
     var selectedRoute by remember { mutableStateOf<FrequentRoute?>(null) }
+    var selectedLocation by remember { mutableStateOf<FrequentLocation?>(null) }
     val switcherDays = remember(today, vm.historyDays) { historySwitcherDays(today, vm.historyDays) }
     val routeDays = remember(vm.trips, selectedRoute) { selectedRoute?.let { routeOccurrenceDays(vm.trips, it) }.orEmpty() }
+    val locationDays = remember(vm.stops, selectedLocation) {
+        selectedLocation?.let { locationOccurrenceDays(vm.stops, it) }.orEmpty()
+    }
+    val filterDays = if (selectedRoute != null) routeDays else locationDays
+    val filterActive = selectedRoute != null || selectedLocation != null
 
     LaunchedEffect(vm.selectedId) {
         selectedRoute = null
+        selectedLocation = null
     }
-    LaunchedEffect(selectedRoute, routeDays) {
-        if (selectedRoute != null) {
-            routeDays.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+    LaunchedEffect(selectedRoute, selectedLocation, filterDays) {
+        if (filterActive) {
+            filterDays.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .maxOrNull()
                 ?.let { day ->
                     selected = day
@@ -2167,19 +2180,67 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
                 }
             }
 
-            // Frequent / recurring routes: departure -> return points.
-            Text(stringResource(R.string.frequent_routes), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            if (vm.frequentRoutes.isEmpty()) {
-                EmptyCard(Icons.AutoMirrored.Filled.DirectionsWalk, stringResource(R.string.empty_routes_title),
-                    stringResource(R.string.empty_routes_body, vm.selected?.displayName ?: stringResource(R.string.label_your_child)))
-            } else {
-                vm.frequentRoutes.forEach { r ->
-                    val selectedThisRoute = selectedRoute == r
-                    RouteCard(
-                        r = r,
-                        selected = selectedThisRoute,
-                        onClick = { selectedRoute = if (selectedThisRoute) null else r },
-                    )
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = frequentMode == HistoryFrequentMode.Routes,
+                    onClick = {
+                        frequentMode = HistoryFrequentMode.Routes
+                        selectedLocation = null
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                ) { Text(stringResource(R.string.frequent_routes)) }
+                SegmentedButton(
+                    selected = frequentMode == HistoryFrequentMode.Locations,
+                    onClick = {
+                        frequentMode = HistoryFrequentMode.Locations
+                        selectedRoute = null
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                ) { Text(stringResource(R.string.frequent_locations)) }
+            }
+
+            when (frequentMode) {
+                HistoryFrequentMode.Routes -> {
+                    if (vm.frequentRoutes.isEmpty()) {
+                        EmptyCard(Icons.AutoMirrored.Filled.DirectionsWalk, stringResource(R.string.empty_routes_title),
+                            stringResource(R.string.empty_routes_body, vm.selected?.displayName ?: stringResource(R.string.label_your_child)))
+                    } else {
+                        vm.frequentRoutes.forEach { route ->
+                            val selectedThisRoute = selectedRoute == route
+                            RouteCard(
+                                r = route,
+                                selected = selectedThisRoute,
+                                onClick = { selectedRoute = if (selectedThisRoute) null else route },
+                            )
+                        }
+                    }
+                }
+                HistoryFrequentMode.Locations -> {
+                    if (vm.frequentLocations.isEmpty()) {
+                        EmptyCard(
+                            Icons.Filled.Place,
+                            stringResource(R.string.empty_frequent_locations_title),
+                            stringResource(
+                                R.string.empty_frequent_locations_body,
+                                vm.selected?.displayName ?: stringResource(R.string.label_your_child),
+                            ),
+                        )
+                    } else {
+                        vm.frequentLocations.forEach { location ->
+                            val selectedThisLocation = selectedLocation == location
+                            FrequentLocationCard(
+                                location = location,
+                                zones = vm.zones,
+                                selected = selectedThisLocation,
+                                onClick = {
+                                    selectedLocation = if (selectedThisLocation) null else location
+                                },
+                                onAddZone = { name, radius ->
+                                    vm.addZone(name, location.lat, location.lng, radius)
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -2190,15 +2251,23 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
             HistoryDaySwitcher(
                 days = switcherDays,
                 selected = selected,
-                routeDays = routeDays,
-                routeFilterActive = selectedRoute != null,
+                filterDays = filterDays,
+                filterActive = filterActive,
                 onSelect = { d ->
                     selected = d
                     vm.loadHistory(d.toString())
                 },
             )
-            val activities = remember(vm.history, vm.trips, vm.stops, vm.zones, selected, selectedRoute) {
-                buildHistoryActivities(vm.history, vm.trips, vm.stops, vm.zones, selected.toString(), selectedRoute)
+            val activities = remember(vm.history, vm.trips, vm.stops, vm.zones, selected, selectedRoute, selectedLocation) {
+                buildHistoryActivities(
+                    vm.history,
+                    vm.trips,
+                    vm.stops,
+                    vm.zones,
+                    selected.toString(),
+                    selectedRoute,
+                    selectedLocation,
+                )
             }
             if (activities.isEmpty()) {
                 EmptyCard(Icons.Filled.History, stringResource(R.string.empty_history_title), stringResource(R.string.empty_history_body))
@@ -2214,8 +2283,8 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
 private fun HistoryDaySwitcher(
     days: List<LocalDate>,
     selected: LocalDate,
-    routeDays: Set<String>,
-    routeFilterActive: Boolean,
+    filterDays: Set<String>,
+    filterActive: Boolean,
     onSelect: (LocalDate) -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
@@ -2229,7 +2298,7 @@ private fun HistoryDaySwitcher(
         ) {
             visibleDays.forEach { d ->
                 val isSelected = d == selected
-                val enabled = !routeFilterActive || d.toString() in routeDays
+                val enabled = !filterActive || d.toString() in filterDays
                 val contentColor = when {
                     isSelected -> Color.White
                     enabled -> MaterialTheme.colorScheme.onSurface
@@ -2276,6 +2345,12 @@ private fun ChildHistorySegment(child: Child, selected: Boolean, onClick: () -> 
 private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) {
     val fromPlace = rememberPlaceName(r.from.lat, r.from.lng)
     val toPlace = rememberPlaceName(r.to.lat, r.to.lng)
+    val routePoints = remember(r.points, r.from, r.to) {
+        r.points
+            .map { MapPoint(it.lat, it.lng) }
+            .ifEmpty { listOf(MapPoint(r.from.lat, r.from.lng), MapPoint(r.to.lat, r.to.lng)) }
+    }
+    val mapDescription = stringResource(R.string.view_on_map)
     val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     val supportingColor = if (selected) {
         MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
@@ -2283,7 +2358,8 @@ private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) 
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     var showMap by remember { mutableStateOf(false) }
-    if (showMap) FullScreenMap(r.to.lat, r.to.lng, stringResource(R.string.return_point)) { showMap = false }
+    val title = "$fromPlace ⇄ $toPlace"
+    if (showMap) FullScreenRouteMap(routePoints, title) { showMap = false }
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
@@ -2296,30 +2372,158 @@ private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) 
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("$fromPlace ⇄ $toPlace", style = MaterialTheme.typography.titleMedium, color = contentColor)
+                    Text(title, style = MaterialTheme.typography.titleMedium, color = contentColor)
                 }
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
                     Text(stringResource(R.string.route_count, r.count), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
                 }
             }
-            com.familyshield.mobile.ui.OsmRoute(r.from, r.to, Modifier.fillMaxWidth().height(140.dp).clip(MaterialTheme.shapes.medium))
+            Box(Modifier.fillMaxWidth().height(140.dp).clip(MaterialTheme.shapes.medium)) {
+                com.familyshield.mobile.ui.OsmRoutePath(routePoints, Modifier.matchParentSize())
+                Box(
+                    Modifier.matchParentSize()
+                        .clickable { showMap = true }
+                        .semantics { contentDescription = mapDescription },
+                )
+            }
             Text(stringResource(R.string.route_summary, "%.1f".format(r.avgKm), r.avgMinutes.toInt(), timeOf(r.lastAt)),
                 style = MaterialTheme.typography.bodySmall, color = supportingColor)
-            Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Map, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.open_return_point))
+        }
+    }
+}
+
+@Composable
+private fun FrequentLocationCard(
+    location: FrequentLocation,
+    zones: List<Zone>,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onAddZone: (String, Int) -> Unit,
+) {
+    val zone = remember(location, zones) {
+        zones
+            .filter { distanceM(location.lat, location.lng, it.lat, it.lng) <= it.radiusM }
+            .minByOrNull { it.radiusM }
+    }
+    val attemptedName = rememberPlaceName(location.lat, location.lng)
+    val title = zone?.name ?: attemptedName
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val supportingColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val mapDescription = stringResource(R.string.view_on_map)
+    var showMap by remember { mutableStateOf(false) }
+    var showAddZone by remember { mutableStateOf(false) }
+    if (showMap) {
+        FullScreenMap(location.lat, location.lng, title, zones = zones) { showMap = false }
+    }
+    if (showAddZone) {
+        AddFrequentLocationZoneDialog(
+            location = location,
+            suggestedName = attemptedName,
+            onDismiss = { showAddZone = false },
+            onAdd = { name, radius ->
+                onAddZone(name, radius)
+                showAddZone = false
+            },
+        )
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        contentColor = contentColor,
+        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+        shadowElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = contentColor, modifier = Modifier.weight(1f))
+                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
+                    Text(
+                        stringResource(R.string.route_count, location.count),
+                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(140.dp).clip(MaterialTheme.shapes.medium)) {
+                OsmMapZones(location.lat, location.lng, zones, Modifier.matchParentSize(), zoom = 15.0)
+                Box(
+                    Modifier.matchParentSize()
+                        .clickable { showMap = true }
+                        .semantics { contentDescription = mapDescription },
+                )
+            }
+            Text(
+                "%.4f, %.4f".format(location.lat, location.lng),
+                style = MaterialTheme.typography.bodySmall,
+                color = supportingColor,
+            )
+            Text(
+                stringResource(R.string.frequent_location_last_visited, timeOf(location.lastAt)),
+                style = MaterialTheme.typography.bodySmall,
+                color = supportingColor,
+            )
+            if (zone == null) {
+                Button(
+                    onClick = { showAddZone = true },
+                    shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.add_as_zone))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RouteEndpoint(icon: ImageVector, tint: Color, place: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
-        Text(place, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+private fun AddFrequentLocationZoneDialog(
+    location: FrequentLocation,
+    suggestedName: String,
+    onDismiss: () -> Unit,
+    onAdd: (String, Int) -> Unit,
+) {
+    val coordinates = remember(location) { "%.4f, %.4f".format(location.lat, location.lng) }
+    var name by remember(location) {
+        mutableStateOf(suggestedName.takeUnless { it == coordinates }.orEmpty())
     }
+    var radius by remember(location) { mutableStateOf(50) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_location_zone_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.zone_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ZoneRadiusPicker(radius, onRadiusChange = { radius = it })
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onAdd(name.trim(), radius) }) {
+                Text(stringResource(R.string.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable

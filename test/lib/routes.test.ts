@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { detectStops, buildTrips, frequentRoutes, analyzeRoutes, type GpsPoint, type Trip } from '@/lib/routes';
+import {
+  detectStops,
+  buildTrips,
+  frequentLocations,
+  frequentRoutes,
+  analyzeRoutes,
+  type GpsPoint,
+  type Stop,
+  type Trip,
+} from '@/lib/routes';
 
 const HOME = { lat: 32.000, lng: 34.000 };
 const SCHOOL = { lat: 32.020, lng: 34.020 }; // ~2.8 km from HOME
@@ -102,6 +111,38 @@ describe('route detection', () => {
     expect(frequent[0].occurrenceKeys).toEqual(
       directTrips.map((route) => `${route.departAt}|${route.arriveAt}`),
     );
+    expect(frequent[0].points).toEqual(directTrips.at(-1)!.points);
+  });
+
+  it('surfaces only recurring stop locations and keeps exact occurrences', () => {
+    const homeStops: Stop[] = [
+      stop(HOME, '2026-06-20T06:00:00Z', '2026-06-20T08:00:00Z'),
+      stop({ lat: 32.0002, lng: 34.0001 }, '2026-06-21T06:00:00Z', '2026-06-21T08:00:00Z'),
+    ];
+    const oneOffSchool = stop(SCHOOL, '2026-06-20T09:00:00Z', '2026-06-20T15:00:00Z');
+
+    const frequent = frequentLocations([...homeStops, oneOffSchool]);
+
+    expect(frequent).toHaveLength(1);
+    expect(frequent[0].count).toBe(2);
+    expect(frequent[0].occurrenceKeys).toEqual(
+      homeStops.map((location) => `${location.arriveAt}|${location.departAt}`),
+    );
+  });
+
+  it('limits frequent locations to five by count then recency', () => {
+    const locations = Array.from({ length: 6 }, (_, index) => {
+      const place = { lat: 31 + index * 0.02, lng: 34 };
+      return [
+        stop(place, `2026-06-${20 + index}T06:00:00Z`, `2026-06-${20 + index}T07:00:00Z`),
+        stop(place, `2026-06-${20 + index}T08:00:00Z`, `2026-06-${20 + index}T09:00:00Z`),
+      ];
+    }).flat();
+
+    const frequent = frequentLocations(locations);
+
+    expect(frequent).toHaveLength(5);
+    expect(frequent[0].lastAt).toBe('2026-06-25T09:00:00Z');
   });
 
   it('limits frequent route summaries to the top five by count then recency', () => {
@@ -159,5 +200,14 @@ function trip(from: typeof HOME, to: typeof HOME, departAt: string): Trip {
       { lat: (from.lat + to.lat) / 2, lng: (from.lng + to.lng) / 2, at: new Date(depart + 10 * 60_000).toISOString() },
       { ...to, at: arriveAt },
     ],
+  };
+}
+
+function stop(place: typeof HOME, arriveAt: string, departAt: string): Stop {
+  return {
+    ...place,
+    arriveAt,
+    departAt,
+    dwellMin: (Date.parse(departAt) - Date.parse(arriveAt)) / 60_000,
   };
 }

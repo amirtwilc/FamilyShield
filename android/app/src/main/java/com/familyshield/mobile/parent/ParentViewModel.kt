@@ -68,6 +68,8 @@ class ParentViewModel(
         private set
     var frequentRoutes by mutableStateOf<List<FrequentRoute>>(emptyList())
         private set
+    var frequentLocations by mutableStateOf<List<FrequentLocation>>(emptyList())
+        private set
     var trips by mutableStateOf<List<RouteTrip>>(emptyList())
         private set
     var stops by mutableStateOf<List<Stop>>(emptyList())
@@ -432,7 +434,7 @@ class ParentViewModel(
     fun select(id: String, historyDate: String = today()) {
         selectedId = id; pairingCode = null; location = null; alerts = emptyList()
         zones = mapZonesByChild[id] ?: emptyList(); history = emptyList(); historyDays = emptyList(); distanceKm = 0.0
-        frequentRoutes = emptyList(); trips = emptyList(); stops = emptyList()
+        frequentRoutes = emptyList(); frequentLocations = emptyList(); trips = emptyList(); stops = emptyList()
         refreshDetail()
         loadZones()
         loadHistory(historyDate)
@@ -445,7 +447,7 @@ class ParentViewModel(
         location = allLocations[id]
         zones = mapZonesByChild[id] ?: emptyList()
         history = emptyList(); historyDays = emptyList(); distanceKm = 0.0
-        frequentRoutes = emptyList(); trips = emptyList(); stops = emptyList()
+        frequentRoutes = emptyList(); frequentLocations = emptyList(); trips = emptyList(); stops = emptyList()
         loadZones()
         loadHistory(today())
         loadHistoryDays()
@@ -552,6 +554,7 @@ class ParentViewModel(
             try {
                 val r = authed { api.routes(it, id) }
                 frequentRoutes = r.frequent
+                frequentLocations = r.frequentLocations
                 trips = r.trips
                 stops = r.stops
             } catch (e: Exception) { error = e.message }
