@@ -122,6 +122,32 @@ class HistoryTimelineTest {
     }
 
     @Test
+    fun `route filter uses exact backend occurrences instead of nearby partial trips`() {
+        val direct = trip(Geo(32.0, 34.0), Geo(32.02, 34.02), "2026-07-26T09:00:00Z")
+        val partial = trip(Geo(32.0, 34.0), Geo(32.01995, 34.01995), "2026-07-26T10:00:00Z")
+        val route = FrequentRoute(
+            Geo(32.0, 34.0),
+            Geo(32.02, 34.02),
+            count = 2,
+            lastAt = direct.arriveAt,
+            avgMinutes = 20.0,
+            avgKm = 2.8,
+            occurrenceKeys = listOf("${direct.departAt}|${direct.arriveAt}"),
+        )
+
+        val activities = buildHistoryActivities(
+            points = emptyList(),
+            trips = listOf(direct, partial),
+            zones = emptyList(),
+            selectedDate = "2026-07-26",
+            selectedRoute = route,
+        )
+
+        assertEquals(1, activities.size)
+        assertEquals(direct.departAt, activities.single().startAt)
+    }
+
+    @Test
     fun `daily timeline uses backend stops as stay rows`() {
         val home = Geo(50.93009, 6.94149)
         val gym = Geo(50.934953, 6.974577)

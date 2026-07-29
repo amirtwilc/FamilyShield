@@ -69,6 +69,7 @@
     <string name="family_network">Family Network</string>
     <string name="children_online">%1$d children online</string>
     <string name="child_online">%1$d child online</string>
+    <string name="child_online_inside_zone">Online - inside %1$s</string>
     <string name="full_view">Full View</string>
     <string name="directions">Directions</string>
     <string name="directions_last_known">Directions to last known location</string>
@@ -200,8 +201,8 @@
     <string name="notification_alert_fallback_title">FamilyShield alert</string>
     <string name="notification_low_battery_body">Battery at %1$d%%</string>
     <string name="notification_child_unpaired_body">The child unpaired this device.</string>
-    <string name="notification_safe_zone_enter_body">Child entered %1$s</string>
-    <string name="notification_safe_zone_exit_body">Child left %1$s</string>
+    <string name="notification_safe_zone_enter_body">%1$s entered %2$s</string>
+    <string name="notification_safe_zone_exit_body">%1$s left %2$s</string>
     <string name="notification_app_usage_limit_total_body">%1$s reached %2$s of %3$s daily screen time.</string>
     <string name="notification_app_usage_limit_app_body">%1$s reached %3$s of %4$s in %2$s.</string>
     <string name="notification_app_usage_limit_total_legacy_body">Daily screen time reached %1$s of %2$s.</string>

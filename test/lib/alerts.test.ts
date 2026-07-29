@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedParent, seedChild, seedDevice } from '../helpers/factories';
 import { db } from '@/db/client';
-import { devices, alerts, safeZones, safeZoneStates } from '@/db/schema';
+import { devices, alerts, childParentLinks, safeZones, safeZoneStates } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { fireLowBatteryIfNeeded, fireSafeZoneTransitionsForBatch } from '@/lib/alerts/engine';
 import { setSender, resetSender, type PushOptions } from '@/lib/alerts/fcm';
@@ -73,8 +73,11 @@ describe('safe-zone alerts', () => {
 
   it('fires only one notification for the net transition in a location batch', async () => {
     const p = await seedParent();
-    const c = await seedChild(p.id);
+    const c = await seedChild(p.id, 'Mia');
     const { device } = await seedDevice(c.id);
+    await db.update(childParentLinks)
+      .set({ displayName: 'Mimi' })
+      .where(eq(childParentLinks.childId, c.id));
     await db.insert(safeZones).values({
       parentId: p.id,
       sourceChildId: c.id,
@@ -93,8 +96,13 @@ describe('safe-zone alerts', () => {
 
     const rows = await db.select().from(alerts).where(eq(alerts.childId, c.id));
     expect(rows.map((row) => row.type)).toEqual(['safe_zone_enter']);
+    expect(rows[0].payload).toEqual(expect.objectContaining({ childName: 'Mimi' }));
     expect(sent).toBe(1);
-    expect(pushes[0].data).toEqual(expect.objectContaining({ type: 'safe_zone_enter', zoneName: 'Home' }));
+    expect(pushes[0].data).toEqual(expect.objectContaining({
+      type: 'safe_zone_enter',
+      childName: 'Mimi',
+      zoneName: 'Home',
+    }));
   });
 
   it('does not send enter and exit notifications together when moving between zones', async () => {
@@ -136,5 +144,37 @@ describe('safe-zone alerts', () => {
     expect(rows[0].payload).toEqual(expect.objectContaining({ zoneName: 'School' }));
     expect(sent).toBe(1);
     expect(pushes[0].data).toEqual(expect.objectContaining({ type: 'safe_zone_enter', zoneName: 'School' }));
+  });
+
+  it('includes the child name in exit notifications', async () => {
+    const p = await seedParent();
+    const c = await seedChild(p.id, 'Noa');
+    const { device } = await seedDevice(c.id);
+    await db.insert(safeZones).values({
+      parentId: p.id,
+      sourceChildId: c.id,
+      name: 'Home',
+      center: { lat: 32.0, lng: 34.0 },
+      radiusM: 500,
+    });
+
+    await fireSafeZoneTransitionsForBatch({
+      device,
+      points: [{ lat: 32.0, lng: 34.0, recordedAt: '2026-07-27T17:00:00.000Z' }],
+    });
+    pushes = [];
+    sent = 0;
+
+    await fireSafeZoneTransitionsForBatch({
+      device,
+      points: [{ lat: 32.01, lng: 34.0, recordedAt: '2026-07-27T17:05:00.000Z' }],
+    });
+
+    expect(sent).toBe(1);
+    expect(pushes[0].data).toEqual(expect.objectContaining({
+      type: 'safe_zone_exit',
+      childName: 'Noa',
+      zoneName: 'Home',
+    }));
   });
 });

@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.fragment.app.FragmentActivity
 import com.familyshield.mobile.kid.KidApp
+import com.familyshield.mobile.net.Geocoding
 import com.familyshield.mobile.net.PrefsTokenStore
 import com.familyshield.mobile.parent.ParentApp
 import com.familyshield.mobile.push.ChatPushDestination
@@ -52,6 +53,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Locales.initialize(this)
+        Geocoding.initialize(this)
         pendingChatDestination.value = chatPushDestinationFromIntent(intent)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33 &&

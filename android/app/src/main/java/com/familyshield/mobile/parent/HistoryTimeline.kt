@@ -12,7 +12,9 @@ import kotlin.math.cos
 
 internal const val HISTORY_DAY_RANGE_DAYS = 14
 internal const val HISTORY_SIMILAR_LOCATION_RADIUS_M = 75.0
-internal const val HISTORY_ROUTE_MATCH_PROXIMITY_M = 300.0
+// Used only as a compatibility fallback for backends that do not yet return
+// exact occurrence keys. It matches the backend's canonical endpoint radius.
+internal const val HISTORY_ROUTE_MATCH_PROXIMITY_M = 150.0
 internal const val HISTORY_MOVEMENT_PAUSE_MIN = 5.0
 internal const val HISTORY_MOVEMENT_MIN_DISTANCE_M = 250.0
 // GPS can occasionally report a short-lived point hundreds of meters away from
@@ -260,12 +262,18 @@ private fun List<HistoryPoint>.nameCandidates(): List<Geo> {
 }
 
 fun routeMatchesFrequentRoute(trip: RouteTrip, route: FrequentRoute, proximityM: Double = HISTORY_ROUTE_MATCH_PROXIMITY_M): Boolean {
+    if (route.occurrenceKeys.isNotEmpty()) {
+        return tripOccurrenceKey(trip) in route.occurrenceKeys
+    }
     val same = distanceMeters(trip.from.lat, trip.from.lng, route.from.lat, route.from.lng) <= proximityM &&
         distanceMeters(trip.to.lat, trip.to.lng, route.to.lat, route.to.lng) <= proximityM
     val reverse = distanceMeters(trip.from.lat, trip.from.lng, route.to.lat, route.to.lng) <= proximityM &&
         distanceMeters(trip.to.lat, trip.to.lng, route.from.lat, route.from.lng) <= proximityM
     return same || reverse
 }
+
+private fun tripOccurrenceKey(trip: RouteTrip): String =
+    "${trip.departAt}|${trip.arriveAt}"
 
 fun historySwitcherDays(today: LocalDate, historyDays: List<String>, rangeDays: Int = HISTORY_DAY_RANGE_DAYS): List<LocalDate> {
     val oldestAllowed = today.minusDays((rangeDays - 1).toLong())

@@ -15,7 +15,7 @@ describe('location reads', () => {
   it('returns current and history for an owned child', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     const { token } = await seedDevice(c.id);
-    const base = new Date(); base.setUTCHours(8, 0, 0, 0);
+    const base = new Date(Date.now() - 60 * 60_000); base.setUTCSeconds(0, 0);
     const at = (min: number) => new Date(base.getTime() + min * 60_000).toISOString();
     const day = base.toISOString().slice(0, 10);
     await upload(new Request('http://t/', {
@@ -39,7 +39,7 @@ describe('location reads', () => {
   it('returns available history days capped to the requested recent range', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     const { token } = await seedDevice(c.id);
-    const recent = new Date(); recent.setUTCHours(8, 0, 0, 0);
+    const recent = new Date(Date.now() - 60 * 60_000); recent.setUTCSeconds(0, 0);
     const old = new Date(recent); old.setUTCDate(old.getUTCDate() - 15);
     await upload(new Request('http://t/', {
       method: 'POST', headers: { authorization: `Bearer ${token}` },

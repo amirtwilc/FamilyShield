@@ -1112,6 +1112,11 @@ private fun DashboardTab(
     val focused = vm.children.find { it.id == scopeId }
     val focusedDevice = focused?.primaryDevice()
     val focusedLocation = focused?.let { vm.allLocations[it.id] ?: vm.location }
+    val focusedZoneName = if (focused != null && focusedLocation != null) {
+        currentActiveZoneName(focusedLocation, vm.mapZonesByChild[focused.id].orEmpty())
+    } else {
+        null
+    }
     val onlineCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
     val focusedOnline = focusedDevice?.isConnected() == true
     val focusedUnpaired = focusedDevice?.isUnpaired() == true
@@ -1125,6 +1130,8 @@ private fun DashboardTab(
     val scopeStatusText = when {
         focused == null -> stringResource(if (onlineCount == 1) R.string.child_online else R.string.children_online, onlineCount)
         focusedUnpaired -> stringResource(R.string.child_unpaired)
+        focusedOnline && focusedZoneName != null ->
+            stringResource(R.string.child_online_inside_zone, focusedZoneName)
         focusedOnline -> stringResource(R.string.chat_online)
         else -> stringResource(R.string.child_offline)
     }
@@ -2269,12 +2276,19 @@ private fun ChildHistorySegment(child: Child, selected: Boolean, onClick: () -> 
 private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) {
     val fromPlace = rememberPlaceName(r.from.lat, r.from.lng)
     val toPlace = rememberPlaceName(r.to.lat, r.to.lng)
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val supportingColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     var showMap by remember { mutableStateOf(false) }
     if (showMap) FullScreenMap(r.to.lat, r.to.lng, stringResource(R.string.return_point)) { showMap = false }
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        contentColor = contentColor,
         border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
         shadowElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
@@ -2282,7 +2296,7 @@ private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) 
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("$fromPlace ⇄ $toPlace", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("$fromPlace ⇄ $toPlace", style = MaterialTheme.typography.titleMedium, color = contentColor)
                 }
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
                     Text(stringResource(R.string.route_count, r.count), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -2291,7 +2305,7 @@ private fun RouteCard(r: FrequentRoute, selected: Boolean, onClick: () -> Unit) 
             }
             com.familyshield.mobile.ui.OsmRoute(r.from, r.to, Modifier.fillMaxWidth().height(140.dp).clip(MaterialTheme.shapes.medium))
             Text(stringResource(R.string.route_summary, "%.1f".format(r.avgKm), r.avgMinutes.toInt(), timeOf(r.lastAt)),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                style = MaterialTheme.typography.bodySmall, color = supportingColor)
             Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Map, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.open_return_point))
@@ -2860,7 +2874,11 @@ private fun LastActivityText(device: Device?, location: CurrentLocation?) {
 
 @Composable
 private fun rememberPlaceName(lat: Double?, lng: Double?): String {
-    var name by remember(lat, lng) { mutableStateOf<String?>(null) }
+    var name by remember(lat, lng) {
+        mutableStateOf(
+            if (lat != null && lng != null) com.familyshield.mobile.net.Geocoding.cached(lat, lng) else null,
+        )
+    }
     LaunchedEffect(lat, lng) {
         if (lat != null && lng != null) name = com.familyshield.mobile.net.Geocoding.reverse(lat, lng)
     }
@@ -2888,9 +2906,17 @@ private fun rememberGeocodedPlaceName(lat: Double, lng: Double, enabled: Boolean
 
 @Composable
 private fun rememberBestGeocodedPlaceName(lat: Double, lng: Double, candidates: List<Geo>, enabled: Boolean): String? {
-    var name by remember(lat, lng, candidates, enabled) { mutableStateOf<String?>(null) }
+    var name by remember(lat, lng, candidates, enabled) {
+        mutableStateOf(
+            if (enabled) {
+                (listOf(Geo(lat, lng)) + candidates)
+                    .firstNotNullOfOrNull { com.familyshield.mobile.net.Geocoding.cached(it.lat, it.lng) }
+            } else {
+                null
+            },
+        )
+    }
     LaunchedEffect(lat, lng, candidates, enabled) {
-        name = null
         if (!enabled) return@LaunchedEffect
         val points = (listOf(Geo(lat, lng)) + candidates)
             .distinctBy { "%.6f,%.6f".format(it.lat, it.lng) }
@@ -2944,7 +2970,7 @@ private fun ago(iso: String): String = try {
     }
 } catch (e: Exception) { "recently" }
 
-private fun distanceM(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
+internal fun distanceM(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
     val dLat = Math.toRadians(bLat - aLat); val dLng = Math.toRadians(bLng - aLng)
     val h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         cos(Math.toRadians(aLat)) * cos(Math.toRadians(bLat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)

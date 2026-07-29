@@ -103,6 +103,7 @@ data class FrequentRoute(
     val lastAt: String,
     val avgMinutes: Double,
     val avgKm: Double,
+    val occurrenceKeys: List<String> = emptyList(),
 )
 
 @Serializable

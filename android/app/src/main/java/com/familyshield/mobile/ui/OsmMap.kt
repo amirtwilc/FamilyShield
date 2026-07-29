@@ -178,10 +178,20 @@ fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, descri
                 })
             }
             when {
-                pts.size == 1 -> { mv.controller.setZoom(15.0); mv.controller.setCenter(pts[0]) }
+                pts.size == 1 || familyMapLocationsCoincide(markers.map { it.lat to it.lng }) -> {
+                    mv.controller.setZoom(FAMILY_MAP_MAX_ZOOM)
+                    mv.controller.setCenter(pts[0])
+                }
                 pts.size > 1 -> {
                     val bbox = BoundingBox.fromGeoPoints(pts)
-                    mv.post { runCatching { mv.zoomToBoundingBox(bbox.increaseByScale(1.5f), false, 70) } }
+                    mv.post {
+                        runCatching {
+                            mv.zoomToBoundingBox(bbox.increaseByScale(1.5f), false, 70)
+                            if (mv.zoomLevelDouble > FAMILY_MAP_MAX_ZOOM) {
+                                mv.controller.setZoom(cappedFamilyMapZoom(mv.zoomLevelDouble))
+                            }
+                        }
+                    }
                 }
             }
             mv.invalidate()

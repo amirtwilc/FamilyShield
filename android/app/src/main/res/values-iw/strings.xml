@@ -77,6 +77,7 @@
     <string name="family_network">רשת המשפחה</string>
     <string name="children_online">%1$d ילדים מחוברים</string>
     <string name="child_online">%1$d ילד מחובר</string>
+    <string name="child_online_inside_zone">מחובר - נמצא ב%1$s</string>
     <string name="full_view">תצוגה מלאה</string>
     <string name="top_places_today">מקומות מובילים היום</string>
     <string name="empty_places_title">אין מקומות עדיין</string>
@@ -202,8 +203,8 @@
     <string name="notification_alert_fallback_title">התראת FamilyShield</string>
     <string name="notification_low_battery_body">סוללה %1$d%%</string>
     <string name="notification_child_unpaired_body">הילד ניתק את המכשיר הזה.</string>
-    <string name="notification_safe_zone_enter_body">הילד נכנס לאזור %1$s</string>
-    <string name="notification_safe_zone_exit_body">הילד יצא מאזור %1$s</string>
+    <string name="notification_safe_zone_enter_body">%1$s נכנס/ה לאזור %2$s</string>
+    <string name="notification_safe_zone_exit_body">%1$s יצא/ה מאזור %2$s</string>
     <string name="notification_app_usage_limit_total_body">%1$s הגיע/ה ל-%2$s מתוך %3$s זמן מסך יומי.</string>
     <string name="notification_app_usage_limit_app_body">%1$s הגיע/ה ל-%3$s מתוך %4$s ב-%2$s.</string>
     <string name="notification_app_usage_limit_total_legacy_body">זמן המסך היומי הגיע ל-%1$s מתוך %2$s.</string>

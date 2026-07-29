@@ -15,14 +15,25 @@ export type Trip = {
   distanceKm: number;
   points: GpsPoint[];
 };
-export type FrequentRoute = { from: LatLng; to: LatLng; count: number; lastAt: string; avgMinutes: number; avgKm: number };
+export type FrequentRoute = {
+  from: LatLng;
+  to: LatLng;
+  count: number;
+  lastAt: string;
+  avgMinutes: number;
+  avgKm: number;
+  occurrenceKeys: string[];
+};
 
 /** Tunable route-analysis defaults. ROUTE_STOP_RADIUS_M is the maximum jitter
  *  around a resting point; ROUTE_CONTINUATION_PAUSE_MIN is the dwell time needed
  *  to split movement into two routes. */
 export const ROUTE_STOP_RADIUS_M = 150;
 export const ROUTE_CONTINUATION_PAUSE_MIN = 5;
-export const FREQUENT_ROUTE_PROXIMITY_M = 300;
+/** Maximum GPS variation for two trip endpoints to represent the same place.
+ * Routes are otherwise matched strictly by their canonical start/end places,
+ * so an intermediate stop cannot make a partial trip part of a longer route. */
+export const FREQUENT_ROUTE_ENDPOINT_RADIUS_M = 150;
 export const FREQUENT_ROUTE_MIN_COUNT = 2;
 export const FREQUENT_ROUTE_LIMIT = 5;
 /** A short-lived GPS cluster can be noise even when it is farther than the stop
@@ -158,18 +169,60 @@ function routePoints(points: GpsPoint[], from: Stop, to: Stop): GpsPoint[] {
   ];
 }
 
-function sameDirection(a: Trip, b: Trip, proximityM: number): boolean {
-  return haversineM(a.from, b.from) <= proximityM && haversineM(a.to, b.to) <= proximityM;
+type EndpointCluster = LatLng & { count: number };
+type ClusteredTrip = { trip: Trip; fromCluster: number; toCluster: number };
+
+export function tripOccurrenceKey(trip: Pick<Trip, 'departAt' | 'arriveAt'>): string {
+  return `${trip.departAt}|${trip.arriveAt}`;
 }
 
-function eitherDirection(a: Trip, b: Trip, proximityM: number): boolean {
-  return sameDirection(a, b, proximityM) ||
-    (haversineM(a.from, b.to) <= proximityM && haversineM(a.to, b.from) <= proximityM);
+function clusterTripEndpoints(trips: Trip[], radiusM: number): ClusteredTrip[] {
+  const clusters: EndpointCluster[] = [];
+
+  const clusterFor = (point: LatLng): number => {
+    let nearest = -1;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    clusters.forEach((cluster, index) => {
+      const distance = haversineM(cluster, point);
+      if (distance <= radiusM && distance < nearestDistance) {
+        nearest = index;
+        nearestDistance = distance;
+      }
+    });
+    if (nearest < 0) {
+      clusters.push({ ...point, count: 1 });
+      return clusters.length - 1;
+    }
+
+    const cluster = clusters[nearest];
+    const count = cluster.count + 1;
+    cluster.lat = (cluster.lat * cluster.count + point.lat) / count;
+    cluster.lng = (cluster.lng * cluster.count + point.lng) / count;
+    cluster.count = count;
+    return nearest;
+  };
+
+  return trips.map((trip) => ({
+    trip,
+    fromCluster: clusterFor(trip.from),
+    toCluster: clusterFor(trip.to),
+  }));
 }
 
-function orientTrip(t: Trip, anchor: Trip, proximityM: number): Trip {
-  if (sameDirection(t, anchor, proximityM)) return t;
-  return { ...t, from: t.to, to: t.from };
+function directionKey(fromCluster: number, toCluster: number): string {
+  return `${fromCluster}:${toCluster}`;
+}
+
+function undirectedKey(fromCluster: number, toCluster: number): string {
+  return fromCluster < toCluster
+    ? directionKey(fromCluster, toCluster)
+    : directionKey(toCluster, fromCluster);
+}
+
+function orientClusteredTrip(entry: ClusteredTrip, fromCluster: number): Trip {
+  return entry.fromCluster === fromCluster
+    ? entry.trip
+    : { ...entry.trip, from: entry.trip.to, to: entry.trip.from };
 }
 
 /** Cluster trips by similar endpoints and surface the recurring routes. Recurrence
@@ -177,24 +230,39 @@ function orientTrip(t: Trip, anchor: Trip, proximityM: number): Trip {
  *  B->A occurrences are included in the same A<->B summary row. */
 export function frequentRoutes(
   trips: Trip[],
-  proximityM = FREQUENT_ROUTE_PROXIMITY_M,
+  endpointRadiusM = FREQUENT_ROUTE_ENDPOINT_RADIUS_M,
   minCount = FREQUENT_ROUTE_MIN_COUNT,
   limit = FREQUENT_ROUTE_LIMIT,
 ): FrequentRoute[] {
-  const clusters: Trip[][] = [];
-  for (const t of trips) {
-    const c = clusters.find((cl) => sameDirection(cl[0], t, proximityM));
-    if (c) c.push(t); else clusters.push([t]);
-  }
-  const frequentClusters = clusters.filter((cl) => cl.length >= minCount);
-  const displayAnchors: Trip[] = [];
-  const summaries: FrequentRoute[] = [];
+  const clustered = clusterTripEndpoints(trips, endpointRadiusM)
+    .filter((entry) => entry.fromCluster !== entry.toCluster);
+  const directed = new Map<string, ClusteredTrip[]>();
+  const undirected = new Map<string, ClusteredTrip[]>();
 
-  for (const frequent of frequentClusters) {
-    const anchor = frequent[0];
-    if (displayAnchors.some((existing) => eitherDirection(existing, anchor, proximityM))) continue;
-    displayAnchors.push(anchor);
-    const matching = trips.filter((t) => eitherDirection(anchor, t, proximityM)).map((t) => orientTrip(t, anchor, proximityM));
+  clustered.forEach((entry) => {
+    const directedKey = directionKey(entry.fromCluster, entry.toCluster);
+    directed.set(directedKey, [...(directed.get(directedKey) ?? []), entry]);
+    const pairKey = undirectedKey(entry.fromCluster, entry.toCluster);
+    undirected.set(pairKey, [...(undirected.get(pairKey) ?? []), entry]);
+  });
+
+  const summaries: FrequentRoute[] = [];
+  for (const matchingEntries of undirected.values()) {
+    const sample = matchingEntries[0];
+    const forward = directed.get(directionKey(sample.fromCluster, sample.toCluster)) ?? [];
+    const reverse = directed.get(directionKey(sample.toCluster, sample.fromCluster)) ?? [];
+    if (forward.length < minCount && reverse.length < minCount) continue;
+
+    const preferred = forward.length > reverse.length
+      ? forward
+      : reverse.length > forward.length
+        ? reverse
+        : [...forward, ...reverse].sort((a, b) =>
+            +new Date(b.trip.arriveAt) - +new Date(a.trip.arriveAt),
+          ).slice(0, 1);
+    const fromCluster = preferred[0].fromCluster;
+    const matching = matchingEntries.map((entry) => orientClusteredTrip(entry, fromCluster));
+
     summaries.push({
       from: { lat: avg(matching.map((t) => t.from.lat)), lng: avg(matching.map((t) => t.from.lng)) },
       to: { lat: avg(matching.map((t) => t.to.lat)), lng: avg(matching.map((t) => t.to.lng)) },
@@ -202,6 +270,7 @@ export function frequentRoutes(
       lastAt: matching.map((t) => t.arriveAt).sort().at(-1)!,
       avgMinutes: avg(matching.map((t) => t.durationMin)),
       avgKm: avg(matching.map((t) => t.distanceKm)),
+      occurrenceKeys: matching.map(tripOccurrenceKey),
     });
   }
   return summaries

@@ -98,17 +98,21 @@ internal fun safetyAlertNotificationCopy(
         "safe_zone_enter" -> {
             val zoneName = data["zoneName"]?.takeIf { it.isNotBlank() }
                 ?: context.getString(R.string.chip_safe_zone)
+            val childName = data["childName"]?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.label_child)
             PushNotificationCopy(
                 context.getString(R.string.alert_safe_zone_enter),
-                context.getString(R.string.notification_safe_zone_enter_body, zoneName),
+                context.getString(R.string.notification_safe_zone_enter_body, childName, zoneName),
             )
         }
         "safe_zone_exit" -> {
             val zoneName = data["zoneName"]?.takeIf { it.isNotBlank() }
                 ?: context.getString(R.string.chip_safe_zone)
+            val childName = data["childName"]?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.label_child)
             PushNotificationCopy(
                 context.getString(R.string.alert_safe_zone_exit),
-                context.getString(R.string.notification_safe_zone_exit_body, zoneName),
+                context.getString(R.string.notification_safe_zone_exit_body, childName, zoneName),
             )
         }
         "app_usage_limit_exceeded" -> {

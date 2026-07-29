@@ -94,17 +94,19 @@ async function fireSafeZoneAlert(
   lng: number,
 ) {
   const verb = type === 'safe_zone_enter' ? 'entered' : 'left';
+  const childName = await childDisplayNameForParent(row.parent_id, device.childId);
   const [a] = await db.insert(alerts).values({
     childId: device.childId,
     parentId: row.parent_id,
     deviceId: device.id,
     type,
-    payload: { zoneId: row.id, zoneName: row.name, radiusM: row.radius_m, lat, lng },
+    payload: { zoneId: row.id, zoneName: row.name, radiusM: row.radius_m, lat, lng, childName },
   }).returning();
 
-  if (await sendToParent(row.parent_id, `Safe zone ${verb}`, `Child ${verb} ${row.name}`, {
+  if (await sendToParent(row.parent_id, `Safe zone ${verb}`, `${childName} ${verb} ${row.name}`, {
     type,
     childId: device.childId,
+    childName,
     zoneId: row.id,
     zoneName: row.name,
   }, LOCALIZED_ALERT_PUSH_OPTIONS)) {

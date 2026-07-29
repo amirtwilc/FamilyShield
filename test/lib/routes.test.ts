@@ -83,6 +83,27 @@ describe('route detection', () => {
     expect(frequentRoutes(trips)).toHaveLength(0);
   });
 
+  it('does not count one-off partial trips as occurrences of a longer route', () => {
+    const midpoint = { lat: 32.010, lng: 34.010 };
+    const directTrips = [
+      trip(HOME, SCHOOL, '2026-06-20T08:00:00Z'),
+      trip(HOME, SCHOOL, '2026-06-21T08:00:00Z'),
+      trip(HOME, SCHOOL, '2026-06-22T08:00:00Z'),
+    ];
+    const partialTrips = [
+      trip(HOME, midpoint, '2026-06-23T08:00:00Z'),
+      trip(midpoint, SCHOOL, '2026-06-23T08:30:00Z'),
+    ];
+
+    const frequent = frequentRoutes([...directTrips, ...partialTrips]);
+
+    expect(frequent).toHaveLength(1);
+    expect(frequent[0].count).toBe(3);
+    expect(frequent[0].occurrenceKeys).toEqual(
+      directTrips.map((route) => `${route.departAt}|${route.arriveAt}`),
+    );
+  });
+
   it('limits frequent route summaries to the top five by count then recency', () => {
     const routes = Array.from({ length: 6 }, (_, index) => {
       const from = { lat: 32 + index * 0.02, lng: 34 };
