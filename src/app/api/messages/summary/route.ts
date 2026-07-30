@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { requireParent } from '@/lib/auth/parent';
 import { ok } from '@/lib/http';
+import { decryptMessageBody } from '@/lib/messages/crypto';
 
 export const runtime = 'nodejs';
 
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
     childId: x.child_id,
     unread: x.unread,
     last: x.last_id
-      ? { id: x.last_id, sender: x.last_sender, body: x.last_body, priority: x.last_priority ?? 'normal', created_at: new Date(x.last_at as string | Date).toISOString() }
+      ? { id: x.last_id, sender: x.last_sender, body: decryptMessageBody(x.last_body!), priority: x.last_priority ?? 'normal', created_at: new Date(x.last_at as string | Date).toISOString() }
       : null,
   }));
   return ok({ conversations });

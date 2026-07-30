@@ -2,7 +2,7 @@
 
 Read this file before working on FamilyShield.
 
-FamilyShield is primarily a native Android parental-safety app backed by a Next.js API and a PostGIS database. The web client in this repo is not the main app; it is a testing/development client for exercising the backend.
+FamilyShield is primarily a native Android parental-safety app backed by a Next.js API and a PostGIS database. The backend web surface is limited to a landing page, health, and API documentation.
 
 ## What The Project Does
 
@@ -51,20 +51,15 @@ It provides:
 
 The database layer uses Drizzle ORM with PostgreSQL + PostGIS. Schema definitions are in `src/db/schema.ts`, and SQL migrations are in `drizzle/`.
 
-## Web Client
+## Backend Web Surface
 
-The web client is not the main application.
-
-It is bundled into the Next.js app for testing, development, and quick manual API exercising.
+The Next.js web surface is intentionally minimal. `/` links to API health and
+Swagger documentation. Parent and kid product flows live only in the Android app.
 
 Useful routes:
 
-- `/parent` - browser parent dashboard/test client
-- `/kid` - browser kid-device simulator/test client
 - `/api/docs` - Swagger UI
 - `/api/openapi.json` - OpenAPI JSON
-
-Do not treat the web client as the primary product UX. The Android app is the primary client.
 
 ## Change Reporting
 
@@ -113,6 +108,8 @@ MAX_LOCATION_BATCH=200
 LOCATION_MAX_FUTURE_MIN=10
 LOCATION_MAX_BACKFILL_DAYS=90
 CRON_SECRET=change-me-cron
+MESSAGE_ENCRYPTION_KEY=<base64-encoded-32-byte-key>
+MESSAGE_RETENTION_DAYS=365
 ```
 
 ## Run Locally
@@ -135,8 +132,6 @@ http://localhost:3000
 Useful URLs:
 
 ```text
-http://localhost:3000/parent
-http://localhost:3000/kid
 http://localhost:3000/api/docs
 http://localhost:3000/api/health
 ```
@@ -153,10 +148,17 @@ During development on Vercel's free tier, `vercel.json` may use `"crons": []`. B
 {
   "crons": [
     { "path": "/api/cron/offline-sweep", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/location-retention", "schedule": "0 * * * *" }
+    { "path": "/api/cron/location-retention", "schedule": "0 * * * *" },
+    { "path": "/api/cron/message-retention", "schedule": "15 2 * * *" }
   ]
 }
 ```
+
+Generate the production chat-encryption key once with
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+Keep it stable and backed up: losing it makes encrypted chat history unreadable.
+After deploying the key, run `npm run db:encrypt-messages` once to encrypt legacy
+plaintext message rows.
 
 Before a production Android release, configure Firebase Cloud Messaging on both sides so parent push notifications can be delivered immediately:
 
@@ -260,5 +262,5 @@ Tests:
 
 ```powershell
 npm test
-npm run test:e2e
+npm run test:auth-emulator
 ```

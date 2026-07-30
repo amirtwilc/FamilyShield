@@ -3,7 +3,6 @@ package com.familyshield.mobile.parent
 import com.familyshield.mobile.MainDispatcherRule
 import com.familyshield.mobile.fakes.FakeApiClient
 import com.familyshield.mobile.fakes.InMemoryTokenStore
-import com.familyshield.mobile.net.ApiClient
 import com.familyshield.mobile.net.AppUsageDayDetail
 import com.familyshield.mobile.net.AppUsageEntry
 import com.familyshield.mobile.net.AppUsageLimitBody
@@ -39,11 +38,11 @@ class ParentViewModelTest {
     @get:Rule
     val mainRule = MainDispatcherRule()
 
-    private fun viewModel(api: ApiClient) =
-        ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher)
+    private fun viewModel(api: FakeApiClient) =
+        ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher, FakeParentAuthGateway(api))
 
-    private fun viewModel(api: ApiClient, store: InMemoryTokenStore) =
-        ParentViewModel(api, store, mainRule.dispatcher)
+    private fun viewModel(api: FakeApiClient, store: InMemoryTokenStore) =
+        ParentViewModel(api, store, mainRule.dispatcher, FakeParentAuthGateway(api))
 
     @Test
     fun `register succeeds and stores a token`() = runTest(mainRule.dispatcher) {
@@ -57,7 +56,7 @@ class ParentViewModelTest {
     }
 
     @Test
-    fun `parent authentication clears kid device token`() = runTest(mainRule.dispatcher) {
+    fun `parent authentication preserves kid device token`() = runTest(mainRule.dispatcher) {
         val store = InMemoryTokenStore(deviceToken = "kid-device-token")
         val vm = viewModel(FakeApiClient(), store)
 
@@ -65,8 +64,41 @@ class ParentViewModelTest {
         advanceUntilIdle()
 
         assertNotNull(vm.token)
-        assertNull(store.deviceToken)
+        assertEquals("kid-device-token", store.deviceToken)
     }
+
+    @Test
+    fun `Firebase auth state is restored without a stored parent JWT`() = runTest(mainRule.dispatcher) {
+        val auth = FakeParentAuthGateway(
+            state = ParentAuthState.SignedIn("firebase-uid", "parent@x.com"),
+        )
+        val vm = ParentViewModel(
+            FakeApiClient(),
+            InMemoryTokenStore(),
+            mainRule.dispatcher,
+            auth,
+        )
+        advanceUntilIdle()
+
+        assertNotNull(vm.token)
+        assertTrue(vm.authState is ParentAuthState.SignedIn)
+    }
+
+    @Test
+    fun `failed Firebase password login falls back to one-time legacy migration`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            api.register("legacy@x.com", "OldPassword!1")
+            val auth = FakeParentAuthGateway(api = api, loginFails = true)
+            val vm = ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher, auth)
+
+            vm.authenticate("legacy@x.com", "OldPassword!1", register = false)
+            advanceUntilIdle()
+
+            assertTrue(auth.customTokenUsed)
+            assertTrue(vm.authState is ParentAuthState.SignedIn)
+            assertNotNull(vm.token)
+        }
 
     @Test
     fun `login with wrong password surfaces an error and no token`() = runTest(mainRule.dispatcher) {
@@ -765,6 +797,55 @@ class ParentViewModelTest {
         assertTrue(device.copy(permissionStatus = null).hasMissingPermissions() == false)
         assertTrue(PermissionStatus(g = "g", r = 223, m = 207).requiredPermissionsSatisfied())
         assertFalse(PermissionStatus(g = "g", r = 207, m = 79).requiredPermissionsSatisfied())
+    }
+}
+
+private class FakeParentAuthGateway(
+    private val api: FakeApiClient? = null,
+    var state: ParentAuthState = ParentAuthState.SignedOut,
+    private val loginFails: Boolean = false,
+) : ParentAuthGateway {
+    var customTokenUsed = false
+    private var token = if (state is ParentAuthState.SignedIn) "acc:parent@x.com" else null
+
+    override fun currentState() = state
+
+    override suspend fun register(email: String, password: String): ParentAuthState {
+        token = api?.register(email, password)?.accessToken ?: "acc:$email"
+        state = ParentAuthState.SignedIn("firebase-uid", email)
+        return state
+    }
+
+    override suspend fun login(email: String, password: String): ParentAuthState {
+        if (loginFails) error("Firebase password login failed")
+        token = api?.login(email, password)?.accessToken ?: "acc:$email"
+        state = ParentAuthState.SignedIn("firebase-uid", email)
+        return state
+    }
+
+    override suspend fun google(idToken: String): ParentAuthState {
+        token = api?.googleLogin(idToken)?.accessToken ?: "acc:google:$idToken"
+        state = ParentAuthState.SignedIn("firebase-google", "google@x.com")
+        return state
+    }
+
+    override suspend fun signInWithCustomToken(customToken: String): ParentAuthState {
+        customTokenUsed = true
+        token = customToken
+        state = ParentAuthState.SignedIn("firebase-uid", "legacy@x.com")
+        return state
+    }
+
+    override suspend fun sendPasswordReset(email: String) = Unit
+    override suspend fun resendVerification() = Unit
+    override suspend fun refreshVerification() = state
+    override suspend fun reauthenticateWithPassword(password: String) = Unit
+    override suspend fun reauthenticateWithGoogle(idToken: String) = Unit
+    override suspend fun idToken(forceRefresh: Boolean) = token ?: error("Not signed in")
+    override suspend fun appCheckToken(forceRefresh: Boolean): String? = "app-check"
+    override fun logout() {
+        token = null
+        state = ParentAuthState.SignedOut
     }
 }
 

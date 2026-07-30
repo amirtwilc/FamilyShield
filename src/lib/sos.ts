@@ -2,6 +2,7 @@ import { and, desc, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { ensureLocationPartition } from '@/db/partitions';
 import { alerts, childParentLinks, children, devices, messages, parents, sosDailyUsage, sosEventReceipts, sosEvents } from '@/db/schema';
+import { decryptMessageRow, encryptMessageBody } from '@/lib/messages/crypto';
 import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
 import { getSender, type PushOptions } from '@/lib/alerts/fcm';
 
@@ -420,9 +421,10 @@ export async function sendUrgentAlertToChild(childId: string, parentId: string, 
   )).limit(1);
   if (recent) return { cooldown: true as const, retryAfterSeconds: cooldown };
 
+  const encryptedBody = encryptMessageBody(body);
   const r = await db.execute(sql`
     INSERT INTO messages (child_id, parent_id, sender, body, priority)
-    VALUES (${childId}, ${parentId}, 'parent', ${body}, 'urgent')
+    VALUES (${childId}, ${parentId}, 'parent', ${encryptedBody}, 'urgent')
     RETURNING id, sender, body, priority, created_at, read_at`);
   const message = r.rows[0] as { id: string };
 
@@ -446,5 +448,5 @@ export async function sendUrgentAlertToChild(childId: string, parentId: string, 
     }, URGENT_PUSH_OPTIONS) || delivered;
   }
   if (delivered) await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
-  return { cooldown: false as const, message: r.rows[0], delivered };
+  return { cooldown: false as const, message: decryptMessageRow(r.rows[0] as { body: unknown }), delivered };
 }

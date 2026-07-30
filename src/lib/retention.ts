@@ -4,6 +4,21 @@ import { db } from '@/db/client';
 export const FREE_TIER_CODE = 'free';
 export const FREE_LOCATION_RETENTION_DAYS = 2;
 export const FREE_MAX_CHILDREN = 5;
+export const DEFAULT_MESSAGE_RETENTION_DAYS = 365;
+
+export function messageRetentionDays(): number {
+  const parsed = Number(process.env.MESSAGE_RETENTION_DAYS ?? DEFAULT_MESSAGE_RETENTION_DAYS);
+  return Number.isInteger(parsed) && parsed >= 30 && parsed <= 3650
+    ? parsed
+    : DEFAULT_MESSAGE_RETENTION_DAYS;
+}
+
+export async function sweepMessageRetention(now = new Date()): Promise<{ deleted: number; retentionDays: number }> {
+  const retentionDays = messageRetentionDays();
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const result = await db.execute(sql`DELETE FROM messages WHERE created_at < ${cutoff.toISOString()}`);
+  return { deleted: result.rowCount ?? 0, retentionDays };
+}
 
 export async function effectiveRetentionDays(childId: string): Promise<number> {
   const r = await db.execute(sql`

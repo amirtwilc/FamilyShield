@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'FamilyShield',
-  description: 'Parental-safety dashboard & device simulator',
+  description: 'FamilyShield parental-safety API',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,9 +15,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             FamilyShield<small>parental safety</small>
           </span>
           <nav className="row">
-            <a href="/parent">Parent</a>
-            <a href="/kid">Kid device</a>
             <a href="/api/docs">API docs</a>
+            <a href="/api/health">Health</a>
           </nav>
         </div>
         {children}

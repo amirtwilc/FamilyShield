@@ -21,10 +21,9 @@ class ApiException(val status: Int, message: String) : Exception(message)
 /** The FamilyShield API surface the app depends on. Implemented by [HttpApiClient]
  *  for production and by a hand-written fake in tests. */
 interface ApiClient {
-    suspend fun register(email: String, password: String): Tokens
-    suspend fun login(email: String, password: String): Tokens
-    suspend fun googleLogin(idToken: String): Tokens
-    suspend fun refreshTokens(refreshToken: String): Tokens
+    suspend fun bootstrapParent(token: String): BootstrapResponse
+    suspend fun legacyMigrate(email: String, password: String): LegacyMigrationResponse
+    suspend fun revokeParentSessions(token: String): RevokeSessionsResponse
     suspend fun registerParentPushToken(token: String, fcmToken: String)
     suspend fun listChildren(token: String): List<Child>
     suspend fun createChild(token: String, name: String, avatar: String? = null, phoneNumber: String? = null): Child
@@ -56,7 +55,7 @@ interface ApiClient {
     suspend fun monitoring(token: String): MonitoringInfo
     suspend fun updateMonitorName(token: String, parentId: String, parentDisplayName: String): MonitoringInfo
     suspend fun removeMonitor(token: String, parentId: String): MonitorUnpairResult
-    suspend fun monitorMessages(token: String, parentId: String, after: String? = null): MessagesResponse
+    suspend fun monitorMessages(token: String, parentId: String, after: String? = null, before: String? = null): MessagesResponse
     suspend fun sendMonitorMessage(token: String, parentId: String, body: String): Message
     suspend fun sendLocation(token: String, lat: Double, lng: Double, battery: Int): InsertResult
     suspend fun sendStatus(token: String, battery: Int, charging: Boolean, permissionStatus: PermissionStatus? = null)
@@ -66,12 +65,15 @@ interface ApiClient {
     suspend fun sendSosLocation(token: String, timezone: String, localDay: String, location: LocationPoint): SosLocationResult
     suspend fun endSos(token: String, reason: String = "child_ended"): SosState
     suspend fun sosState(token: String, localDay: String? = null): SosState
-    suspend fun deviceMessages(token: String, after: String? = null): MessagesResponse
+    suspend fun deviceMessages(token: String, after: String? = null, before: String? = null): MessagesResponse
     suspend fun sendDeviceMessage(token: String, body: String): Message
 }
 
 /** Thin coroutine wrapper over the FamilyShield REST API (OkHttp + kotlinx.serialization). */
-class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : ApiClient {
+class HttpApiClient(
+    private val baseUrl: String = BuildConfig.API_BASE_URL,
+    private val appCheckTokenProvider: suspend () -> String? = { null },
+) : ApiClient {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
     private val http = OkHttpClient.Builder()
@@ -97,6 +99,7 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
             else -> error("unsupported method $method")
         }
         token?.let { builder.header("Authorization", "Bearer $it") }
+        appCheckTokenProvider()?.let { builder.header("X-Firebase-AppCheck", it) }
 
         http.newCall(builder.build()).execute().use { res ->
             val text = res.body?.string().orEmpty()
@@ -113,21 +116,18 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     }
 
     // ---- Parent ----
-    override suspend fun register(email: String, password: String): Tokens =
-        json.decodeFromString(requestRaw("POST", "/api/auth/register",
-            json.encodeToString(Credentials(email, password))))
+    override suspend fun bootstrapParent(token: String): BootstrapResponse =
+        json.decodeFromString(requestRaw("POST", "/api/auth/bootstrap", token = token))
 
-    override suspend fun login(email: String, password: String): Tokens =
-        json.decodeFromString(requestRaw("POST", "/api/auth/login",
-            json.encodeToString(Credentials(email, password))))
+    override suspend fun legacyMigrate(email: String, password: String): LegacyMigrationResponse =
+        json.decodeFromString(requestRaw(
+            "POST",
+            "/api/auth/legacy-migrate",
+            json.encodeToString(Credentials(email, password)),
+        ))
 
-    override suspend fun googleLogin(idToken: String): Tokens =
-        json.decodeFromString(requestRaw("POST", "/api/auth/google",
-            json.encodeToString(GoogleLoginBody(idToken))))
-
-    override suspend fun refreshTokens(refreshToken: String): Tokens =
-        json.decodeFromString(requestRaw("POST", "/api/auth/refresh",
-            json.encodeToString(RefreshBody(refreshToken))))
+    override suspend fun revokeParentSessions(token: String): RevokeSessionsResponse =
+        json.decodeFromString(requestRaw("POST", "/api/auth/revoke-sessions", token = token))
 
     override suspend fun registerParentPushToken(token: String, fcmToken: String) {
         requestRaw("POST", "/api/parent/push-token", json.encodeToString(PushTokenBody(fcmToken)), token)
@@ -262,9 +262,12 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
     override suspend fun removeMonitor(token: String, parentId: String): MonitorUnpairResult =
         json.decodeFromString(requestRaw("DELETE", "/api/device/monitors/$parentId", token = token))
 
-    override suspend fun monitorMessages(token: String, parentId: String, after: String?): MessagesResponse {
-        val path = "/api/device/monitors/$parentId/messages" +
-            if (after != null) "?after=" + java.net.URLEncoder.encode(after, "UTF-8") else ""
+    override suspend fun monitorMessages(token: String, parentId: String, after: String?, before: String?): MessagesResponse {
+        val q = buildList {
+            if (after != null) add("after=" + java.net.URLEncoder.encode(after, "UTF-8"))
+            if (before != null) add("before=" + java.net.URLEncoder.encode(before, "UTF-8"))
+        }.joinToString("&")
+        val path = "/api/device/monitors/$parentId/messages" + if (q.isEmpty()) "" else "?$q"
         return json.decodeFromString(requestRaw("GET", path, token = token))
     }
 
@@ -308,8 +311,12 @@ class HttpApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) : Ap
         return json.decodeFromString(requestRaw("GET", path, token = token))
     }
 
-    override suspend fun deviceMessages(token: String, after: String?): MessagesResponse {
-        val path = "/api/device/messages" + if (after != null) "?after=" + java.net.URLEncoder.encode(after, "UTF-8") else ""
+    override suspend fun deviceMessages(token: String, after: String?, before: String?): MessagesResponse {
+        val q = buildList {
+            if (after != null) add("after=" + java.net.URLEncoder.encode(after, "UTF-8"))
+            if (before != null) add("before=" + java.net.URLEncoder.encode(before, "UTF-8"))
+        }.joinToString("&")
+        val path = "/api/device/messages" + if (q.isEmpty()) "" else "?$q"
         return json.decodeFromString(requestRaw("GET", path, token = token))
     }
 

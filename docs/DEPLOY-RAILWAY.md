@@ -27,6 +27,8 @@ DATABASE_URL=postgresql://familyshield:<password>@<db-service>.railway.internal:
 JWT_SECRET=<32-byte random>
 JWT_REFRESH_SECRET=<32-byte random>
 CRON_SECRET=<32-byte random>
+MESSAGE_ENCRYPTION_KEY=<base64-encoded-32-byte-key>
+MESSAGE_RETENTION_DAYS=365
 LOW_BATTERY_THRESHOLD=15
 LOW_BATTERY_COOLDOWN_MIN=60
 OFFLINE_THRESHOLD_MIN=30
@@ -40,6 +42,9 @@ FCM_SERVICE_ACCOUNT_JSON=
 ```
 Use Railway's **internal** DB hostname (`*.railway.internal`) for `DATABASE_URL`.
 Generate secrets with: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+Generate `MESSAGE_ENCRYPTION_KEY` with:
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+Back this key up securely; losing it makes encrypted chat history unreadable.
 
 The container's start command runs `scripts/db-init.mjs` (creates the PostGIS
 extension + applies every `drizzle/*.sql`) before `next start`, so the schema is
@@ -49,13 +54,19 @@ provisioned on first boot. Health check: `GET /api/health`.
 Web service → **Settings → Networking → Generate Domain** → you get
 `https://<name>.up.railway.app` (TLS included). Add a custom domain later if you want.
 
-## 5. Schedule the offline-sweep cron
+For an existing database, run `npm run db:encrypt-messages` once after the
+encryption key is configured.
+
+## 5. Schedule the maintenance crons
 Project → **New** → **Cron** (or a separate service) hitting:
 ```
 GET https://<your-domain>/api/cron/offline-sweep
 Header: Authorization: Bearer <CRON_SECRET>
 ```
 e.g. every 5 minutes (`*/5 * * * *`).
+
+Also schedule `/api/cron/location-retention` hourly and
+`/api/cron/message-retention` daily with the same authorization header.
 
 ## 6. Point the Android release app at the deployed server
 ```

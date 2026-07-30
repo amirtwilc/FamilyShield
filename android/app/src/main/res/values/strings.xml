@@ -32,6 +32,19 @@
     <string name="login_new_here">New here? Create an account</string>
     <string name="login_setup_kid">Set up a kid device →</string>
     <string name="google_signin">Continue with Google</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="password_requirements">8–128 characters with uppercase, lowercase, a number, and a special character</string>
+    <string name="password_reset_confirmation">If an account can receive email, Firebase has sent password-reset instructions.</string>
+    <string name="verification_title">Verify your email</string>
+    <string name="verification_body">We sent a verification link to %1$s. Open it, then return here.</string>
+    <string name="verification_check">I verified my email</string>
+    <string name="verification_resend">Resend verification email</string>
+    <string name="verification_resent">Verification email sent.</string>
+    <string name="verification_use_other">Use another account</string>
+    <string name="action_sign_out_all">Sign out all devices</string>
+    <string name="sign_out_all_help">Requires a recent sign-in. If requested, sign in again and retry.</string>
+    <string name="reauth_title">Confirm it’s you</string>
+    <string name="reauth_body">Enter your password or continue with Google. FamilyShield will then revoke every session, including this device.</string>
 
     <!-- Bottom navigation -->
     <string name="nav_dashboard">Dashboard</string>
@@ -142,6 +155,7 @@
     <string name="frequent_location_last_visited">Last visited %1$s</string>
     <string name="add_as_zone">Add as zone</string>
     <string name="add_location_zone_title">Add location as zone</string>
+    <string name="cd_clear_zone_name">Clear zone name</string>
     <string name="location_update">Location update</string>
     <string name="history_route_start_coordinates">Start: %1$s</string>
     <string name="history_route_end_coordinates">End: %1$s</string>

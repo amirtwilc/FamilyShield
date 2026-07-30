@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
@@ -172,10 +174,15 @@ fun ParentApp(
     onChatDestinationConsumed: (ChatPushDestination) -> Unit = {},
     vm: ParentViewModel = viewModel(factory = ParentViewModel.factory(LocalContext.current)),
 ) {
-    if (vm.token == null) {
-        LoginScreen(vm, onKidDevice)
-    } else {
-        ParentLockGate(vm) {
+    when {
+        vm.authState is ParentAuthState.AwaitingVerification ->
+            VerificationPendingScreen(vm, vm.authState as ParentAuthState.AwaitingVerification)
+        vm.authState is ParentAuthState.SignedIn && vm.token == null ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        vm.token == null -> LoginScreen(vm, onKidDevice)
+        else -> ParentLockGate(vm) {
             ParentShell(vm, chatDestination, onChatDestinationConsumed)
         }
     }
@@ -307,6 +314,11 @@ private fun LoginScreen(vm: ParentViewModel, onKidDevice: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var register by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
+    val passwordMeetsPolicy = password.length in 8..128 &&
+        password.any(Char::isUpperCase) &&
+        password.any(Char::isLowerCase) &&
+        password.any(Char::isDigit) &&
+        password.any { !it.isLetterOrDigit() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
         .verticalScroll(rememberScrollState()).imePadding()) {
@@ -344,11 +356,29 @@ private fun LoginScreen(vm: ParentViewModel, onKidDevice: () -> Unit) {
                                     stringResource(if (showPassword) R.string.cd_hide_password else R.string.cd_show_password))
                             }
                         }, modifier = Modifier.fillMaxWidth())
+                    if (register) {
+                        Text(
+                            stringResource(R.string.password_requirements),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (passwordMeetsPolicy) Green else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        TextButton(
+                            onClick = { vm.forgotPassword(email.trim()) },
+                            enabled = email.isNotBlank(),
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.forgot_password))
+                        }
+                    }
                     GradientButton(stringResource(if (register) R.string.action_create_account else R.string.action_sign_in),
                         onClick = { vm.authenticate(email.trim(), password, register) },
-                        enabled = email.isNotBlank() && password.isNotBlank(), loading = vm.busy,
+                        enabled = email.isNotBlank() && password.isNotBlank() && (!register || passwordMeetsPolicy), loading = vm.busy,
                         modifier = Modifier.fillMaxWidth())
                     vm.error?.let { Text(it, color = Danger, style = MaterialTheme.typography.bodySmall) }
+                    if (vm.authNotice == "password_reset_sent") {
+                        Text(stringResource(R.string.password_reset_confirmation), color = Green, style = MaterialTheme.typography.bodySmall)
+                    }
 
                     if (BuildConfig.GOOGLE_CLIENT_ID.isNotBlank()) {
                         val googleSignIn = rememberGoogleSignIn(vm)
@@ -370,6 +400,62 @@ private fun LoginScreen(vm: ParentViewModel, onKidDevice: () -> Unit) {
                     Text(stringResource(R.string.login_setup_kid), color = MaterialTheme.colorScheme.secondary)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun VerificationPendingScreen(
+    vm: ParentViewModel,
+    state: ParentAuthState.AwaitingVerification,
+) {
+    Column(
+        Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            Icons.Filled.MarkEmailUnread,
+            null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(56.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.verification_title), style = MaterialTheme.typography.headlineSmall)
+        Text(
+            stringResource(R.string.verification_body, state.email),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+        )
+        GradientButton(
+            stringResource(R.string.verification_check),
+            onClick = vm::refreshVerification,
+            loading = vm.busy,
+            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+        )
+        OutlinedButton(
+            onClick = vm::resendVerification,
+            enabled = !vm.busy && vm.canResendVerification,
+            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).padding(top = 10.dp),
+        ) {
+            Text(stringResource(R.string.verification_resend))
+        }
+        if (vm.authNotice == "verification_resent") {
+            Text(
+                stringResource(R.string.verification_resent),
+                color = Green,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+        vm.error?.let {
+            Text(it, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp))
+        }
+        TextButton(onClick = vm::logout, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(R.string.verification_use_other))
         }
     }
 }
@@ -666,6 +752,8 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     var rename by remember { mutableStateOf<Child?>(null) }
     var pendingDelete by remember { mutableStateOf<Child?>(null) }
     var lockMessage by remember { mutableStateOf<String?>(null) }
+    var signOutAllOpen by remember { mutableStateOf(false) }
+    val googleReauthenticate = rememberGoogleReauthentication(vm)
     val snackbar = remember { SnackbarHostState() }
     val activeCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
 
@@ -789,6 +877,14 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
                 OutlinedButton(onClick = { vm.logout() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.AutoMirrored.Filled.Logout, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.action_logout))
                 }
+                OutlinedButton(onClick = { signOutAllOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.action_sign_out_all))
+                }
+                Text(
+                    stringResource(R.string.sign_out_all_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -865,6 +961,60 @@ private fun SettingsScreen(vm: ParentViewModel, onBack: () -> Unit, onOpenZones:
     }
     permissionsFor?.let { c ->
         ChildPermissionsDialog(child = c, onDismiss = { permissionsFor = null })
+    }
+    if (signOutAllOpen) {
+        var password by remember { mutableStateOf("") }
+        var showPassword by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { signOutAllOpen = false },
+            title = { Text(stringResource(R.string.reauth_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.reauth_body))
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(stringResource(R.string.field_password)) },
+                        singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    stringResource(if (showPassword) R.string.cd_hide_password else R.string.cd_show_password),
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (BuildConfig.GOOGLE_CLIENT_ID.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = {
+                                signOutAllOpen = false
+                                googleReauthenticate()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.google_signin))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = password.isNotBlank() && !vm.busy,
+                    onClick = {
+                        signOutAllOpen = false
+                        vm.signOutAllDevicesWithPassword(password)
+                    },
+                ) { Text(stringResource(R.string.action_sign_out_all)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { signOutAllOpen = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -1838,7 +1988,7 @@ private fun ChatThread(vm: ParentViewModel, onSettings: () -> Unit, showBack: Bo
             }
         }
         ChatInput(input, { input = it }, vm.sending, stringResource(R.string.chat_hint_name, name)) {
-            if (input.isNotBlank()) { vm.sendChat(input); input = "" }
+            if (input.isNotBlank()) vm.sendChat(input) { input = "" }
         }
     }
 }
@@ -1918,7 +2068,7 @@ private fun ChatInput(value: String, onChange: (String) -> Unit, sending: Boolea
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value, onChange, modifier = Modifier.weight(1f),
+            OutlinedTextField(value, { onChange(it.take(2_000)) }, modifier = Modifier.weight(1f),
                 placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) }, shape = CircleShape, maxLines = 4)
             FilledIconButton(onClick = onSend, enabled = value.isNotBlank() && !sending, modifier = Modifier.size(48.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
@@ -2509,6 +2659,17 @@ private fun AddFrequentLocationZoneDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.zone_name_label)) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { name = "" },
+                            enabled = name.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                stringResource(R.string.cd_clear_zone_name),
+                            )
+                        }
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )

@@ -40,6 +40,19 @@
     <string name="login_new_here">חדש כאן? יצירת חשבון</string>
     <string name="login_setup_kid">הגדרת מכשיר לילד ←</string>
     <string name="google_signin">המשך עם Google</string>
+    <string name="forgot_password">שכחת את הסיסמה?</string>
+    <string name="password_requirements">8–128 תווים, כולל אות גדולה, אות קטנה, מספר ותו מיוחד</string>
+    <string name="password_reset_confirmation">אם החשבון יכול לקבל אימייל, Firebase שלח הוראות לאיפוס הסיסמה.</string>
+    <string name="verification_title">אימות כתובת האימייל</string>
+    <string name="verification_body">שלחנו קישור אימות אל %1$s. יש לפתוח אותו ואז לחזור לכאן.</string>
+    <string name="verification_check">אימתתי את האימייל</string>
+    <string name="verification_resend">שליחה מחדש של אימייל האימות</string>
+    <string name="verification_resent">אימייל האימות נשלח.</string>
+    <string name="verification_use_other">שימוש בחשבון אחר</string>
+    <string name="action_sign_out_all">התנתקות מכל המכשירים</string>
+    <string name="sign_out_all_help">נדרשת כניסה עדכנית. אם תתבקשו, היכנסו שוב ונסו מחדש.</string>
+    <string name="reauth_title">אימות זהות</string>
+    <string name="reauth_body">יש להזין את הסיסמה או להמשיך עם Google. לאחר מכן FamilyShield יבטל את כל ההפעלות, כולל במכשיר זה.</string>
 
     <!-- Bottom navigation -->
     <string name="nav_dashboard">בית</string>
@@ -144,6 +157,7 @@
     <string name="frequent_location_last_visited">ביקור אחרון %1$s</string>
     <string name="add_as_zone">הוספה כאזור</string>
     <string name="add_location_zone_title">הוספת מיקום כאזור</string>
+    <string name="cd_clear_zone_name">ניקוי שם האזור</string>
     <string name="location_update">עדכון מיקום</string>
     <string name="history_route_start_coordinates">התחלה: %1$s</string>
     <string name="history_route_end_coordinates">סיום: %1$s</string>

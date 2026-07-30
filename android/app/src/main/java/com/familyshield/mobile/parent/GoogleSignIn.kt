@@ -21,7 +21,10 @@ import kotlinx.coroutines.launch
  * surface as an error.
  */
 @Composable
-fun rememberGoogleSignIn(vm: ParentViewModel): () -> Unit {
+private fun rememberGoogleCredential(
+    onToken: (String) -> Unit,
+    onError: (String?) -> Unit,
+): () -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     return {
@@ -36,17 +39,25 @@ fun rememberGoogleSignIn(vm: ParentViewModel): () -> Unit {
                 val response = CredentialManager.create(context).getCredential(context, request)
                 val cred = response.credential
                 if (cred is CustomCredential && cred.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                    vm.googleSignIn(GoogleIdTokenCredential.createFrom(cred.data).idToken)
+                    onToken(GoogleIdTokenCredential.createFrom(cred.data).idToken)
                 } else {
-                    vm.showError("Unexpected sign-in credential")
+                    onError("Unexpected sign-in credential")
                 }
             } catch (_: GetCredentialCancellationException) {
                 // user dismissed the picker — not an error
             } catch (e: GetCredentialException) {
-                vm.showError(e.message ?: "Google sign-in failed")
+                onError(e.message ?: "Google sign-in failed")
             } catch (_: GoogleIdTokenParsingException) {
-                vm.showError("Could not read the Google credential")
+                onError("Could not read the Google credential")
             }
         }
     }
 }
+
+@Composable
+fun rememberGoogleSignIn(vm: ParentViewModel): () -> Unit =
+    rememberGoogleCredential(vm::googleSignIn, vm::showError)
+
+@Composable
+fun rememberGoogleReauthentication(vm: ParentViewModel): () -> Unit =
+    rememberGoogleCredential(vm::signOutAllDevicesWithGoogle, vm::showError)

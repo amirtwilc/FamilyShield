@@ -7,14 +7,24 @@ import { GET as kidList, POST as kidSend } from '@/app/api/device/messages/route
 import { GET as kidMonitorList, POST as kidMonitorSend } from '@/app/api/device/monitors/[parentId]/messages/route';
 import { GET as summary } from '@/app/api/messages/summary/route';
 import { db } from '@/db/client';
-import { childParentLinks, devices } from '@/db/schema';
+import { childParentLinks, devices, messages } from '@/db/schema';
 import { setSender, resetSender } from '@/lib/alerts/fcm';
 import { and, eq } from 'drizzle-orm';
+import { encodeCursor } from '@/lib/pagination';
+import { pageMessages } from '@/lib/messages';
+import { encryptMessageBody } from '@/lib/messages/crypto';
+import { enforceChatSendLimit } from '@/lib/messages/limits';
 
 beforeAll(async () => { await resetDb(); });
 beforeEach(() => { resetSender(); });
 
 describe('parent ⇄ kid chat', () => {
+  it('limits abusive message bursts deployment-wide', async () => {
+    const key = `test-burst-${Date.now()}`;
+    for (let i = 0; i < 120; i++) expect(await enforceChatSendLimit(key)).toBeNull();
+    expect((await enforceChatSendLimit(key))?.status).toBe(429);
+  });
+
   it('exchanges messages both ways and tracks read state', async () => {
     const p = await seedParent(); const c = await seedChild(p.id);
     const { token: dtok } = await seedDevice(c.id);
@@ -96,6 +106,43 @@ describe('parent ⇄ kid chat', () => {
     const b = conv.find((x: any) => x.childId === c2.id);
     expect(b.last).toBeNull();
     expect(b.unread).toBe(0);
+  });
+
+  it('uses id as a tie-breaker when polling messages with identical timestamps', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const createdAt = new Date('2026-07-29T10:00:00.000Z');
+    const ids = [
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+    ];
+    await db.insert(messages).values(ids.map((id, index) => ({
+      id, childId: c.id, parentId: p.id, sender: 'parent',
+      body: encryptMessageBody(`same-${index + 1}`), createdAt,
+    })));
+
+    const after = encodeCursor({ recordedAt: createdAt.toISOString(), id: ids[0]! });
+    const page = await pageMessages(c.id, new URL(`http://t/?after=${encodeURIComponent(after)}`), p.id);
+    expect(page.messages.map((message) => message.body)).toEqual(['same-2', 'same-3']);
+    expect(page.latestCursor).toBeTruthy();
+  });
+
+  it('enforces the 2000-character boundary and encrypts stored content', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const ptok = await signAccess(p.id);
+    const ctx = { params: Promise.resolve({ id: c.id }) };
+    const send = (body: string) => parentSend(new Request('http://t/', {
+      method: 'POST', headers: { authorization: `Bearer ${ptok}` }, body: JSON.stringify({ body }),
+    }), ctx);
+
+    const accepted = await send('x'.repeat(2_000));
+    expect(accepted.status).toBe(201);
+    expect((await accepted.json()).body).toHaveLength(2_000);
+    expect((await send('x'.repeat(2_001))).status).toBe(400);
+
+    const [stored] = await db.select({ body: messages.body }).from(messages).where(eq(messages.childId, c.id));
+    expect(stored.body).toMatch(/^enc:v1:/);
+    expect(stored.body).not.toContain('x'.repeat(100));
   });
 
   it('scopes kid chat to a selected monitoring parent', async () => {

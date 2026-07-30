@@ -39,16 +39,22 @@ export const subscriptionTiers = pgTable('subscription_tiers', {
 
 export const parents = pgTable('parents', {
   id: uuid('id').primaryKey().defaultRandom(),
-  email: text('email').notNull().unique(),
-  // Null for accounts created via Google sign-in (no local password).
+  email: text('email').notNull(),
+  // Retained only while legacy password migration remains available.
   passwordHash: text('password_hash'),
-  // Google account subject id, set when the parent signs in with Google.
+  // Retained only while legacy Google identities are being pre-provisioned.
   googleSub: text('google_sub'),
+  firebaseUid: text('firebase_uid'),
+  authMigratedAt: timestamp('auth_migrated_at', { withTimezone: true }),
   fcmToken: text('fcm_token'),
   tierCode: text('tier_code').notNull().default('free')
     .references(() => subscriptionTiers.code, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => ({
+  normalizedEmail: uniqueIndex('parents_email_normalized_unique_idx').on(sql`lower(btrim(${t.email}))`),
+  firebaseUidUnique: uniqueIndex('parents_firebase_uid_unique_idx').on(t.firebaseUid)
+    .where(sql`${t.firebaseUid} IS NOT NULL`),
+}));
 
 export const children = pgTable('children', {
   id: uuid('id').primaryKey().defaultRandom(),

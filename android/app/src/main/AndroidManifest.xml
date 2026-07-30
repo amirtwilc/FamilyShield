@@ -42,6 +42,7 @@
     </queries>
 
     <application
+        android:name=".FamilyShieldApplication"
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"

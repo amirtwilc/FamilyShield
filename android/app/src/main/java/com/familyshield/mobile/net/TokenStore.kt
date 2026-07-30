@@ -10,11 +10,9 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Stores the parent JWT (+ refresh token) and the kid device token. Abstracted so
- *  ViewModels can be unit-tested with an in-memory fake instead of SharedPreferences. */
+/** Stores the kid device token and local preferences. Firebase Auth owns parent
+ * sessions; this abstraction remains testable without SharedPreferences. */
 interface TokenStore {
-    var parentToken: String?
-    var parentRefreshToken: String?
     var deviceToken: String?
     var biometricLock: Boolean
     var alertsEnabled: Boolean
@@ -23,6 +21,12 @@ interface TokenStore {
 /** SharedPreferences-backed [TokenStore] for production. */
 class PrefsTokenStore(context: Context) : TokenStore {
     private val prefs = context.applicationContext.getSharedPreferences("familyshield", Context.MODE_PRIVATE)
+
+    init {
+        // Firebase Auth owns parent sessions from this version onward. Remove
+        // legacy FamilyShield JWTs without touching the kid token or preferences.
+        prefs.edit().remove("parent_token").remove("parent_refresh_token").apply()
+    }
 
     private fun putSensitive(key: String, value: String?) {
         prefs.edit().apply {
@@ -43,14 +47,6 @@ class PrefsTokenStore(context: Context) : TokenStore {
             null
         }
     }
-
-    override var parentToken: String?
-        get() = getSensitive("parent_token")
-        set(v) = putSensitive("parent_token", v)
-
-    override var parentRefreshToken: String?
-        get() = getSensitive("parent_refresh_token")
-        set(v) = putSensitive("parent_refresh_token", v)
 
     override var deviceToken: String?
         get() = getSensitive("device_token")

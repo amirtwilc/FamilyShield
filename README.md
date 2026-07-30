@@ -1,8 +1,8 @@
 # FamilyShield
 
 FamilyShield is a native Android parental-safety app backed by a Next.js API and
-PostgreSQL/PostGIS. The Android app in `android/` is the primary product. The web
-client inside the Next.js app is a development/test client for exercising the API.
+PostgreSQL/PostGIS. The Android app in `android/` is the product client; the
+Next.js application exposes the API, health endpoint, and Swagger documentation.
 
 For the feature inventory and screen-level overview, see [FEATURES.md](FEATURES.md).
 
@@ -13,13 +13,11 @@ For the feature inventory and screen-level overview, see [FEATURES.md](FEATURES.
   parents are unpaired from the device.
 - **Backend API** (`src/app/api/`): parent auth, pairing, child/device data,
   location, status, app usage, safe zones, alerts, messages, cron jobs, and OpenAPI.
-- **Web test client** (`src/app/(client)/`): browser parent dashboard and kid
-  simulator for quick manual and Playwright testing.
 
 ## Stack
 
 Next.js 16 App Router, TypeScript, Drizzle ORM, PostgreSQL + PostGIS, Zod, `jose`,
-`argon2`, `firebase-admin`, Swagger/OpenAPI, Vitest, Playwright, Kotlin, Jetpack
+`argon2`, `firebase-admin`, Swagger/OpenAPI, Vitest, Kotlin, Jetpack
 Compose, Material 3, OkHttp, kotlinx.serialization, and osmdroid/OpenStreetMap.
 
 ## Prerequisites
@@ -39,6 +37,8 @@ npm run db:setup
 ```
 
 The local `.env` should point at the Docker PostGIS database on port `5433`.
+The example chat-encryption key is for local development only. Production must
+use a separately generated, backed-up 32-byte base64 key.
 `npm run db:setup` resets and rebuilds the local development schema, including all
 SQL migrations under `drizzle/`.
 
@@ -48,16 +48,22 @@ SQL migrations under `drizzle/`.
 npm run dev        # http://localhost:3000
 npm run verify     # TypeScript + Vitest
 npm run build      # production build
-npm run test:e2e   # Playwright parent/kid loop, after db:setup and with dev server
+npm run test:auth-emulator
 ```
 
 Useful local routes:
 
-- `http://localhost:3000/parent`
-- `http://localhost:3000/kid`
 - `http://localhost:3000/api/docs`
 - `http://localhost:3000/api/openapi.json`
 - `http://localhost:3000/api/health`
+
+### Chat security and retention
+
+Chat bodies are encrypted in the database with AES-256-GCM using
+`MESSAGE_ENCRYPTION_KEY`. Encryption is application-level encryption at rest,
+not end-to-end encryption: the backend decrypts authorized API responses and
+includes a truncated preview in chat push notifications. Message retention
+defaults to 365 days and is configurable with `MESSAGE_RETENTION_DAYS`.
 
 ## Android
 
@@ -80,7 +86,7 @@ LAN backend:
 
 | Audience | Mechanism | Header |
 |---|---|---|
-| Parent | Email/password or Google sign-in, then JWT access + refresh tokens | `Authorization: Bearer <accessToken>` |
+| Parent | Firebase email/password or Google sign-in; verified ID token plus App Check | `Authorization: Bearer <firebaseIdToken>` and `X-Firebase-AppCheck` |
 | Kid device | Opaque token issued by `/api/pair`, stored server-side as a SHA-256 hash | `Authorization: Bearer <deviceToken>` |
 
 Parent routes authorize by linked child ownership. Device routes authorize by the
@@ -105,7 +111,9 @@ Parent-facing routes:
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/google` | Parent authentication |
+| POST | `/api/auth/bootstrap` | Map a verified Firebase identity to its Neon parent |
+| POST | `/api/auth/legacy-migrate` | One-time, rate-limited password migration |
+| POST | `/api/auth/revoke-sessions` | Revoke all Firebase refresh tokens after recent authentication |
 | GET / POST | `/api/children` | List/create children |
 | GET | `/api/children/{id}` | Child detail |
 | POST | `/api/children/{id}/pairing-code` | Generate a pairing code |
@@ -125,8 +133,9 @@ Internal cron routes:
 
 - `GET /api/cron/offline-sweep`
 - `GET /api/cron/location-retention`
+- `GET /api/cron/message-retention`
 
-Both cron routes require `Authorization: Bearer $CRON_SECRET`.
+All cron routes require `Authorization: Bearer $CRON_SECRET`.
 
 ## Database
 
@@ -137,6 +146,13 @@ with a monthly partitioned PostGIS table. Production setup should use:
 npm run db:prod:setup
 npm run db:check
 ```
+
+Before migrating parent authentication, run `npm run auth:preflight`. Apply
+`drizzle/0019_firebase_parent_auth.sql`, then run `npm run auth:provision` and
+review its dry-run output before `npm run auth:provision:apply`.
+
+For an existing deployment, set `MESSAGE_ENCRYPTION_KEY` first and then run
+`npm run db:encrypt-messages` once to encrypt legacy plaintext chat rows.
 
 When app-usage metadata is added to an existing database, apply
 `drizzle/0011_app_usage_metadata.sql`.
@@ -170,19 +186,20 @@ regional child-safety obligations.
 ```text
 android/                     Native Android app
 src/app/api/                 Next.js REST API routes
-src/app/(client)/            Web development/test client
 src/db/                      Drizzle schema and database client
 src/lib/                     Auth, validation, telemetry, alerts, routes, OpenAPI
 drizzle/                     SQL migrations
 scripts/                     Database setup and demo seed scripts
-test/                        Vitest API/lib tests and Playwright E2E tests
+test/                        Vitest API and library integration tests
 docs/                        Deployment notes, Google sign-in notes, design archive
 ```
 
 ## Production Notes
 
-- Use strong production secrets for JWT, refresh JWT, and cron auth.
-- Configure Firebase Cloud Messaging on the backend and Android app before release.
+- Configure one Firebase project for Authentication, App Check, and Cloud
+  Messaging. Enable Email/Password and Google, one account per email, email
+  enumeration protection, the selected password policy, and Play Integrity.
+- Keep legacy JWT secrets only through the configured 30-day transition cutoff.
 - Restore scheduled Vercel cron jobs before launch if `vercel.json` has an empty
   `crons` array during free-tier development.
 - Replace the in-memory rate limiter with a shared store such as Redis/Upstash

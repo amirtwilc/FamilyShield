@@ -36,25 +36,34 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     private fun parentEmail(token: String) = token.removePrefix("acc:")
 
     // ---- Parent ----
-    override suspend fun register(email: String, password: String): Tokens {
+    suspend fun register(email: String, password: String): Tokens {
         if (parents.containsKey(email)) throw ApiException(409, "Email already registered")
         parents[email] = password
         return Tokens("acc:$email", "ref:$email")
     }
 
-    override suspend fun login(email: String, password: String): Tokens {
+    suspend fun login(email: String, password: String): Tokens {
         if (parents[email] != password) throw ApiException(401, "Invalid email or password")
         return Tokens("acc:$email", "ref:$email")
     }
 
-    override suspend fun googleLogin(idToken: String): Tokens =
+    suspend fun googleLogin(idToken: String): Tokens =
         Tokens("acc:google:$idToken", "ref:google:$idToken")
 
-    override suspend fun refreshTokens(refreshToken: String): Tokens {
+    suspend fun refreshTokens(refreshToken: String): Tokens {
         if (!refreshToken.startsWith("ref:")) throw ApiException(401, "Invalid refresh token")
         val email = refreshToken.removePrefix("ref:")
         return Tokens("acc:$email", "ref:$email")
     }
+
+    override suspend fun bootstrapParent(token: String) = BootstrapResponse(parentEmail(token))
+
+    override suspend fun legacyMigrate(email: String, password: String): LegacyMigrationResponse {
+        if (parents[email] != password) throw ApiException(401, "Unable to sign in with those credentials")
+        return LegacyMigrationResponse("custom:$email")
+    }
+
+    override suspend fun revokeParentSessions(token: String) = RevokeSessionsResponse(true)
 
     override suspend fun registerParentPushToken(token: String, fcmToken: String) {
         parentPushTokens[parentEmail(token)] = fcmToken
@@ -369,12 +378,15 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     /** Mirrors the server's after/before paging (cursor token = a message's createdAt). */
     private fun pageFake(all: List<Message>, after: String?, before: String?): MessagesResponse {
-        if (after != null) return MessagesResponse(all.filter { it.createdAt > after }, null)
+        if (after != null) {
+            val delta = all.filter { it.createdAt > after }
+            return MessagesResponse(delta, latestCursor = delta.lastOrNull()?.createdAt)
+        }
         val pageSize = 50
         val older = if (before != null) all.filter { it.createdAt < before } else all
         val page = older.takeLast(pageSize)
         val next = if (older.size > pageSize) page.first().createdAt else null
-        return MessagesResponse(page, next)
+        return MessagesResponse(page, next, page.lastOrNull()?.createdAt)
     }
 
     override suspend fun messages(token: String, childId: String, after: String?, before: String?, markRead: Boolean): MessagesResponse {
@@ -416,12 +428,12 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun acknowledgeSos(token: String, childId: String, eventId: String): SosAckResult =
         SosAckResult(ok = true, delivered = true)
 
-    override suspend fun deviceMessages(token: String, after: String?): MessagesResponse {
+    override suspend fun deviceMessages(token: String, after: String?, before: String?): MessagesResponse {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val parent = childParents[childId]?.keys?.firstOrNull() ?: return MessagesResponse()
         val list = monitorMessagesByChild[childId]?.get(parent)
         markReadFor(list, "parent")
-        return pageFake(list?.toList() ?: emptyList(), after, null)
+        return pageFake(list?.toList() ?: emptyList(), after, before)
     }
 
     override suspend fun sendDeviceMessage(token: String, body: String): Message {
@@ -433,12 +445,12 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         return m
     }
 
-    override suspend fun monitorMessages(token: String, parentId: String, after: String?): MessagesResponse {
+    override suspend fun monitorMessages(token: String, parentId: String, after: String?, before: String?): MessagesResponse {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val parent = parentId.removePrefix("parent:")
         val list = monitorMessagesByChild[childId]?.get(parent)
         markReadFor(list, "parent")
-        return pageFake(list?.toList() ?: emptyList(), after, null)
+        return pageFake(list?.toList() ?: emptyList(), after, before)
     }
 
     override suspend fun sendMonitorMessage(token: String, parentId: String, body: String): Message {

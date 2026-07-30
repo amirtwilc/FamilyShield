@@ -1,6 +1,6 @@
 import { OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { registry } from './registry';
-import { registerSchema, loginSchema, refreshSchema, googleSchema, tokenPairSchema } from '@/lib/schemas/auth';
+import { registerSchema, loginSchema, refreshSchema, googleSchema, legacyMigrateSchema, tokenPairSchema } from '@/lib/schemas/auth';
 import { monitorNameSchema, pairSchema } from '@/lib/schemas/pair';
 import { locationBatch } from '@/lib/schemas/locations';
 import { statusSchema } from '@/lib/schemas/status';
@@ -18,7 +18,12 @@ let built: object | null = null;
 export function buildOpenApiDocument() {
   if (built) return built;
 
-  registry.registerComponent('securitySchemes', 'parentJwt', { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' });
+  registry.registerComponent('securitySchemes', 'parentJwt', {
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'Firebase ID token',
+    description: 'Firebase ID token. Legacy FamilyShield JWTs are accepted only until LEGACY_AUTH_CUTOFF_AT.',
+  });
   registry.registerComponent('securitySchemes', 'deviceToken', { type: 'http', scheme: 'bearer' });
 
   const json = (schema: unknown) => ({ content: { 'application/json': { schema: schema as any } } });
@@ -31,6 +36,12 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'OK', ...json(tokenPairSchema) } } });
   registry.registerPath({ method: 'post', path: '/api/auth/google', request: { body: json(googleSchema) },
     responses: { 200: { description: 'OK', ...json(tokenPairSchema) }, 401: { description: 'Invalid Google token' } } });
+  registry.registerPath({ method: 'post', path: '/api/auth/bootstrap', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'Firebase identity mapped to a Neon parent' }, 409: { description: 'Identity conflict' } } });
+  registry.registerPath({ method: 'post', path: '/api/auth/legacy-migrate', request: { body: json(legacyMigrateSchema) },
+    responses: { 200: { description: 'Legacy password migrated to Firebase' }, 401: { description: 'Generic migration failure' }, 429: { description: 'Rate limited' } } });
+  registry.registerPath({ method: 'post', path: '/api/auth/revoke-sessions', security: [{ parentJwt: [] }],
+    responses: { 200: { description: 'All Firebase refresh tokens revoked' }, 403: { description: 'Recent sign-in required' } } });
   registry.registerPath({ method: 'get', path: '/api/health',
     responses: { 200: { description: 'Health status' } } });
   registry.registerPath({ method: 'post', path: '/api/pair', request: { body: json(pairSchema) },

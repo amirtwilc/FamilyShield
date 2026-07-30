@@ -5,10 +5,12 @@ import { parseBody } from '@/lib/validate';
 import { ok, err } from '@/lib/http';
 import { verifyRefresh, signAccess, signRefresh } from '@/lib/auth/jwt';
 import { refreshSchema } from '@/lib/schemas/auth';
+import { legacyAuthEnabled, legacyAuthUnavailable } from '@/lib/auth/legacy';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  if (!legacyAuthEnabled()) return legacyAuthUnavailable();
   const p = await parseBody(req, refreshSchema);
   if ('response' in p) return p.response;
   try {

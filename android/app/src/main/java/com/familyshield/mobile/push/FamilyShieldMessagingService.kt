@@ -5,10 +5,14 @@ import com.familyshield.mobile.net.DeviceTelemetryBody
 import com.familyshield.mobile.net.HttpApiClient
 import com.familyshield.mobile.net.PrefsTokenStore
 import com.familyshield.mobile.net.StatusBody
+import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 
 class FamilyShieldMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
@@ -43,10 +47,15 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         runBlocking(Dispatchers.IO) {
             val store = PrefsTokenStore(applicationContext)
-            val api = HttpApiClient()
-            store.parentToken?.let { parentToken ->
-                runCatching { api.registerParentPushToken(parentToken, token) }
+            if (FirebaseApp.getApps(this@FamilyShieldMessagingService).isNotEmpty()) {
+                val api = HttpApiClient(appCheckTokenProvider = {
+                    runCatching { FirebaseAppCheck.getInstance().getAppCheckToken(false).await().token }.getOrNull()
+                })
+                FirebaseAuth.getInstance().currentUser?.getIdToken(false)?.await()?.token?.let { parentToken ->
+                    runCatching { api.registerParentPushToken(parentToken, token) }
+                }
             }
+            val api = HttpApiClient()
             store.deviceToken?.let { deviceToken ->
                 runCatching {
                     api.sendTelemetry(

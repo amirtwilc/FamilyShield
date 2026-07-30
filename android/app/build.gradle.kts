@@ -14,6 +14,9 @@ gradle.taskGraph.whenReady {
         if (!apiBase.startsWith("https://")) {
             throw GradleException("Release API_BASE must use HTTPS, got: $apiBase")
         }
+        if (!file("google-services.json").exists()) {
+            throw GradleException("Release builds require android/app/google-services.json")
+        }
     }
 }
 
@@ -29,7 +32,7 @@ android {
         applicationId = "com.familyshield.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
+        versionCode = 5
         versionName = "1.0"
         // Backend base URL.
         //  - Dev default: http://10.0.2.2:3000 (the emulator's alias for the dev PC).
@@ -103,7 +106,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("com.google.firebase:firebase-messaging-ktx:24.0.2")
+    // 33.x is the newest line compatible with this project's Kotlin 2.0
+    // toolchain; Firebase Auth/App Check APIs used here are stable.
+    val firebaseBom = platform("com.google.firebase:firebase-bom:33.16.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
 
     // OpenStreetMap (never Google Maps, per project constraint)
     implementation("org.osmdroid:osmdroid-android:6.1.20")

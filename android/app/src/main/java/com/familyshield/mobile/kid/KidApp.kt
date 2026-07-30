@@ -1012,7 +1012,7 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
     BackHandler(onBack = onBack)
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    LaunchedEffect(vm.chatMessages.size) {
+    LaunchedEffect(vm.chatMessages.lastOrNull()?.id) {
         if (vm.chatMessages.isNotEmpty()) listState.animateScrollToItem(vm.chatMessages.size - 1)
     }
     Scaffold(
@@ -1034,6 +1034,12 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
             } else {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = listState,
                     verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
+                    if (vm.chatCursor != null) item {
+                        Box(Modifier.fillMaxWidth().padding(4.dp), contentAlignment = Alignment.Center) {
+                            if (vm.loadingOlder) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                            else TextButton(onClick = vm::loadOlderChat) { Text(stringResource(R.string.chat_load_earlier)) }
+                        }
+                    }
                     itemsIndexed(vm.chatMessages, key = { _, m -> m.id }) { index, m ->
                         val currentDate = messageLocalDate(m.createdAt)
                         val previousDate = vm.chatMessages.getOrNull(index - 1)?.createdAt?.let { messageLocalDate(it) }
@@ -1048,7 +1054,9 @@ private fun KidChatScreen(vm: KidViewModel, monitor: Monitor, onBack: () -> Unit
                     val q = stringResource(res); KidQuickReplyChip(q) { vm.sendChat(q) }
                 }
             }
-            KidChatInput(input, { input = it }, vm.sending) { if (input.isNotBlank()) { vm.sendChat(input); input = "" } }
+            KidChatInput(input, { input = it }, vm.sending) {
+                if (input.isNotBlank()) vm.sendChat(input) { input = "" }
+            }
         }
     }
 }
@@ -1110,7 +1118,7 @@ private fun KidChatInput(value: String, onChange: (String) -> Unit, sending: Boo
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value, onChange, modifier = Modifier.weight(1f),
+            OutlinedTextField(value, { onChange(it.take(2_000)) }, modifier = Modifier.weight(1f),
                 placeholder = { Text(stringResource(R.string.chat_hint)) }, shape = CircleShape, maxLines = 4)
             FilledIconButton(onClick = onSend, enabled = value.isNotBlank() && !sending, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.cd_send))

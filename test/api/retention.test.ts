@@ -3,13 +3,14 @@ import { eq, sql } from 'drizzle-orm';
 import { resetDb } from '../helpers/db';
 import { seedChild, seedDevice, seedParent } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks, devices, locations, parents, subscriptionTiers } from '@/db/schema';
+import { childParentLinks, devices, locations, messages, parents, subscriptionTiers } from '@/db/schema';
 import { signAccess } from '@/lib/auth/jwt';
 import { POST as upload } from '@/app/api/locations/route';
 import { GET as current } from '@/app/api/children/[id]/location/current/route';
 import { GET as history } from '@/app/api/children/[id]/location/history/route';
 import { GET as routes } from '@/app/api/children/[id]/routes/route';
-import { sweepLocationRetention } from '@/lib/retention';
+import { sweepLocationRetention, sweepMessageRetention } from '@/lib/retention';
+import { encryptMessageBody } from '@/lib/messages/crypto';
 
 beforeAll(async () => { await resetDb(); });
 
@@ -17,6 +18,21 @@ const post = (token: string, body: unknown) => new Request('http://t/', {
   method: 'POST',
   headers: { authorization: `Bearer ${token}` },
   body: JSON.stringify(body),
+});
+
+describe('message retention', () => {
+  it('deletes expired messages and keeps current history', async () => {
+    const p = await seedParent('message_retention@test.io'); const c = await seedChild(p.id);
+    await db.insert(messages).values([
+      { childId: c.id, parentId: p.id, sender: 'parent', body: encryptMessageBody('old'), createdAt: daysAgo(366) },
+      { childId: c.id, parentId: p.id, sender: 'parent', body: encryptMessageBody('current'), createdAt: daysAgo(1) },
+    ]);
+
+    const result = await sweepMessageRetention();
+    expect(result.retentionDays).toBe(365);
+    expect(result.deleted).toBe(1);
+    expect(await db.select().from(messages).where(eq(messages.childId, c.id))).toHaveLength(1);
+  });
 });
 const get = (token: string, query = '') => new Request('http://t/' + query, {
   headers: { authorization: `Bearer ${token}` },

@@ -50,21 +50,6 @@ class KidViewModelTest {
     }
 
     @Test
-    fun `pairing as kid clears parent session tokens`() = runTest(mainRule.dispatcher) {
-        val api = FakeApiClient()
-        val (_, _, code) = seedCode(api)
-        val store = InMemoryTokenStore(parentToken = "parent-access", parentRefreshToken = "parent-refresh")
-        val vm = viewModel(api, store)
-
-        vm.pair(code, "android", "Mom")
-        advanceUntilIdle()
-
-        assertNotNull(vm.deviceToken)
-        assertNull(store.parentToken)
-        assertNull(store.parentRefreshToken)
-    }
-
-    @Test
     fun `pairing with an invalid code surfaces an error`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
 

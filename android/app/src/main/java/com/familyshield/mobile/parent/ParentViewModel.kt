@@ -26,16 +26,36 @@ data class TopPlace(val childId: String, val childName: String, val lat: Double,
 /** An alert tagged with the child it belongs to. */
 data class FamilyAlert(val childId: String, val childName: String, val alert: Alert)
 
+private const val MAX_CHAT_MESSAGES = 1_000
+private const val CHAT_POLL_MIN_MS = 3_000L
+private const val CHAT_POLL_MAX_MS = 30_000L
+
 class ParentViewModel(
     private val api: ApiClient,
     private val store: TokenStore,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    private val authGateway: ParentAuthGateway,
 ) : ViewModel() {
-    var token by mutableStateOf(store.parentToken)
+    var authState by mutableStateOf(authGateway.currentState())
+        private set
+    var token by mutableStateOf<String?>(null)
+        private set
+    var authNotice by mutableStateOf<String?>(null)
+        private set
+    var canResendVerification by mutableStateOf(true)
         private set
 
     init {
-        registerPushToken()
+        if (authState is ParentAuthState.SignedIn) {
+            viewModelScope.launch(dispatcher) {
+                try {
+                    completeSignedIn(authState, refreshData = false)
+                } catch (failure: Exception) {
+                    error = failure.message
+                    expireSession()
+                }
+            }
+        }
     }
     var children by mutableStateOf<List<Child>>(emptyList())
         private set
@@ -121,6 +141,7 @@ class ParentViewModel(
         private set
 
     private var chatJob: Job? = null
+    private var chatLatestCursor: String? = null
 
     val chatChild: Child? get() = children.find { it.id == chatChildId }
 
@@ -143,6 +164,7 @@ class ParentViewModel(
         chatChildId = childId
         chatMessages = emptyList()
         chatCursor = null
+        chatLatestCursor = null
         if (selectedId != childId) select(childId)   // load zones/location for the safe-zone card
         chatJob?.cancel()
         chatJob = viewModelScope.launch(dispatcher) {
@@ -150,20 +172,30 @@ class ParentViewModel(
                 val resp = authed { api.messages(it, childId, markRead = true) }
                 chatMessages = resp.messages
                 chatCursor = resp.nextCursor
+                chatLatestCursor = resp.latestCursor
             } catch (_: CancellationException) {
                 return@launch
             } catch (e: Exception) { error = e.message }
+            var pollDelay = CHAT_POLL_MIN_MS
             while (isActive) {
-                delay(3000)
-                val after = chatMessages.lastOrNull()?.createdAt
+                delay(pollDelay)
                 try {
-                    val delta = authed { api.messages(it, childId, after = after, markRead = true) }.messages
+                    val response = authed { api.messages(it, childId, after = chatLatestCursor, markRead = true) }
+                    val delta = response.messages
                     val have = chatMessages.mapTo(HashSet()) { m -> m.id }
                     val fresh = delta.filter { m -> m.id !in have }
-                    if (fresh.isNotEmpty()) chatMessages = chatMessages + fresh
+                    response.latestCursor?.let { chatLatestCursor = it }
+                    if (fresh.isNotEmpty()) {
+                        chatMessages = (chatMessages + fresh).takeLast(MAX_CHAT_MESSAGES)
+                        pollDelay = CHAT_POLL_MIN_MS
+                    } else {
+                        pollDelay = (pollDelay * 2).coerceAtMost(CHAT_POLL_MAX_MS)
+                    }
                 } catch (_: CancellationException) {
                     return@launch
-                } catch (_: Exception) { /* quiet during polling */ }
+                } catch (_: Exception) {
+                    pollDelay = (pollDelay * 2).coerceAtMost(CHAT_POLL_MAX_MS)
+                }
             }
         }
     }
@@ -178,14 +210,15 @@ class ParentViewModel(
             try {
                 val resp = authed { api.messages(it, id, before = cur) }
                 val have = chatMessages.mapTo(HashSet()) { m -> m.id }
-                val older = resp.messages.filter { m -> m.id !in have }
+                val available = (MAX_CHAT_MESSAGES - chatMessages.size).coerceAtLeast(0)
+                val older = resp.messages.filter { m -> m.id !in have }.takeLast(available)
                 chatMessages = older + chatMessages
-                chatCursor = resp.nextCursor
+                chatCursor = if (chatMessages.size >= MAX_CHAT_MESSAGES) null else resp.nextCursor
             } catch (e: Exception) { error = e.message } finally { loadingOlder = false }
         }
     }
 
-    fun closeChat() { chatJob?.cancel(); chatJob = null; chatChildId = null; chatMessages = emptyList(); chatCursor = null }
+    fun closeChat() { chatJob?.cancel(); chatJob = null; chatChildId = null; chatMessages = emptyList(); chatCursor = null; chatLatestCursor = null }
 
     // ---- App usage (screen time) ----
     var appUsage by mutableStateOf<AppUsageSummary?>(null)
@@ -250,7 +283,7 @@ class ParentViewModel(
         } ?: AppUsageSummary(limits = listOf(limit))
     }
 
-    fun sendChat(body: String) {
+    fun sendChat(body: String, onSent: (() -> Unit)? = null) {
         val id = chatChildId ?: return
         if (token == null || body.isBlank()) return
         sending = true
@@ -258,6 +291,7 @@ class ParentViewModel(
             try {
                 val m = authed { api.sendMessage(it, id, body.trim()) }
                 if (chatMessages.none { e -> e.id == m.id }) chatMessages = chatMessages + m
+                onSent?.invoke()
             } catch (e: Exception) { error = e.message } finally { sending = false }
         }
     }
@@ -341,52 +375,110 @@ class ParentViewModel(
     /** Runs an authed call with the current access token; on a 401, refreshes the
      *  token once and retries. If the refresh also fails, signs the user out. */
     private suspend fun <T> authed(call: suspend (String) -> T): T {
-        val t = token ?: throw ApiException(401, "Not signed in")
+        if (token == null) throw ApiException(401, "Not signed in")
+        val t = authGateway.idToken()
         return try {
             call(t)
         } catch (e: ApiException) {
-            val rt = store.parentRefreshToken
-            if (e.status == 401 && rt != null) {
-                val fresh = try { api.refreshTokens(rt) } catch (_: Exception) {
-                    logout(); throw ApiException(401, "Session expired — please sign in again")
+            if (e.status == 401) {
+                val refreshed = try { authGateway.idToken(forceRefresh = true) } catch (_: Exception) {
+                    expireSession()
+                    throw ApiException(401, "Session expired — please sign in again")
                 }
-                store.parentToken = fresh.accessToken
-                store.parentRefreshToken = fresh.refreshToken
-                token = fresh.accessToken
-                registerPushToken()
-                call(fresh.accessToken)
+                try {
+                    call(refreshed)
+                } catch (retry: ApiException) {
+                    if (retry.status == 401) expireSession()
+                    throw retry
+                }
             } else throw e
         }
     }
 
     fun authenticate(email: String, password: String, register: Boolean) {
-        error = null; busy = true
+        error = null; authNotice = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val t = if (register) api.register(email, password) else api.login(email, password)
-                store.deviceToken = null
-                store.parentToken = t.accessToken
-                store.parentRefreshToken = t.refreshToken
-                token = t.accessToken
-                registerPushToken()
-                refreshChildren()
+                val state = if (register) {
+                    authGateway.register(email, password)
+                } else {
+                    try {
+                        authGateway.login(email, password)
+                    } catch (firebaseFailure: Exception) {
+                        val migrated = api.legacyMigrate(email, password)
+                        authGateway.signInWithCustomToken(migrated.customToken)
+                    }
+                }
+                completeSignedIn(state)
             } catch (e: Exception) { error = e.message } finally { busy = false }
         }
     }
 
     /** Exchange a verified Google ID token for our session tokens. */
     fun googleSignIn(idToken: String) {
+        error = null; authNotice = null; busy = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                completeSignedIn(authGateway.google(idToken))
+            } catch (e: Exception) { error = e.message } finally { busy = false }
+        }
+    }
+
+    fun forgotPassword(email: String) {
+        error = null
+        authNotice = "password_reset_sent"
+        viewModelScope.launch(dispatcher) {
+            // Keep the confirmation identical for existing and unknown accounts.
+            runCatching { authGateway.sendPasswordReset(email.trim()) }
+        }
+    }
+
+    fun resendVerification() {
+        if (!canResendVerification) return
+        error = null
+        canResendVerification = false
+        viewModelScope.launch(dispatcher) {
+            try {
+                authGateway.resendVerification()
+                authNotice = "verification_resent"
+            } catch (e: Exception) { error = e.message }
+            finally {
+                delay(60_000)
+                canResendVerification = true
+            }
+        }
+    }
+
+    fun refreshVerification() {
+        error = null; busy = true
+        viewModelScope.launch(dispatcher) {
+            try { completeSignedIn(authGateway.refreshVerification()) }
+            catch (e: Exception) { error = e.message }
+            finally { busy = false }
+        }
+    }
+
+    fun signOutAllDevicesWithPassword(password: String) {
         error = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
-                val t = api.googleLogin(idToken)
-                store.deviceToken = null
-                store.parentToken = t.accessToken
-                store.parentRefreshToken = t.refreshToken
-                token = t.accessToken
-                registerPushToken()
-                refreshChildren()
-            } catch (e: Exception) { error = e.message } finally { busy = false }
+                authGateway.reauthenticateWithPassword(password)
+                api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
+                logout()
+            } catch (e: Exception) { error = e.message }
+            finally { busy = false }
+        }
+    }
+
+    fun signOutAllDevicesWithGoogle(idToken: String) {
+        error = null; busy = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                authGateway.reauthenticateWithGoogle(idToken)
+                api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
+                logout()
+            } catch (e: Exception) { error = e.message }
+            finally { busy = false }
         }
     }
 
@@ -394,9 +486,29 @@ class ParentViewModel(
     fun showError(message: String?) { error = message }
 
     fun logout() {
-        store.parentToken = null; store.parentRefreshToken = null
+        authGateway.logout()
+        authState = ParentAuthState.SignedOut
         token = null; children = emptyList(); selectedId = null
         location = null; allLocations = emptyMap(); mapZonesByChild = emptyMap(); sosByChild = emptyMap()
+    }
+
+    private fun expireSession() {
+        authGateway.logout()
+        authState = ParentAuthState.Expired
+        token = null
+    }
+
+    private suspend fun completeSignedIn(state: ParentAuthState, refreshData: Boolean = true) {
+        authState = state
+        if (state !is ParentAuthState.SignedIn) {
+            token = null
+            return
+        }
+        val idToken = authGateway.idToken()
+        token = idToken
+        api.bootstrapParent(idToken)
+        registerPushToken()
+        if (refreshData) refreshChildren()
     }
 
     fun refreshChildren() {
@@ -700,7 +812,13 @@ class ParentViewModel(
     companion object {
         fun factory(context: Context) = viewModelFactory {
             initializer {
-                ParentViewModel(HttpApiClient(), PrefsTokenStore(context.applicationContext))
+                val auth = FirebaseParentAuthGateway()
+                val api = HttpApiClient(appCheckTokenProvider = { auth.appCheckToken() })
+                ParentViewModel(
+                    api = api,
+                    store = PrefsTokenStore(context.applicationContext),
+                    authGateway = auth,
+                )
             }
         }
     }

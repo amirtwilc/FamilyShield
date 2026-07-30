@@ -3,23 +3,16 @@ export default function Home() {
     <main className="shell">
       <h1>FamilyShield</h1>
       <p className="muted">
-        Keep track of your family&apos;s devices — see where they are, their battery,
-        and get alerts. Choose where to go:
+        FamilyShield&apos;s Android clients connect to this API service.
       </p>
       <div className="landing-cards">
-        <a className="card" href="/parent">
-          <h2>👨‍👩‍👧 Parent dashboard</h2>
-          <p className="muted">
-            Sign in, add a child, generate a pairing code, and watch their live
-            location, status, and alerts on the map.
-          </p>
+        <a className="card" href="/api/docs">
+          <h2>API documentation</h2>
+          <p className="muted">Open the interactive Swagger documentation.</p>
         </a>
-        <a className="card" href="/kid">
-          <h2>📱 Kid device simulator</h2>
-          <p className="muted">
-            Pair this &quot;device&quot; with a code from the parent, then send
-            location and battery updates.
-          </p>
+        <a className="card" href="/api/health">
+          <h2>Service health</h2>
+          <p className="muted">Check API and database availability.</p>
         </a>
       </div>
     </main>

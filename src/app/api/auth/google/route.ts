@@ -4,6 +4,7 @@ import { signAccess, signRefresh } from '@/lib/auth/jwt';
 import { googleSchema } from '@/lib/schemas/auth';
 import { verifyGoogleIdToken, resolveGoogleParent } from '@/lib/auth/google';
 import { databaseLimiter, clientKey, tooMany } from '@/lib/ratelimit';
+import { legacyAuthEnabled, legacyAuthUnavailable } from '@/lib/auth/legacy';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,7 @@ const googleLimiter = databaseLimiter(20, 60_000);
 /** Sign in with a Google ID token. Verifies it, then finds/links/creates the
  *  parent and returns our normal access + refresh tokens. */
 export async function POST(req: Request) {
+  if (!legacyAuthEnabled()) return legacyAuthUnavailable();
   if (!(await googleLimiter.check(clientKey(req, 'auth_google'))).allowed) return tooMany();
   const p = await parseBody(req, googleSchema);
   if ('response' in p) return p.response;

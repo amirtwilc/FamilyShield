@@ -71,8 +71,6 @@ class KidViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 val r = api.pair(code.trim(), platform, AndroidTelemetry.deviceModel(), parentDisplayName.trim())
-                store.parentToken = null
-                store.parentRefreshToken = null
                 store.deviceToken = r.deviceToken
                 deviceToken = r.deviceToken
                 refreshMonitoring(r.deviceToken)
@@ -206,40 +204,76 @@ class KidViewModel(
         private set
     var sending by mutableStateOf(false)
         private set
+    var chatCursor by mutableStateOf<String?>(null)
+        private set
+    var loadingOlder by mutableStateOf(false)
+        private set
     private var chatJob: Job? = null
     private var chatParentId: String? = null
+    private var chatLatestCursor: String? = null
 
     fun startChat(parentId: String? = null) {
         val t = deviceToken ?: return
         if (chatParentId == parentId && chatJob?.isActive == true) return
         chatJob?.cancel()
         chatParentId = parentId
+        chatMessages = emptyList()
+        chatCursor = null
+        chatLatestCursor = null
         chatJob = viewModelScope.launch(dispatcher) {
             try {
-                chatMessages = if (parentId == null) api.deviceMessages(t).messages
-                else api.monitorMessages(t, parentId).messages
+                val response = if (parentId == null) api.deviceMessages(t)
+                else api.monitorMessages(t, parentId)
+                chatMessages = response.messages
+                chatCursor = response.nextCursor
+                chatLatestCursor = response.latestCursor
             } catch (_: CancellationException) {
                 return@launch
             } catch (_: Exception) {}
+            var pollDelay = 3_000L
             while (isActive) {
-                delay(3000)
-                val after = chatMessages.lastOrNull()?.createdAt
+                delay(pollDelay)
                 try {
-                    val delta = if (parentId == null) api.deviceMessages(t, after).messages
-                    else api.monitorMessages(t, parentId, after).messages
+                    val response = if (parentId == null) api.deviceMessages(t, chatLatestCursor)
+                    else api.monitorMessages(t, parentId, chatLatestCursor)
+                    val delta = response.messages
                     val have = chatMessages.mapTo(HashSet()) { it.id }
                     val fresh = delta.filter { it.id !in have }
-                    if (fresh.isNotEmpty()) chatMessages = chatMessages + fresh
+                    response.latestCursor?.let { chatLatestCursor = it }
+                    if (fresh.isNotEmpty()) {
+                        chatMessages = (chatMessages + fresh).takeLast(1_000)
+                        pollDelay = 3_000L
+                    } else pollDelay = (pollDelay * 2).coerceAtMost(30_000L)
                 } catch (_: CancellationException) {
                     return@launch
-                } catch (_: Exception) {}
+                } catch (_: Exception) { pollDelay = (pollDelay * 2).coerceAtMost(30_000L) }
             }
         }
     }
 
-    fun stopChat() { chatJob?.cancel(); chatJob = null; chatParentId = null }
+    fun loadOlderChat() {
+        val t = deviceToken ?: return
+        val cursor = chatCursor ?: return
+        val parentId = chatParentId
+        if (loadingOlder || chatMessages.size >= 1_000) return
+        loadingOlder = true
+        viewModelScope.launch(dispatcher) {
+            try {
+                val response = if (parentId == null) api.deviceMessages(t, before = cursor)
+                else api.monitorMessages(t, parentId, before = cursor)
+                val have = chatMessages.mapTo(HashSet()) { it.id }
+                val available = 1_000 - chatMessages.size
+                chatMessages = response.messages.filter { it.id !in have }.takeLast(available) + chatMessages
+                chatCursor = if (chatMessages.size >= 1_000) null else response.nextCursor
+            } catch (e: Exception) {
+                if (!handleDeviceAuthError(e)) error = e.message
+            } finally { loadingOlder = false }
+        }
+    }
 
-    fun sendChat(body: String) {
+    fun stopChat() { chatJob?.cancel(); chatJob = null; chatParentId = null; chatCursor = null; chatLatestCursor = null }
+
+    fun sendChat(body: String, onSent: (() -> Unit)? = null) {
         val t = deviceToken ?: return
         val parentId = chatParentId
         if (body.isBlank()) return
@@ -249,6 +283,7 @@ class KidViewModel(
                 val m = if (parentId == null) api.sendDeviceMessage(t, body.trim())
                 else api.sendMonitorMessage(t, parentId, body.trim())
                 if (chatMessages.none { it.id == m.id }) chatMessages = chatMessages + m
+                onSent?.invoke()
             } catch (e: Exception) { if (!handleDeviceAuthError(e)) error = e.message } finally { sending = false }
         }
     }

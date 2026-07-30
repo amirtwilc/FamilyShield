@@ -7,6 +7,15 @@ import kotlinx.serialization.Serializable
 data class Tokens(val accessToken: String, val refreshToken: String)
 
 @Serializable
+data class BootstrapResponse(val parentId: String)
+
+@Serializable
+data class LegacyMigrationResponse(val customToken: String)
+
+@Serializable
+data class RevokeSessionsResponse(val revoked: Boolean)
+
+@Serializable
 data class Device(
     val id: String,
     val platform: String,
@@ -161,6 +170,7 @@ data class Message(
 data class MessagesResponse(
     val messages: List<Message> = emptyList(),
     val nextCursor: String? = null,
+    val latestCursor: String? = null,
 )
 
 @Serializable
@@ -376,12 +386,6 @@ data class InsertResult(val inserted: Int)
 // ---- request bodies ----
 @Serializable
 data class Credentials(val email: String, val password: String)
-
-@Serializable
-data class RefreshBody(val refreshToken: String)
-
-@Serializable
-data class GoogleLoginBody(val idToken: String)
 
 @Serializable
 data class PushTokenBody(@SerialName("fcm_token") val fcmToken: String)
