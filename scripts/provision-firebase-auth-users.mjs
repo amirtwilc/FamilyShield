@@ -98,12 +98,16 @@ for (const parent of result.rows) {
     existing++;
   }
 
-  await client.query(
+  const mapped = await client.query(
     `UPDATE parents
-     SET firebase_uid = $1
-     WHERE id = $1 AND (firebase_uid IS NULL OR firebase_uid = $1)`,
+     SET firebase_uid = $1::text
+     WHERE id = $1::uuid
+       AND (firebase_uid IS NULL OR firebase_uid = $1::text)`,
     [parent.id],
   );
+  if (mapped.rowCount !== 1) {
+    throw new Error(`Neon parent ${parent.id} could not be mapped to its Firebase UID`);
+  }
 }
 
 await client.end();
