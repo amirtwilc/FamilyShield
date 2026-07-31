@@ -8,11 +8,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.familyshield.mobile.net.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -26,6 +28,17 @@ data class TopPlace(val childId: String, val childName: String, val lat: Double,
 /** An alert tagged with the child it belongs to. */
 data class FamilyAlert(val childId: String, val childName: String, val alert: Alert)
 
+enum class ParentAuthUiError {
+    TooManyAttempts,
+}
+
+internal fun isAuthenticationThrottleMessage(message: String?): Boolean {
+    val normalized = message?.trim()?.lowercase() ?: return false
+    return normalized.contains("too many attempts") ||
+        normalized.contains("unusual activity") ||
+        normalized.contains("blocked all requests from this device")
+}
+
 private const val MAX_CHAT_MESSAGES = 1_000
 private const val CHAT_POLL_MIN_MS = 3_000L
 private const val CHAT_POLL_MAX_MS = 30_000L
@@ -36,16 +49,30 @@ class ParentViewModel(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val authGateway: ParentAuthGateway,
 ) : ViewModel() {
+    private var sessionGeneration = 0L
+
     var authState by mutableStateOf(authGateway.currentState())
         private set
     var token by mutableStateOf<String?>(null)
         private set
     var authNotice by mutableStateOf<String?>(null)
         private set
+    var authUiError by mutableStateOf<ParentAuthUiError?>(null)
+        private set
     var canResendVerification by mutableStateOf(true)
         private set
+    private val removeAuthStateListener: () -> Unit
 
     init {
+        removeAuthStateListener = authGateway.observeState { observed ->
+            if (observed is ParentAuthState.SignedOut && authState !is ParentAuthState.SignedOut) {
+                viewModelScope.launch(dispatcher) {
+                    authState = ParentAuthState.SignedOut
+                    token = null
+                    clearParentSessionData()
+                }
+            }
+        }
         if (authState is ParentAuthState.SignedIn) {
             viewModelScope.launch(dispatcher) {
                 try {
@@ -303,7 +330,10 @@ class ParentViewModel(
 
     val selected: Child? get() = children.find { it.id == selectedId }
 
-    fun clearError() { error = null }
+    fun clearError() {
+        error = null
+        authUiError = null
+    }
 
     fun updateBiometricLock(v: Boolean) { store.biometricLock = v; biometricLock = v }
     fun updateAlertsEnabled(v: Boolean) { store.alertsEnabled = v; alertsEnabled = v }
@@ -375,18 +405,20 @@ class ParentViewModel(
     /** Runs an authed call with the current access token; on a 401, refreshes the
      *  token once and retries. If the refresh also fails, signs the user out. */
     private suspend fun <T> authed(call: suspend (String) -> T): T {
+        val generation = sessionGeneration
         if (token == null) throw ApiException(401, "Not signed in")
         val t = authGateway.idToken()
         return try {
-            call(t)
+            call(t).also { ensureCurrentSession(generation) }
         } catch (e: ApiException) {
-            if (e.status == 401) {
+            if (e.status == 401 && e.code != "invalid_app_check") {
+                ensureCurrentSession(generation)
                 val refreshed = try { authGateway.idToken(forceRefresh = true) } catch (_: Exception) {
                     expireSession()
                     throw ApiException(401, "Session expired — please sign in again")
                 }
                 try {
-                    call(refreshed)
+                    call(refreshed).also { ensureCurrentSession(generation) }
                 } catch (retry: ApiException) {
                     if (retry.status == 401) expireSession()
                     throw retry
@@ -396,7 +428,7 @@ class ParentViewModel(
     }
 
     fun authenticate(email: String, password: String, register: Boolean) {
-        error = null; authNotice = null; busy = true
+        clearError(); authNotice = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
                 val state = if (register) {
@@ -404,23 +436,23 @@ class ParentViewModel(
                 } else {
                     try {
                         authGateway.login(email, password)
-                    } catch (firebaseFailure: Exception) {
+                    } catch (_: LegacyMigrationCandidateException) {
                         val migrated = api.legacyMigrate(email, password)
                         authGateway.signInWithCustomToken(migrated.customToken)
                     }
                 }
                 completeSignedIn(state)
-            } catch (e: Exception) { error = e.message } finally { busy = false }
+            } catch (e: Exception) { setAuthFailure(e) } finally { busy = false }
         }
     }
 
     /** Exchange a verified Google ID token for our session tokens. */
     fun googleSignIn(idToken: String) {
-        error = null; authNotice = null; busy = true
+        clearError(); authNotice = null; busy = true
         viewModelScope.launch(dispatcher) {
             try {
                 completeSignedIn(authGateway.google(idToken))
-            } catch (e: Exception) { error = e.message } finally { busy = false }
+            } catch (e: Exception) { setAuthFailure(e) } finally { busy = false }
         }
     }
 
@@ -435,13 +467,17 @@ class ParentViewModel(
 
     fun resendVerification() {
         if (!canResendVerification) return
-        error = null
+        clearError()
         canResendVerification = false
         viewModelScope.launch(dispatcher) {
             try {
                 authGateway.resendVerification()
                 authNotice = "verification_resent"
-            } catch (e: Exception) { error = e.message }
+            } catch (e: ParentAuthSessionExpiredException) {
+                authState = ParentAuthState.Expired
+                token = null
+                error = e.message
+            } catch (e: Exception) { setAuthFailure(e) }
             finally {
                 delay(60_000)
                 canResendVerification = true
@@ -450,65 +486,139 @@ class ParentViewModel(
     }
 
     fun refreshVerification() {
-        error = null; busy = true
+        clearError(); busy = true
         viewModelScope.launch(dispatcher) {
             try { completeSignedIn(authGateway.refreshVerification()) }
-            catch (e: Exception) { error = e.message }
+            catch (e: Exception) { setAuthFailure(e) }
             finally { busy = false }
         }
     }
 
     fun signOutAllDevicesWithPassword(password: String) {
-        error = null; busy = true
+        clearError(); busy = true
         viewModelScope.launch(dispatcher) {
             try {
                 authGateway.reauthenticateWithPassword(password)
                 api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
                 logout()
-            } catch (e: Exception) { error = e.message }
+            } catch (e: Exception) { setAuthFailure(e) }
             finally { busy = false }
         }
     }
 
     fun signOutAllDevicesWithGoogle(idToken: String) {
-        error = null; busy = true
+        clearError(); busy = true
         viewModelScope.launch(dispatcher) {
             try {
                 authGateway.reauthenticateWithGoogle(idToken)
                 api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
                 logout()
-            } catch (e: Exception) { error = e.message }
+            } catch (e: Exception) { setAuthFailure(e) }
             finally { busy = false }
         }
     }
 
     /** Surface an error raised outside the ViewModel (e.g. the credential picker). */
-    fun showError(message: String?) { error = message }
+    fun showError(message: String?) {
+        authUiError = null
+        error = message
+    }
+
+    private fun setAuthFailure(failure: Throwable) {
+        val throttled = generateSequence(failure as Throwable?) { it.cause }
+            .any {
+                it is FirebaseTooManyRequestsException ||
+                    it is ParentAuthTooManyAttemptsException
+            }
+        authUiError = if (throttled) ParentAuthUiError.TooManyAttempts else null
+        error = if (throttled) null else failure.message
+    }
 
     fun logout() {
         authGateway.logout()
         authState = ParentAuthState.SignedOut
-        token = null; children = emptyList(); selectedId = null
-        location = null; allLocations = emptyMap(); mapZonesByChild = emptyMap(); sosByChild = emptyMap()
+        token = null
+        clearParentSessionData()
     }
 
     private fun expireSession() {
         authGateway.logout()
         authState = ParentAuthState.Expired
         token = null
+        clearParentSessionData()
     }
 
     private suspend fun completeSignedIn(state: ParentAuthState, refreshData: Boolean = true) {
-        authState = state
         if (state !is ParentAuthState.SignedIn) {
+            authState = state
             token = null
+            clearParentSessionData()
             return
         }
+        clearParentSessionData(cancelOngoingWork = false)
+        authState = state
         val idToken = authGateway.idToken()
         token = idToken
+        val generation = sessionGeneration
         api.bootstrapParent(idToken)
+        ensureCurrentSession(generation)
         registerPushToken()
         if (refreshData) refreshChildren()
+    }
+
+    private fun ensureCurrentSession(generation: Long) {
+        if (generation != sessionGeneration || token == null) throw CancellationException()
+    }
+
+    /** Remove every piece of parent/account-derived UI state before another account can use this ViewModel. */
+    private fun clearParentSessionData(cancelOngoingWork: Boolean = true) {
+        sessionGeneration++
+        if (cancelOngoingWork) viewModelScope.coroutineContext.cancelChildren()
+        stopLive()
+        closeChat()
+
+        children = emptyList()
+        selectedId = null
+        dashboardChildId = null
+        location = null
+        allLocations = emptyMap()
+        alerts = emptyList()
+        familyAlerts = emptyList()
+        allFamilyAlerts = emptyList()
+        pairingCode = null
+
+        zones = emptyList()
+        mapZonesByChild = emptyMap()
+        history = emptyList()
+        historyDate = today()
+        historyDays = emptyList()
+        distanceKm = 0.0
+        frequentRoutes = emptyList()
+        frequentLocations = emptyList()
+        trips = emptyList()
+        stops = emptyList()
+        topPlaces = emptyList()
+
+        sosByChild = emptyMap()
+        acknowledgedSosEventIds = emptySet()
+        urgentSending = false
+        unreadByChild = emptyMap()
+        lastMessageByChild = emptyMap()
+        sending = false
+        loadingOlder = false
+
+        appUsage = null
+        appUsageChildId = null
+        appUsageDate = null
+        loadingUsage = false
+
+        error = null
+        authNotice = null
+        authUiError = null
+        loadingChildren = false
+        loadingDetail = false
+        loadingAllAlerts = false
+        firstLoad = true
     }
 
     fun refreshChildren() {
@@ -657,7 +767,12 @@ class ParentViewModel(
 
     fun stopLive() { liveJob?.cancel(); liveJob = null }
 
-    override fun onCleared() { stopLive(); chatJob?.cancel(); super.onCleared() }
+    override fun onCleared() {
+        removeAuthStateListener()
+        stopLive()
+        chatJob?.cancel()
+        super.onCleared()
+    }
 
     fun loadRoutes() {
         val id = selectedId ?: return
@@ -813,7 +928,11 @@ class ParentViewModel(
         fun factory(context: Context) = viewModelFactory {
             initializer {
                 val auth = FirebaseParentAuthGateway()
-                val api = HttpApiClient(appCheckTokenProvider = { auth.appCheckToken() })
+                val api = HttpApiClient(
+                    appCheckTokenProvider = { forceRefresh ->
+                        auth.appCheckToken(forceRefresh)
+                    },
+                )
                 ParentViewModel(
                     api = api,
                     store = PrefsTokenStore(context.applicationContext),

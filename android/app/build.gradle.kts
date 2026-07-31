@@ -32,7 +32,7 @@ android {
         applicationId = "com.familyshield.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
+        versionCode = 10
         versionName = "1.0"
         // Backend base URL.
         //  - Dev default: http://10.0.2.2:3000 (the emulator's alias for the dev PC).
@@ -122,5 +122,7 @@ dependencies {
 
     // Unit tests (JVM) — ViewModel logic with hand-written fakes
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

@@ -71,8 +71,12 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     /** When set, the next listChildren call rejects with 401 (simulates an expired access token). */
     var expireNextCall = false
+    var rejectAppCheck = false
 
     override suspend fun listChildren(token: String): List<Child> {
+        if (rejectAppCheck) {
+            throw ApiException(401, "App attestation failed", "invalid_app_check")
+        }
         if (expireNextCall) { expireNextCall = false; throw ApiException(401, "Invalid token") }
         val parent = parentEmail(token)
         return childName.mapNotNull { (id, fallbackName) ->

@@ -4,6 +4,8 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
@@ -18,9 +20,21 @@ sealed interface ParentAuthState {
 }
 
 class ProviderLinkRequiredException(message: String) : Exception(message)
+class LegacyMigrationCandidateException(cause: Throwable) : Exception(cause.message, cause)
+class ParentAuthSessionExpiredException : Exception("Your sign-in session expired. Please sign in again.")
+class ParentAuthTooManyAttemptsException(cause: Throwable? = null) :
+    Exception("Too many authentication attempts", cause)
+
+internal fun isLegacyMigrationErrorCode(errorCode: String): Boolean =
+    errorCode in setOf(
+        "ERROR_INVALID_CREDENTIAL",
+        "ERROR_WRONG_PASSWORD",
+        "ERROR_USER_NOT_FOUND",
+    )
 
 interface ParentAuthGateway {
     fun currentState(): ParentAuthState
+    fun observeState(listener: (ParentAuthState) -> Unit): () -> Unit
     suspend fun register(email: String, password: String): ParentAuthState
     suspend fun login(email: String, password: String): ParentAuthState
     suspend fun google(idToken: String): ParentAuthState
@@ -56,6 +70,12 @@ class FirebaseParentAuthGateway : ParentAuthGateway {
         else ParentAuthState.AwaitingVerification(email)
     }
 
+    override fun observeState(listener: (ParentAuthState) -> Unit): () -> Unit {
+        val authListener = FirebaseAuth.AuthStateListener { listener(currentState()) }
+        auth.addAuthStateListener(authListener)
+        return { auth.removeAuthStateListener(authListener) }
+    }
+
     override suspend fun register(email: String, password: String): ParentAuthState {
         setEmailLanguage()
         val user = auth.createUserWithEmailAndPassword(email, password).await().user
@@ -66,8 +86,15 @@ class FirebaseParentAuthGateway : ParentAuthGateway {
 
     override suspend fun login(email: String, password: String): ParentAuthState {
         setEmailLanguage()
-        val user = auth.signInWithEmailAndPassword(email, password).await().user
-            ?: error("Firebase did not return an account")
+        val user = try {
+            auth.signInWithEmailAndPassword(email, password).await().user
+                ?: error("Firebase did not return an account")
+        } catch (failure: FirebaseAuthException) {
+            if (isLegacyMigrationErrorCode(failure.errorCode)) {
+                throw LegacyMigrationCandidateException(failure)
+            }
+            throw failure
+        }
         pendingGoogleCredential?.let { credential ->
             user.linkWithCredential(credential).await()
             pendingGoogleCredential = null
@@ -90,7 +117,13 @@ class FirebaseParentAuthGateway : ParentAuthGateway {
     }
 
     override suspend fun signInWithCustomToken(customToken: String): ParentAuthState {
-        auth.signInWithCustomToken(customToken).await()
+        setEmailLanguage()
+        val user = auth.signInWithCustomToken(customToken).await().user
+            ?: error("Firebase did not return the migrated account")
+        user.reload().await()
+        if (!user.isEmailVerified) {
+            user.sendEmailVerification().await()
+        }
         return currentState()
     }
 
@@ -101,12 +134,23 @@ class FirebaseParentAuthGateway : ParentAuthGateway {
 
     override suspend fun resendVerification() {
         setEmailLanguage()
-        auth.currentUser?.sendEmailVerification()?.await()
-            ?: error("No account is awaiting verification")
+        val user = auth.currentUser ?: throw ParentAuthSessionExpiredException()
+        try {
+            user.sendEmailVerification().await()
+        } catch (_: FirebaseAuthInvalidUserException) {
+            auth.signOut()
+            throw ParentAuthSessionExpiredException()
+        }
     }
 
     override suspend fun refreshVerification(): ParentAuthState {
-        auth.currentUser?.reload()?.await() ?: return ParentAuthState.SignedOut
+        val user = auth.currentUser ?: return ParentAuthState.SignedOut
+        try {
+            user.reload().await()
+        } catch (_: FirebaseAuthInvalidUserException) {
+            auth.signOut()
+            throw ParentAuthSessionExpiredException()
+        }
         return currentState()
     }
 
@@ -125,9 +169,8 @@ class FirebaseParentAuthGateway : ParentAuthGateway {
         auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
             ?: throw IllegalStateException("Session expired")
 
-    override suspend fun appCheckToken(forceRefresh: Boolean): String? =
-        runCatching { FirebaseAppCheck.getInstance().getAppCheckToken(forceRefresh).await().token }
-            .getOrNull()
+    override suspend fun appCheckToken(forceRefresh: Boolean): String =
+        FirebaseAppCheck.getInstance().getAppCheckToken(forceRefresh).await().token
 
     override fun logout() {
         pendingGoogleCredential = null

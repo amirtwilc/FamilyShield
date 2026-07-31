@@ -80,7 +80,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -88,7 +87,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -108,6 +106,7 @@ import com.familyshield.mobile.R
 import com.familyshield.mobile.Locales
 import com.familyshield.mobile.net.Alert
 import com.familyshield.mobile.net.Child
+import com.familyshield.mobile.ui.copySensitiveText
 import com.familyshield.mobile.net.CurrentLocation
 import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.FrequentRoute
@@ -375,7 +374,9 @@ private fun LoginScreen(vm: ParentViewModel, onKidDevice: () -> Unit) {
                         onClick = { vm.authenticate(email.trim(), password, register) },
                         enabled = email.isNotBlank() && password.isNotBlank() && (!register || passwordMeetsPolicy), loading = vm.busy,
                         modifier = Modifier.fillMaxWidth())
-                    vm.error?.let { Text(it, color = Danger, style = MaterialTheme.typography.bodySmall) }
+                    authErrorMessage(vm)?.let {
+                        Text(it, color = Danger, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (vm.authNotice == "password_reset_sent") {
                         Text(stringResource(R.string.password_reset_confirmation), color = Green, style = MaterialTheme.typography.bodySmall)
                     }
@@ -451,7 +452,7 @@ private fun VerificationPendingScreen(
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
-        vm.error?.let {
+        authErrorMessage(vm)?.let {
             Text(it, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp))
         }
         TextButton(onClick = vm::logout, modifier = Modifier.padding(top = 8.dp)) {
@@ -483,7 +484,13 @@ private fun ParentShell(
         onDispose { vm.stopLive() }
     }
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(vm.error) { vm.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
+    val currentError = authErrorMessage(vm)
+    LaunchedEffect(currentError) {
+        currentError?.let {
+            snackbar.showSnackbar(it)
+            vm.clearError()
+        }
+    }
     val scope = rememberCoroutineScope()
     val tabs = Tab.entries
     var tab by rememberSaveable { mutableStateOf(Tab.Dashboard) }
@@ -678,6 +685,17 @@ private fun ParentShell(
         }
     }
 }
+
+@Composable
+private fun authErrorMessage(vm: ParentViewModel): String? =
+    when (vm.authUiError) {
+        ParentAuthUiError.TooManyAttempts -> stringResource(R.string.auth_too_many_attempts)
+        null -> if (isAuthenticationThrottleMessage(vm.error)) {
+            stringResource(R.string.auth_too_many_attempts)
+        } else {
+            vm.error
+        }
+    }
 
 @Composable
 private fun SectionPage(
@@ -1164,7 +1182,7 @@ private fun ChildSettingRow(
 
 @Composable
 private fun PairingCodePanel(code: String) {
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1189,7 +1207,9 @@ private fun PairingCodePanel(code: String) {
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                 )
             }
-            FilledTonalIconButton(onClick = { clipboard.setText(AnnotatedString(code)) }) {
+            FilledTonalIconButton(onClick = {
+                copySensitiveText(context, context.getString(R.string.pairing_code_label), code)
+            }) {
                 Icon(Icons.Filled.ContentCopy, stringResource(R.string.copy_pairing_code))
             }
         }

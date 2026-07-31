@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PersonAdd
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -95,6 +97,8 @@ import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
 import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.ui.OsmMap
+import com.familyshield.mobile.ui.pairingCodeEditOrNull
+import com.familyshield.mobile.ui.pairingCodeFromClipboard
 import com.familyshield.mobile.ui.formatMessageDate
 import com.familyshield.mobile.ui.formatMessageTime
 import com.familyshield.mobile.ui.messageLocalDate
@@ -255,11 +259,11 @@ private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp))
                 Spacer(Modifier.height(24.dp))
+                PairingCodeEntry(code = code, onChange = { code = it })
+                Spacer(Modifier.height(18.dp))
                 MonitoringDisclosure(checked = disclosureAccepted, onCheckedChange = { disclosureAccepted = it })
                 Spacer(Modifier.height(18.dp))
                 ParentNameInput(parentName, { parentName = it })
-                Spacer(Modifier.height(18.dp))
-                CodeBoxes(code) { code = it.filter { c -> c.isDigit() }.take(6) }
                 Spacer(Modifier.height(24.dp))
                 Button(
                     onClick = { vm.pair(code, "android", parentName) },
@@ -297,6 +301,41 @@ private fun ConnectScreen(vm: KidViewModel, onBack: () -> Unit, onSettings: () -
         Text(stringResource(R.string.kid_version), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun PairingCodeEntry(code: String, onChange: (String) -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var invalidPaste by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth()) {
+        CodeBoxes(code) { candidate ->
+            pairingCodeEditOrNull(candidate)?.let {
+                invalidPaste = false
+                onChange(it)
+            }
+        }
+        TextButton(
+            onClick = {
+                val pastedCode = pairingCodeFromClipboard(clipboard.getText()?.text)
+                invalidPaste = pastedCode == null
+                pastedCode?.let(onChange)
+            },
+            modifier = Modifier.align(Alignment.End),
+        ) {
+            Icon(Icons.Filled.ContentPaste, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.kid_paste_pairing_code))
+        }
+        if (invalidPaste) {
+            Text(
+                stringResource(R.string.kid_clipboard_no_pairing_code),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.align(Alignment.End),
+            )
+        }
     }
 }
 
@@ -952,9 +991,9 @@ private fun AddParentDialog(vm: KidViewModel, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.kid_pair_another_parent)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                PairingCodeEntry(code = code, onChange = { code = it })
                 MonitoringDisclosure(checked = disclosureAccepted, onCheckedChange = { disclosureAccepted = it })
                 ParentNameInput(parentName, { parentName = it })
-                CodeBoxes(code) { code = it.filter { c -> c.isDigit() }.take(6) }
             }
         },
         confirmButton = {

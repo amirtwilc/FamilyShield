@@ -40,11 +40,13 @@
     <string name="login_new_here">חדש כאן? יצירת חשבון</string>
     <string name="login_setup_kid">הגדרת מכשיר לילד ←</string>
     <string name="google_signin">המשך עם Google</string>
+    <string name="google_signin_unavailable">הכניסה באמצעות Google אינה זמינה משום שאין לאפליקציה מסך פעיל.</string>
+    <string name="auth_too_many_attempts">בוצעו יותר מדי ניסיונות. יש לנסות שוב מאוחר יותר.</string>
     <string name="forgot_password">שכחת את הסיסמה?</string>
     <string name="password_requirements">8–128 תווים, כולל אות גדולה, אות קטנה, מספר ותו מיוחד</string>
     <string name="password_reset_confirmation">אם החשבון יכול לקבל אימייל, Firebase שלח הוראות לאיפוס הסיסמה.</string>
     <string name="verification_title">אימות כתובת האימייל</string>
-    <string name="verification_body">שלחנו קישור אימות אל %1$s. יש לפתוח אותו ואז לחזור לכאן.</string>
+    <string name="verification_body">יש לאמת את %1$s לפני שממשיכים. אם אימייל האימות לא התקבל, יש להשתמש בכפתור השליחה מחדש.</string>
     <string name="verification_check">אימתתי את האימייל</string>
     <string name="verification_resend">שליחה מחדש של אימייל האימות</string>
     <string name="verification_resent">אימייל האימות נשלח.</string>
@@ -307,6 +309,8 @@
     <string name="kid_connect_title">התחברות להורה</string>
     <string name="kid_connect_body">הזינו את קוד הצימוד בן 6 הספרות המוצג במכשיר ההורה כדי להתחיל להגן על הטלפון הזה.</string>
     <string name="kid_connect_action">חיבור המכשיר שלי</string>
+    <string name="kid_paste_pairing_code">הדבקת קוד</string>
+    <string name="kid_clipboard_no_pairing_code">הלוח אינו מכיל קוד בן 6 ספרות.</string>
     <string name="kid_parent_name_label">שם ההורה</string>
     <string name="kid_parent_name_helper">בחרו איך ההורה הזה יוצג בטלפון הזה.</string>
     <string name="kid_parent_name_required">בחרו או הזינו שם להורה.</string>

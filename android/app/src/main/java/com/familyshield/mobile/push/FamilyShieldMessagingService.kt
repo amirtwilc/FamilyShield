@@ -48,8 +48,10 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
         runBlocking(Dispatchers.IO) {
             val store = PrefsTokenStore(applicationContext)
             if (FirebaseApp.getApps(this@FamilyShieldMessagingService).isNotEmpty()) {
-                val api = HttpApiClient(appCheckTokenProvider = {
-                    runCatching { FirebaseAppCheck.getInstance().getAppCheckToken(false).await().token }.getOrNull()
+                val api = HttpApiClient(appCheckTokenProvider = { forceRefresh ->
+                    runCatching {
+                        FirebaseAppCheck.getInstance().getAppCheckToken(forceRefresh).await().token
+                    }.getOrNull()
                 })
                 FirebaseAuth.getInstance().currentUser?.getIdToken(false)?.await()?.token?.let { parentToken ->
                     runCatching { api.registerParentPushToken(parentToken, token) }

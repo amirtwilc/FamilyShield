@@ -85,11 +85,35 @@ class ParentViewModelTest {
     }
 
     @Test
+    fun `Firebase sign-out removes a stale verification screen`() = runTest(mainRule.dispatcher) {
+        val auth = FakeParentAuthGateway(
+            state = ParentAuthState.AwaitingVerification("parent@x.com"),
+        )
+        val vm = ParentViewModel(
+            FakeApiClient(),
+            InMemoryTokenStore(),
+            mainRule.dispatcher,
+            auth,
+        )
+
+        auth.emitState(ParentAuthState.SignedOut)
+        advanceUntilIdle()
+
+        assertTrue(vm.authState is ParentAuthState.SignedOut)
+        assertNull(vm.token)
+    }
+
+    @Test
     fun `failed Firebase password login falls back to one-time legacy migration`() =
         runTest(mainRule.dispatcher) {
             val api = FakeApiClient()
             api.register("legacy@x.com", "OldPassword!1")
-            val auth = FakeParentAuthGateway(api = api, loginFails = true)
+            val auth = FakeParentAuthGateway(
+                api = api,
+                loginFailure = LegacyMigrationCandidateException(
+                    IllegalStateException("Firebase password login failed"),
+                ),
+            )
             val vm = ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher, auth)
 
             vm.authenticate("legacy@x.com", "OldPassword!1", register = false)
@@ -99,6 +123,66 @@ class ParentViewModelTest {
             assertTrue(vm.authState is ParentAuthState.SignedIn)
             assertNotNull(vm.token)
         }
+
+    @Test
+    fun `Firebase throttling does not invoke legacy migration`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val auth = FakeParentAuthGateway(
+            api = api,
+            loginFailure = IllegalStateException("Requests from this device are temporarily blocked"),
+        )
+        val vm = ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher, auth)
+
+        vm.authenticate("parent@x.com", "Password!1", register = false)
+        advanceUntilIdle()
+
+        assertFalse(auth.customTokenUsed)
+        assertNull(vm.token)
+        assertEquals("Requests from this device are temporarily blocked", vm.error)
+    }
+
+    @Test
+    fun `Firebase throttling is mapped to a clear user-facing error`() =
+        runTest(mainRule.dispatcher) {
+            val auth = FakeParentAuthGateway(
+                loginFailure = ParentAuthTooManyAttemptsException(),
+            )
+            val vm = ParentViewModel(
+                FakeApiClient(),
+                InMemoryTokenStore(),
+                mainRule.dispatcher,
+                auth,
+            )
+
+            vm.authenticate("parent@x.com", "Password!1", register = false)
+            advanceUntilIdle()
+
+            assertEquals(ParentAuthUiError.TooManyAttempts, vm.authUiError)
+            assertNull(vm.error)
+            assertFalse(auth.customTokenUsed)
+        }
+
+    @Test
+    fun `raw Firebase throttle messages from dashboard operations use friendly wording`() {
+        assertTrue(isAuthenticationThrottleMessage("Too many attempts"))
+        assertTrue(
+            isAuthenticationThrottleMessage(
+                "We have blocked all requests from this device due to unusual activity",
+            ),
+        )
+        assertFalse(isAuthenticationThrottleMessage("App attestation failed"))
+        assertFalse(isAuthenticationThrottleMessage("Network unavailable"))
+    }
+
+    @Test
+    fun `only invalid credential errors qualify for legacy migration`() {
+        assertTrue(isLegacyMigrationErrorCode("ERROR_INVALID_CREDENTIAL"))
+        assertTrue(isLegacyMigrationErrorCode("ERROR_WRONG_PASSWORD"))
+        assertTrue(isLegacyMigrationErrorCode("ERROR_USER_NOT_FOUND"))
+        assertFalse(isLegacyMigrationErrorCode("ERROR_TOO_MANY_REQUESTS"))
+        assertFalse(isLegacyMigrationErrorCode("ERROR_USER_DISABLED"))
+        assertFalse(isLegacyMigrationErrorCode("ERROR_NETWORK_REQUEST_FAILED"))
+    }
 
     @Test
     fun `login with wrong password surfaces an error and no token`() = runTest(mainRule.dispatcher) {
@@ -158,6 +242,24 @@ class ParentViewModelTest {
             assertNull("a refreshed token should hide the 401", vm.error)
             assertNotNull(vm.token)
             assertNotNull("still signed in after refresh", firstToken)
+        }
+
+    @Test
+    fun `App Check rejection does not sign out an authenticated parent`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val auth = FakeParentAuthGateway(api = api)
+            val vm = ParentViewModel(api, InMemoryTokenStore(), mainRule.dispatcher, auth)
+            vm.authenticate("parent@x.com", "Password!1", register = true)
+            advanceUntilIdle()
+
+            api.rejectAppCheck = true
+            vm.refreshChildren()
+            advanceUntilIdle()
+
+            assertTrue(vm.authState is ParentAuthState.SignedIn)
+            assertNotNull(vm.token)
+            assertEquals("App attestation failed", vm.error)
         }
 
     @Test
@@ -234,6 +336,79 @@ class ParentViewModelTest {
             vm.topPlaces.map { it.childName }.toSet() == setOf("Mia", "Noah"))
         assertEquals(32.0, vm.topPlaces[0].lat, 1e-9)
     }
+
+    @Test
+    fun `logout clears all account derived data before another parent signs in`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val today = LocalDate.now()
+            api.routesResult = RoutesResponse(
+                frequent = listOf(
+                    FrequentRoute(
+                        Geo(32.0, 34.0),
+                        Geo(32.02, 34.02),
+                        count = 3,
+                        lastAt = "${today}T09:00:00Z",
+                        avgMinutes = 20.0,
+                        avgKm = 2.8,
+                    ),
+                ),
+                frequentLocations = listOf(
+                    FrequentLocation(32.0, 34.0, count = 4, lastAt = "${today}T09:00:00Z"),
+                ),
+                stops = listOf(
+                    Stop(32.0, 34.0, "${today}T08:00:00Z", "${today}T09:00:00Z", dwellMin = 60.0),
+                ),
+            )
+            val vm = viewModel(api)
+            vm.authenticate("first-parent@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+            vm.addChild("Mia")
+            advanceUntilIdle()
+            val childId = vm.selectedId!!
+            val code = api.pairingCode(vm.token!!, childId).code
+            val deviceToken = api.pair(code, "android", null, "Mom").deviceToken
+            api.sendLocation(deviceToken, lat = 32.0, lng = 34.0, battery = 10)
+            api.createZone(vm.token!!, childId, "School", 32.0, 34.0, 300, active = true)
+
+            vm.refreshDetail()
+            vm.loadZones()
+            vm.loadHistory(today.toString())
+            vm.loadRoutes()
+            vm.loadFamilyOverview()
+            advanceUntilIdle()
+
+            assertTrue(vm.topPlaces.isNotEmpty())
+            assertTrue(vm.familyAlerts.isNotEmpty())
+            assertTrue(vm.history.isNotEmpty())
+            assertTrue(vm.zones.isNotEmpty())
+            assertTrue(vm.frequentRoutes.isNotEmpty())
+
+            vm.logout()
+
+            assertTrue(vm.children.isEmpty())
+            assertTrue(vm.topPlaces.isEmpty())
+            assertTrue(vm.familyAlerts.isEmpty())
+            assertTrue(vm.allFamilyAlerts.isEmpty())
+            assertTrue(vm.alerts.isEmpty())
+            assertTrue(vm.history.isEmpty())
+            assertTrue(vm.historyDays.isEmpty())
+            assertTrue(vm.zones.isEmpty())
+            assertTrue(vm.mapZonesByChild.isEmpty())
+            assertTrue(vm.frequentRoutes.isEmpty())
+            assertTrue(vm.frequentLocations.isEmpty())
+            assertTrue(vm.trips.isEmpty())
+            assertTrue(vm.stops.isEmpty())
+
+            vm.authenticate("second-parent@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+
+            assertTrue(vm.children.isEmpty())
+            assertTrue(vm.topPlaces.isEmpty())
+            assertTrue(vm.familyAlerts.isEmpty())
+            assertTrue(vm.history.isEmpty())
+            assertTrue(vm.zones.isEmpty())
+        }
 
     @Test
     fun `family overview excludes places from previous days`() = runTest(mainRule.dispatcher) {
@@ -803,12 +978,23 @@ class ParentViewModelTest {
 private class FakeParentAuthGateway(
     private val api: FakeApiClient? = null,
     var state: ParentAuthState = ParentAuthState.SignedOut,
-    private val loginFails: Boolean = false,
+    private val loginFailure: Exception? = null,
 ) : ParentAuthGateway {
     var customTokenUsed = false
     private var token = if (state is ParentAuthState.SignedIn) "acc:parent@x.com" else null
+    private var stateListener: ((ParentAuthState) -> Unit)? = null
 
     override fun currentState() = state
+
+    override fun observeState(listener: (ParentAuthState) -> Unit): () -> Unit {
+        stateListener = listener
+        return { stateListener = null }
+    }
+
+    fun emitState(newState: ParentAuthState) {
+        state = newState
+        stateListener?.invoke(newState)
+    }
 
     override suspend fun register(email: String, password: String): ParentAuthState {
         token = api?.register(email, password)?.accessToken ?: "acc:$email"
@@ -817,7 +1003,7 @@ private class FakeParentAuthGateway(
     }
 
     override suspend fun login(email: String, password: String): ParentAuthState {
-        if (loginFails) error("Firebase password login failed")
+        loginFailure?.let { throw it }
         token = api?.login(email, password)?.accessToken ?: "acc:$email"
         state = ParentAuthState.SignedIn("firebase-uid", email)
         return state

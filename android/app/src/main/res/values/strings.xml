@@ -32,11 +32,13 @@
     <string name="login_new_here">New here? Create an account</string>
     <string name="login_setup_kid">Set up a kid device →</string>
     <string name="google_signin">Continue with Google</string>
+    <string name="google_signin_unavailable">Google sign-in is unavailable because the app has no active screen.</string>
+    <string name="auth_too_many_attempts">Too many attempts. Please try again later.</string>
     <string name="forgot_password">Forgot password?</string>
     <string name="password_requirements">8–128 characters with uppercase, lowercase, a number, and a special character</string>
     <string name="password_reset_confirmation">If an account can receive email, Firebase has sent password-reset instructions.</string>
     <string name="verification_title">Verify your email</string>
-    <string name="verification_body">We sent a verification link to %1$s. Open it, then return here.</string>
+    <string name="verification_body">Verify %1$s before continuing. If you haven’t received a verification email, use the resend button.</string>
     <string name="verification_check">I verified my email</string>
     <string name="verification_resend">Resend verification email</string>
     <string name="verification_resent">Verification email sent.</string>
@@ -305,6 +307,8 @@
     <string name="kid_connect_title">Connect to Parent</string>
     <string name="kid_connect_body">Enter the 6-digit pairing code shown on your parent\'s device to start protecting this phone.</string>
     <string name="kid_connect_action">Connect My Device</string>
+    <string name="kid_paste_pairing_code">Paste code</string>
+    <string name="kid_clipboard_no_pairing_code">Clipboard does not contain a 6-digit code.</string>
     <string name="kid_parent_name_label">Parent name</string>
     <string name="kid_parent_name_helper">Choose what this parent should be called on this phone.</string>
     <string name="kid_parent_name_required">Choose or enter a parent name.</string>

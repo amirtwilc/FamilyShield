@@ -16,7 +16,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
-class ApiException(val status: Int, message: String) : Exception(message)
+class ApiException(
+    val status: Int,
+    message: String,
+    val code: String? = null,
+) : Exception(message)
 
 /** The FamilyShield API surface the app depends on. Implemented by [HttpApiClient]
  *  for production and by a hand-written fake in tests. */
@@ -72,7 +76,7 @@ interface ApiClient {
 /** Thin coroutine wrapper over the FamilyShield REST API (OkHttp + kotlinx.serialization). */
 class HttpApiClient(
     private val baseUrl: String = BuildConfig.API_BASE_URL,
-    private val appCheckTokenProvider: suspend () -> String? = { null },
+    private val appCheckTokenProvider: suspend (forceRefresh: Boolean) -> String? = { null },
 ) : ApiClient {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
@@ -88,6 +92,21 @@ class HttpApiClient(
         path: String,
         bodyJson: String? = null,
         token: String? = null,
+    ): String {
+        return try {
+            requestRawOnce(method, path, bodyJson, token, forceAppCheckRefresh = false)
+        } catch (failure: ApiException) {
+            if (failure.code != "invalid_app_check") throw failure
+            requestRawOnce(method, path, bodyJson, token, forceAppCheckRefresh = true)
+        }
+    }
+
+    private suspend fun requestRawOnce(
+        method: String,
+        path: String,
+        bodyJson: String?,
+        token: String?,
+        forceAppCheckRefresh: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(baseUrl + path)
         val reqBody = bodyJson?.toRequestBody(jsonMedia)
@@ -99,17 +118,20 @@ class HttpApiClient(
             else -> error("unsupported method $method")
         }
         token?.let { builder.header("Authorization", "Bearer $it") }
-        appCheckTokenProvider()?.let { builder.header("X-Firebase-AppCheck", it) }
+        appCheckTokenProvider(forceAppCheckRefresh)
+            ?.let { builder.header("X-Firebase-AppCheck", it) }
 
         http.newCall(builder.build()).execute().use { res ->
             val text = res.body?.string().orEmpty()
             if (!res.isSuccessful) {
-                val msg = runCatching {
+                val error = runCatching {
                     (json.parseToJsonElement(text) as? JsonObject)
-                        ?.get("error")?.let { it as? JsonObject }
-                        ?.get("message")?.toString()?.trim('"')
-                }.getOrNull() ?: "Request failed (${res.code})"
-                throw ApiException(res.code, msg)
+                        ?.get("error") as? JsonObject
+                }.getOrNull()
+                val code = error?.get("code")?.toString()?.trim('"')
+                val message = error?.get("message")?.toString()?.trim('"')
+                    ?: "Request failed (${res.code})"
+                throw ApiException(res.code, message, code)
             }
             text
         }
