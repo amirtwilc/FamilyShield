@@ -32,7 +32,6 @@ class LocationSimulationEngineTest {
             mode = LocationSimulationMode.Route,
             waypoints = listOf(from, to),
             speedMps = 1.0,
-            dwellMinutes = 5,
             startedAtMs = 0L,
         )
 
@@ -46,44 +45,21 @@ class LocationSimulationEngineTest {
     }
 
     @Test
-    fun `paused route freezes position and reports stationary speed`() {
+    fun `completed route remains at its destination with stationary speed`() {
+        val destination = SimulationWaypoint(0.0, 0.001)
         val config = LocationSimulationConfig(
             mode = LocationSimulationMode.Route,
-            waypoints = listOf(SimulationWaypoint(0.0, 0.0), SimulationWaypoint(0.0, 0.01)),
+            waypoints = listOf(SimulationWaypoint(0.0, 0.0), destination),
             speedMps = 10.0,
             startedAtMs = 0L,
-            pausedAtMs = 10_000L,
         )
 
-        val first = LocationSimulationEngine.sample(config, nowMs = 20_000L)!!
-        val later = LocationSimulationEngine.sample(config, nowMs = 120_000L)!!
+        val arrived = LocationSimulationEngine.sample(config, nowMs = 120_000L)!!
+        val later = LocationSimulationEngine.sample(config, nowMs = 220_000L)!!
 
-        assertEquals(first.lat, later.lat, 0.0)
-        assertEquals(first.lng, later.lng, 0.0)
+        assertEquals(destination.lng, arrived.lng, 0.0)
+        assertEquals(arrived.lng, later.lng, 0.0)
         assertEquals(0.0, later.speed!!, 0.0)
-    }
-
-    @Test
-    fun `looping route dwells before travelling back to its first waypoint`() {
-        val from = SimulationWaypoint(0.0, 0.0)
-        val to = SimulationWaypoint(0.0, 0.0001)
-        val travelSeconds = LocationSimulationEngine.distanceM(from, to)
-        val config = LocationSimulationConfig(
-            mode = LocationSimulationMode.Route,
-            waypoints = listOf(from, to),
-            speedMps = 1.0,
-            dwellMinutes = 1,
-            loop = true,
-            startedAtMs = 0L,
-        )
-
-        val dwelling = LocationSimulationEngine.sample(config, nowMs = ((travelSeconds + 30) * 1_000).toLong())!!
-        val returning = LocationSimulationEngine.sample(config, nowMs = ((travelSeconds + 60 + travelSeconds / 2) * 1_000).toLong())!!
-
-        assertEquals(to.lng, dwelling.lng, 0.0)
-        assertEquals(0.0, dwelling.speed!!, 0.0)
-        assertEquals(0.00005, returning.lng, 0.000002)
-        assertEquals(1.0, returning.speed!!, 0.0)
     }
 
     @Test

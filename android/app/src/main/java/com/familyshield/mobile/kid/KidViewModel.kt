@@ -31,7 +31,16 @@ class KidViewModel(
     private val api: ApiClient,
     private val store: TokenStore,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main,
-    private val onSimulationChanged: (Context) -> Unit = ::notifyKidSimulationChanged,
+    private val onSimulationChanged: (Context, SimulationChange) -> Unit = { context, change ->
+        when (change) {
+            SimulationChange.Started -> notifyKidSimulationStarted(context)
+            SimulationChange.Updated -> notifyKidSimulationUpdated(context)
+            SimulationChange.Stopped -> notifyKidSimulationStopped(context)
+        }
+    },
+    private val currentLocationProvider: suspend (Context) -> SimulationWaypoint? = { context ->
+        AndroidTelemetry.currentLocation(context)?.let { SimulationWaypoint(it.latitude, it.longitude) }
+    },
 ) : ViewModel() {
 
     var deviceToken by mutableStateOf(store.deviceToken)
@@ -120,58 +129,32 @@ class KidViewModel(
         simulationConfig = LocationSimulationStore(context.applicationContext).activeConfig()
     }
 
-    fun startFixedSimulation(context: Context, point: SimulationWaypoint) {
-        authorizeSimulation(context) { store -> store.startFixed(point) }
-    }
-
-    fun startRouteSimulation(
-        context: Context,
-        waypoints: List<SimulationWaypoint>,
-        speedMps: Double,
-        dwellMinutes: Int,
-        loop: Boolean,
-    ) {
-        authorizeSimulation(context) { store ->
-            store.startRoute(waypoints, speedMps, dwellMinutes, loop)
-        }
-    }
-
-    fun pauseSimulation(context: Context) {
-        simulationConfig = LocationSimulationStore(context.applicationContext).pause()
-        onSimulationChanged(context)
-    }
-
-    fun resumeSimulation(context: Context) {
-        authorizeSimulation(context) { store -> store.resume() ?: error("No simulation to resume") }
-    }
-
-    fun stopSimulation(context: Context) {
-        LocationSimulationStore(context.applicationContext).stop()
-        simulationConfig = null
-        onSimulationChanged(context)
-        message = context.getString(R.string.kid_simulation_stopped)
-    }
-
-    private fun authorizeSimulation(
-        context: Context,
-        activate: (LocationSimulationStore) -> LocationSimulationConfig,
-    ) {
+    fun startSimulation(context: Context) {
         val token = deviceToken ?: return
         val app = context.applicationContext
         simulationBusy = true
+        error = null
         viewModelScope.launch(dispatcher) {
             try {
                 val info = api.monitoring(token)
                 monitors = info.monitors
-                if (!canSimulateLocation) {
+                if (!info.monitors.allowsLocationSimulation()) {
                     LocationSimulationStore(app).stop()
                     simulationConfig = null
-                    onSimulationChanged(app)
+                    onSimulationChanged(app, SimulationChange.Stopped)
                     error = app.getString(R.string.kid_simulation_admin_required)
                     return@launch
                 }
-                simulationConfig = activate(LocationSimulationStore(app))
-                onSimulationChanged(app)
+                val start = currentLocationProvider(app)
+                    ?: lat?.let { currentLat -> lng?.let { currentLng -> SimulationWaypoint(currentLat, currentLng) } }
+                if (start == null || !start.isValid()) {
+                    error = app.getString(R.string.kid_simulation_location_unavailable)
+                    return@launch
+                }
+                simulationConfig = LocationSimulationStore(app).start(start)
+                lat = start.lat
+                lng = start.lng
+                onSimulationChanged(app, SimulationChange.Started)
                 message = app.getString(R.string.kid_simulation_started)
             } catch (e: Exception) {
                 if (!handleDeviceAuthError(e)) error = e.message
@@ -179,6 +162,43 @@ class KidViewModel(
                 simulationBusy = false
             }
         }
+    }
+
+    fun selectSimulationMode(context: Context, mode: LocationSimulationMode) {
+        updateSimulation(context) { it.selectMode(mode) }
+    }
+
+    fun moveSimulatedLocation(context: Context, point: SimulationWaypoint) {
+        updateSimulation(context) { it.moveFixed(point) }
+    }
+
+    fun setSimulationDestination(context: Context, destination: SimulationWaypoint) {
+        updateSimulation(context) { it.setRouteDestination(destination) }
+    }
+
+    fun setSimulationSpeed(context: Context, speedMps: Double) {
+        updateSimulation(context) { it.setSpeed(speedMps) }
+    }
+
+    private fun updateSimulation(
+        context: Context,
+        update: (LocationSimulationStore) -> LocationSimulationConfig?,
+    ) {
+        val app = context.applicationContext
+        val config = update(LocationSimulationStore(app)) ?: return
+        simulationConfig = config
+        LocationSimulationEngine.sample(config)?.let {
+            lat = it.lat
+            lng = it.lng
+        }
+        onSimulationChanged(app, SimulationChange.Updated)
+    }
+
+    fun stopSimulation(context: Context) {
+        LocationSimulationStore(context.applicationContext).stop()
+        simulationConfig = null
+        onSimulationChanged(context, SimulationChange.Stopped)
+        message = context.getString(R.string.kid_simulation_stopped)
     }
 
     private fun handleDeviceAuthError(e: Exception): Boolean {
@@ -223,7 +243,7 @@ class KidViewModel(
                         if (!simulationAllowed) {
                             simulationStore.stop()
                             simulationConfig = null
-                            onSimulationChanged(app)
+                            onSimulationChanged(app, SimulationChange.Stopped)
                         }
                     }
                 }
@@ -281,7 +301,16 @@ class KidViewModel(
                     monitors = result.monitors
                     message = "Parent removed."
                 }
-            } catch (e: Exception) { if (!handleDeviceAuthError(e)) error = e.message } finally { busy = false }
+            } catch (e: Exception) {
+                if (!handleDeviceAuthError(e)) {
+                    try {
+                        monitors = api.monitoring(t).monitors
+                        error = e.message
+                    } catch (refreshError: Exception) {
+                        if (!handleDeviceAuthError(refreshError)) error = e.message
+                    }
+                }
+            } finally { busy = false }
         }
     }
 
@@ -392,6 +421,15 @@ class KidViewModel(
         }
     }
 
+    fun refreshDisplayedSimulation(context: Context) {
+        val config = LocationSimulationStore(context.applicationContext).activeConfig()
+        simulationConfig = config
+        config?.let { LocationSimulationEngine.sample(it) }?.let {
+            lat = it.lat
+            lng = it.lng
+        }
+    }
+
     fun refreshAppUsageAccess(context: Context) {
         appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(context.applicationContext)
     }
@@ -408,3 +446,5 @@ class KidViewModel(
         }
     }
 }
+
+enum class SimulationChange { Started, Updated, Stopped }

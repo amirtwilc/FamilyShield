@@ -49,9 +49,19 @@ export async function DELETE(req: Request, { params }: Ctx) {
 
   if (result.type === 'not_found') return err('not_found', 'Monitor not found', 404);
   if (result.type === 'unpaired') {
-    await fireChildUnpaired(a.device);
+    // The relationship/device mutation has already committed. Push delivery is
+    // best-effort and must not turn a successful unpair into a misleading 500.
+    try {
+      await fireChildUnpaired(a.device);
+    } catch (error) {
+      console.error('Failed to notify parents after child unpair', error);
+    }
     return ok({ unpaired: true, childId: a.device.childId, monitors: [] });
   }
-  await fireParentRemovedByChild(parentId, a.device);
+  try {
+    await fireParentRemovedByChild(parentId, a.device);
+  } catch (error) {
+    console.error('Failed to notify removed parent after child unpair', error);
+  }
   return ok({ unpaired: false, ...(await monitoringInfo(a.device.childId)) });
 }

@@ -1,10 +1,18 @@
 package com.familyshield.mobile.kid
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TelemetryUploadPolicyTest {
+    @Test
+    fun `GPS acquisition retries quickly until a current fix is available`() {
+        assertEquals(GPS_ACQUISITION_RETRY_INTERVAL_MS, nextMonitorDelayMs(false, false))
+        assertEquals(TELEMETRY_UPLOAD_INTERVAL_MS, nextMonitorDelayMs(false, true))
+        assertEquals(SIMULATION_INTERVAL_MS, nextMonitorDelayMs(true, false))
+    }
+
     @Test
     fun `optional telemetry fields are sent immediately and then on their own intervals`() {
         val policy = TelemetryUploadPolicy(

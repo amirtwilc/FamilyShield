@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Point
+import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +73,8 @@ fun OsmMap(
     val context = LocalContext.current
     val mapView = remember { newMap(context, zoom) }
     val marker = remember { Marker(mapView) }
+    var initialCameraSet by remember { mutableStateOf(false) }
+    var userMovedCamera by remember { mutableStateOf(false) }
     lifecycleBind(mapView)
     AndroidView(
         modifier = modifier.semantics { contentDescription = description },
@@ -79,12 +82,19 @@ fun OsmMap(
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             mapView.overlays.add(marker)
             if (onTap != null) mapView.overlays.add(TapOverlay { p -> onTap(p.latitude, p.longitude) })
+            mapView.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) userMovedCamera = true
+                false
+            }
             mapView
         },
         update = { mv ->
             val p = GeoPoint(lat, lng)
             marker.position = p
-            mv.controller.setCenter(p)
+            if (!initialCameraSet || !userMovedCamera) {
+                mv.controller.setCenter(p)
+                initialCameraSet = true
+            }
             mv.invalidate()
         },
         onRelease = { it.onDetach() },
@@ -200,44 +210,62 @@ fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, descri
     )
 }
 
-/** Editable simulation route map. Each tap appends a waypoint; markers are
- * numbered in route order and connected by a straight polyline. */
+/** Live simulation editor. The child marker moves without resetting the user's
+ * pan/zoom, and an optional route destination is connected by a straight line. */
 @Composable
 fun OsmSimulationMap(
-    points: List<MapPoint>,
-    fallbackCenter: MapPoint,
+    current: MapPoint,
+    destination: MapPoint?,
     onTap: (Double, Double) -> Unit,
     modifier: Modifier = Modifier,
     description: String = "Location simulation route editor",
 ) {
     val context = LocalContext.current
     val mapView = remember { newMap(context, 14.0) }
-    val tapOverlay = remember { TapOverlay { point -> onTap(point.latitude, point.longitude) } }
+    val currentOnTap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    val tapOverlay = remember { TapOverlay { point -> currentOnTap(point.latitude, point.longitude) } }
+    var initialCameraSet by remember { mutableStateOf(false) }
+    var userMovedCamera by remember { mutableStateOf(false) }
     lifecycleBind(mapView)
     AndroidView(
         modifier = modifier.semantics { contentDescription = description },
-        factory = { mapView },
+        factory = {
+            mapView.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) userMovedCamera = true
+                false
+            }
+            mapView
+        },
         update = { mv ->
             mv.overlays.clear()
-            if (points.size > 1) {
+            val currentPoint = GeoPoint(current.lat, current.lng)
+            if (destination != null) {
+                val destinationPoint = GeoPoint(destination.lat, destination.lng)
                 mv.overlays.add(Polyline(mv).apply {
-                    setPoints(points.map { GeoPoint(it.lat, it.lng) })
+                    setPoints(listOf(currentPoint, destinationPoint))
                     outlinePaint.color = AndroidColor.argb(220, 0x0A, 0x6C, 0xDB)
                     outlinePaint.strokeWidth = 8f
                 })
-            }
-            points.forEachIndexed { index, point ->
                 mv.overlays.add(Marker(mv).apply {
-                    position = GeoPoint(point.lat, point.lng)
-                    title = (index + 1).toString()
-                    setTextIcon((index + 1).toString())
+                    position = destinationPoint
+                    title = "Destination"
+                    setTextIcon("B")
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     infoWindow = null
                 })
             }
+            mv.overlays.add(Marker(mv).apply {
+                position = currentPoint
+                title = "Child"
+                setTextIcon("●")
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                infoWindow = null
+            })
             mv.overlays.add(tapOverlay)
-            val center = points.lastOrNull() ?: fallbackCenter
-            mv.controller.setCenter(GeoPoint(center.lat, center.lng))
+            if (!initialCameraSet || !userMovedCamera) {
+                mv.controller.setCenter(currentPoint)
+                initialCameraSet = true
+            }
             mv.invalidate()
         },
         onRelease = { it.onDetach() },

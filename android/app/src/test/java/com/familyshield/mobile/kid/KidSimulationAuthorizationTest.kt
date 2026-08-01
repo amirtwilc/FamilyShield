@@ -25,28 +25,33 @@ class KidSimulationAuthorizationTest {
     }
 
     @Test
-    fun `start requires an admin and resume rechecks current parent tiers`() = runTest {
+    fun `start requires an admin and rechecking start removes simulation after downgrade`() = runTest {
         val api = FakeApiClient()
         val parentToken = api.register("admin@test.io", "password1").accessToken
         val child = api.createChild(parentToken, "Mia")
         val code = api.pairingCode(parentToken, child.id).code
         val pairing = api.pair(code, "android", "Pixel", "Mom")
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val vm = KidViewModel(api, InMemoryTokenStore(pairing.deviceToken), dispatcher) {}
+        val vm = KidViewModel(
+            api = api,
+            store = InMemoryTokenStore(pairing.deviceToken),
+            dispatcher = dispatcher,
+            onSimulationChanged = { _, _ -> },
+            currentLocationProvider = { SimulationWaypoint(32.0, 34.0) },
+        )
         advanceUntilIdle()
 
-        vm.startFixedSimulation(context, SimulationWaypoint(32.0, 34.0))
+        vm.startSimulation(context)
         advanceUntilIdle()
         assertNull(LocationSimulationStore(context).activeConfig())
 
         api.setParentTier("admin@test.io", "admin")
-        vm.startFixedSimulation(context, SimulationWaypoint(32.0, 34.0))
+        vm.startSimulation(context)
         advanceUntilIdle()
         assertNotNull(LocationSimulationStore(context).activeConfig())
 
-        vm.pauseSimulation(context)
         api.setParentTier("admin@test.io", "free")
-        vm.resumeSimulation(context)
+        vm.startSimulation(context)
         advanceUntilIdle()
 
         assertNull(LocationSimulationStore(context).activeConfig())

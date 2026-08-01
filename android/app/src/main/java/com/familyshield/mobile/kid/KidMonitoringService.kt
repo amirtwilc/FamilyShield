@@ -27,8 +27,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 private const val ACTION_STOP = "com.familyshield.mobile.kid.STOP_MONITORING"
-private const val ACTION_SIMULATION_CHANGED = "com.familyshield.mobile.kid.SIMULATION_CHANGED"
+private const val ACTION_SIMULATION_STARTED = "com.familyshield.mobile.kid.SIMULATION_STARTED"
+private const val ACTION_SIMULATION_UPDATED = "com.familyshield.mobile.kid.SIMULATION_UPDATED"
+private const val ACTION_SIMULATION_STOPPED = "com.familyshield.mobile.kid.SIMULATION_STOPPED"
+private const val ACTION_LOCATION_PERMISSIONS_CHANGED = "com.familyshield.mobile.kid.LOCATION_PERMISSIONS_CHANGED"
 internal const val TELEMETRY_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
+internal const val GPS_ACQUISITION_RETRY_INTERVAL_MS = 20 * 1000L
 internal const val MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS = 60 * 1000L
 internal const val MOVEMENT_LOCATION_MIN_DISTANCE_M = 75f
 internal const val LOCATION_STALE_AFTER_MS = 2 * 60 * 1000L
@@ -85,13 +89,38 @@ class KidMonitoringService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_SIMULATION_CHANGED) {
-            monitorJob?.cancel()
-            pendingLocations.clear()
-            lastSimulationAuthCheckAtMs = null
-            simulationAuthorized = false
-            syncMovementLocationCollection()
-            showMonitoringNotification(this)
+        when (intent?.action) {
+            ACTION_SIMULATION_STARTED -> {
+                monitorJob?.cancel()
+                pendingLocations.clear()
+                lastSimulationAuthCheckAtMs = null
+                simulationAuthorized = false
+                syncMovementLocationCollection()
+                showMonitoringNotification(this)
+            }
+            ACTION_SIMULATION_UPDATED -> {
+                // Keep already generated simulated points. The new config starts
+                // from the exact current synthetic position, so no GPS sample or
+                // route gap is introduced while editing an active simulation.
+                monitorJob?.cancel()
+                syncMovementLocationCollection()
+                showMonitoringNotification(this)
+            }
+            ACTION_SIMULATION_STOPPED -> {
+                monitorJob?.cancel()
+                pendingLocations.clear()
+                lastSimulationAuthCheckAtMs = null
+                simulationAuthorized = false
+                syncMovementLocationCollection()
+                showMonitoringNotification(this)
+            }
+            ACTION_LOCATION_PERMISSIONS_CHANGED -> {
+                // A service started before the runtime permission dialog resolves
+                // may have no location callback. Wake it immediately after the
+                // result instead of waiting for the normal five-minute interval.
+                monitorJob?.cancel()
+                syncMovementLocationCollection()
+            }
         }
         if (monitorJob?.isActive != true) monitorJob = scope.launch { monitorLoop() }
         if (sosJob?.isActive != true) sosJob = scope.launch { sosLoop() }
@@ -135,7 +164,7 @@ class KidMonitoringService : Service() {
                         stopSimulationAndResumeGps()
                         runCatching { uploadTick(token, uploadPolicy) }
                     }
-                    SimulationAuthorization.Unavailable -> Result.success(Unit)
+                    SimulationAuthorization.Unavailable -> Result.success(false)
                     SimulationAuthorization.DeviceUnauthorized -> {
                         store.deviceToken = null
                         stopSelf()
@@ -153,7 +182,7 @@ class KidMonitoringService : Service() {
                 stopSelf()
                 return
             }
-            delay(if (simulationStore.activeConfig() != null) SIMULATION_INTERVAL_MS else TELEMETRY_UPLOAD_INTERVAL_MS)
+            delay(nextMonitorDelayMs(simulationStore.activeConfig() != null, result.getOrNull() == true))
         }
     }
 
@@ -242,7 +271,7 @@ class KidMonitoringService : Service() {
         token: String,
         uploadPolicy: TelemetryUploadPolicy,
         locationOverride: LocationPoint? = null,
-    ) {
+    ): Boolean {
         val nowMs = System.currentTimeMillis()
         val optionalFields = uploadPolicy.optionalFields(nowMs)
         val appUsage = if (optionalFields.appUsage) {
@@ -272,6 +301,7 @@ class KidMonitoringService : Service() {
         )
         pendingLocations.acknowledge(locations)
         uploadPolicy.markUploaded(optionalFields, nowMs)
+        return currentLocation != null
     }
 
     private fun startMovementLocationCollection() {
@@ -340,6 +370,12 @@ class KidMonitoringService : Service() {
     private enum class SimulationAuthorization { Authorized, Revoked, Unavailable, DeviceUnauthorized }
 }
 
+internal fun nextMonitorDelayMs(simulationActive: Boolean, hasCurrentLocation: Boolean): Long = when {
+    simulationActive -> SIMULATION_INTERVAL_MS
+    !hasCurrentLocation -> GPS_ACQUISITION_RETRY_INTERVAL_MS
+    else -> TELEMETRY_UPLOAD_INTERVAL_MS
+}
+
 fun startKidMonitoring(context: Context): Boolean {
     val app = context.applicationContext
     val intent = Intent(app, KidMonitoringService::class.java)
@@ -357,9 +393,18 @@ fun stopKidMonitoring(context: Context) {
     app.startService(Intent(app, KidMonitoringService::class.java).setAction(ACTION_STOP))
 }
 
-fun notifyKidSimulationChanged(context: Context) {
+private fun startKidMonitoringAction(context: Context, action: String) {
     val app = context.applicationContext
-    val intent = Intent(app, KidMonitoringService::class.java).setAction(ACTION_SIMULATION_CHANGED)
+    val intent = Intent(app, KidMonitoringService::class.java).setAction(action)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(intent)
     else app.startService(intent)
 }
+
+fun notifyKidSimulationStarted(context: Context) = startKidMonitoringAction(context, ACTION_SIMULATION_STARTED)
+
+fun notifyKidSimulationUpdated(context: Context) = startKidMonitoringAction(context, ACTION_SIMULATION_UPDATED)
+
+fun notifyKidSimulationStopped(context: Context) = startKidMonitoringAction(context, ACTION_SIMULATION_STOPPED)
+
+fun notifyKidLocationPermissionsChanged(context: Context) =
+    startKidMonitoringAction(context, ACTION_LOCATION_PERMISSIONS_CHANGED)

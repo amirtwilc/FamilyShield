@@ -181,4 +181,20 @@ describe('pairing', () => {
     const unpairAlerts = await db.select().from(alerts);
     expect(unpairAlerts.some((a) => a.childId === c.id && a.type === 'child_unpaired')).toBe(true);
   });
+
+  it('returns success when unpair notification delivery fails after the mutation commits', async () => {
+    const parent = await seedParent('remove_push_failure@test.io');
+    const child = await seedChild(parent.id, 'Mia');
+    const { token: deviceToken } = await seedDevice(child.id);
+    setSender({ async send() { throw new Error('FCM unavailable'); } });
+
+    const response = await removeMonitor(
+      new Request('http://t/', { method: 'DELETE', headers: { authorization: `Bearer ${deviceToken}` } }),
+      { params: Promise.resolve({ parentId: parent.id }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ unpaired: true, childId: child.id, monitors: [] });
+    expect((await monitoring(get(deviceToken))).status).toBe(401);
+  });
 });

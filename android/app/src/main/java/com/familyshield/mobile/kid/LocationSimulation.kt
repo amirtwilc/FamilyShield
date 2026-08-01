@@ -36,54 +36,76 @@ data class LocationSimulationConfig(
     val mode: LocationSimulationMode,
     val waypoints: List<SimulationWaypoint>,
     val speedMps: Double = 1.4,
-    val dwellMinutes: Int = 5,
-    val loop: Boolean = false,
     val startedAtMs: Long,
-    val pausedAtMs: Long? = null,
-    val accumulatedPausedMs: Long = 0L,
-) {
-    val isPaused: Boolean get() = pausedAtMs != null
-}
+    val schemaVersion: Int = 1,
+)
 
 class LocationSimulationStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     fun activeConfig(): LocationSimulationConfig? = prefs.getString(KEY_CONFIG, null)?.let { encoded ->
-        runCatching { json.decodeFromString<LocationSimulationConfig>(encoded) }.getOrNull()
+        val config = runCatching { json.decodeFromString<LocationSimulationConfig>(encoded) }.getOrNull()
+        if (config == null || config.schemaVersion != CURRENT_SCHEMA_VERSION || !config.isValid()) {
+            stop()
+            null
+        } else {
+            config
+        }
     }
 
-    fun startFixed(point: SimulationWaypoint, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig {
-        require(point.isValid()) { "Invalid fixed location" }
-        return save(LocationSimulationConfig(LocationSimulationMode.Fixed, listOf(point), speedMps = 0.0, startedAtMs = nowMs))
-    }
-
-    fun startRoute(
-        waypoints: List<SimulationWaypoint>,
-        speedMps: Double,
-        dwellMinutes: Int,
-        loop: Boolean,
-        nowMs: Long = System.currentTimeMillis(),
-    ): LocationSimulationConfig {
-        require(waypoints.size >= 2 && waypoints.all { it.isValid() }) { "A route requires at least two valid waypoints" }
-        require(speedMps in 0.6..50.0) { "Speed must be between 0.6 and 50 m/s" }
-        require(dwellMinutes in 0..60) { "Dwell time must be between 0 and 60 minutes" }
-        return save(LocationSimulationConfig(LocationSimulationMode.Route, waypoints, speedMps, dwellMinutes, loop, nowMs))
-    }
-
-    fun pause(nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
-        val config = activeConfig() ?: return null
-        if (config.isPaused) return config
-        return save(config.copy(pausedAtMs = nowMs))
-    }
-
-    fun resume(nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
-        val config = activeConfig() ?: return null
-        val pausedAt = config.pausedAtMs ?: return config
-        return save(config.copy(
-            pausedAtMs = null,
-            accumulatedPausedMs = config.accumulatedPausedMs + (nowMs - pausedAt).coerceAtLeast(0L),
+    fun start(point: SimulationWaypoint, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig {
+        require(point.isValid()) { "Invalid start location" }
+        return save(LocationSimulationConfig(
+            mode = LocationSimulationMode.Fixed,
+            waypoints = listOf(point),
+            speedMps = 1.4,
+            startedAtMs = nowMs,
+            schemaVersion = CURRENT_SCHEMA_VERSION,
         ))
+    }
+
+    fun selectMode(mode: LocationSimulationMode, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
+        val current = activeConfig() ?: return null
+        if (current.mode == mode) return current
+        val point = current.currentWaypoint(nowMs) ?: return null
+        return save(current.copy(mode = mode, waypoints = listOf(point), startedAtMs = nowMs))
+    }
+
+    fun moveFixed(point: SimulationWaypoint, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
+        require(point.isValid()) { "Invalid fixed location" }
+        val current = activeConfig() ?: return null
+        return save(current.copy(
+            mode = LocationSimulationMode.Fixed,
+            waypoints = listOf(point),
+            startedAtMs = nowMs,
+        ))
+    }
+
+    fun setRouteDestination(
+        destination: SimulationWaypoint,
+        nowMs: Long = System.currentTimeMillis(),
+    ): LocationSimulationConfig? {
+        require(destination.isValid()) { "Invalid route destination" }
+        val current = activeConfig() ?: return null
+        val origin = current.currentWaypoint(nowMs) ?: return null
+        return save(current.copy(
+            mode = LocationSimulationMode.Route,
+            waypoints = listOf(origin, destination),
+            startedAtMs = nowMs,
+        ))
+    }
+
+    fun setSpeed(speedMps: Double, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
+        require(speedMps in 0.6..50.0) { "Speed must be between 0.6 and 50 m/s" }
+        val current = activeConfig() ?: return null
+        val origin = current.currentWaypoint(nowMs) ?: return null
+        val points = if (current.mode == LocationSimulationMode.Route && current.waypoints.size >= 2) {
+            listOf(origin, current.waypoints.last())
+        } else {
+            listOf(origin)
+        }
+        return save(current.copy(waypoints = points, speedMps = speedMps, startedAtMs = nowMs))
     }
 
     fun stop() {
@@ -98,8 +120,15 @@ class LocationSimulationStore(context: Context) {
     private companion object {
         const val PREFS_NAME = "familyshield_location_simulation"
         const val KEY_CONFIG = "active_config"
+        const val CURRENT_SCHEMA_VERSION = 2
     }
 }
+
+private fun LocationSimulationConfig.isValid(): Boolean =
+    speedMps in 0.6..50.0 && waypoints.isNotEmpty() && waypoints.size <= 2 && waypoints.all { it.isValid() }
+
+private fun LocationSimulationConfig.currentWaypoint(nowMs: Long): SimulationWaypoint? =
+    LocationSimulationEngine.sample(this, nowMs)?.let { SimulationWaypoint(it.lat, it.lng) }
 
 internal object LocationSimulationEngine {
     fun sample(
@@ -108,8 +137,7 @@ internal object LocationSimulationEngine {
         batteryLevel: Int? = null,
     ): LocationPoint? {
         if (config.waypoints.isEmpty() || config.waypoints.any { !it.isValid() }) return null
-        val effectiveNow = config.pausedAtMs?.coerceAtMost(nowMs) ?: nowMs
-        val elapsedSeconds = ((effectiveNow - config.startedAtMs - config.accumulatedPausedMs).coerceAtLeast(0L)) / 1000.0
+        val elapsedSeconds = ((nowMs - config.startedAtMs).coerceAtLeast(0L)) / 1000.0
         val positioned = when (config.mode) {
             LocationSimulationMode.Fixed -> PositionedSample(config.waypoints.first(), 0.0)
             LocationSimulationMode.Route -> routeSample(config, elapsedSeconds)
@@ -119,34 +147,20 @@ internal object LocationSimulationEngine {
             lng = positioned.point.lng,
             recordedAt = iso(nowMs),
             batteryLevel = batteryLevel,
-            speed = if (config.isPaused) 0.0 else positioned.speedMps,
+            speed = positioned.speedMps,
         )
     }
 
     private fun routeSample(config: LocationSimulationConfig, elapsedSeconds: Double): PositionedSample {
         if (config.waypoints.size < 2) return PositionedSample(config.waypoints.first(), 0.0)
-        val legs = buildList {
-            config.waypoints.zipWithNext().forEach { (from, to) -> add(from to to) }
-            if (config.loop) add(config.waypoints.last() to config.waypoints.first())
+        val from = config.waypoints.first()
+        val to = config.waypoints.last()
+        val distance = distanceM(from, to)
+        val travelSeconds = distance / config.speedMps
+        if (travelSeconds > 0.0 && elapsedSeconds < travelSeconds) {
+            return PositionedSample(interpolate(from, to, elapsedSeconds / travelSeconds), config.speedMps)
         }
-        val dwellSeconds = config.dwellMinutes * 60.0
-        val cycleSeconds = legs.sumOf { (from, to) -> distanceM(from, to) / config.speedMps + dwellSeconds }
-        var remaining = if (config.loop && cycleSeconds > 0.0) elapsedSeconds % cycleSeconds else elapsedSeconds
-
-        for ((index, leg) in legs.withIndex()) {
-            val (from, to) = leg
-            val distance = distanceM(from, to)
-            val travelSeconds = distance / config.speedMps
-            if (travelSeconds > 0.0 && remaining < travelSeconds) {
-                return PositionedSample(interpolate(from, to, remaining / travelSeconds), config.speedMps)
-            }
-            remaining = (remaining - travelSeconds).coerceAtLeast(0.0)
-            val isFinalNonLoopingLeg = !config.loop && index == legs.lastIndex
-            if (isFinalNonLoopingLeg) return PositionedSample(to, 0.0)
-            if (remaining < dwellSeconds) return PositionedSample(to, 0.0)
-            remaining = (remaining - dwellSeconds).coerceAtLeast(0.0)
-        }
-        return PositionedSample(config.waypoints.last(), 0.0)
+        return PositionedSample(to, 0.0)
     }
 
     private fun interpolate(from: SimulationWaypoint, to: SimulationWaypoint, fraction: Double): SimulationWaypoint {

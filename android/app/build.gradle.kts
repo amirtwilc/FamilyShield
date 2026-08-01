@@ -32,7 +32,7 @@ android {
         applicationId = "com.familyshield.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
+        versionCode = 12
         versionName = "1.0"
         // Backend base URL.
         //  - Dev default: http://10.0.2.2:3000 (the emulator's alias for the dev PC).
