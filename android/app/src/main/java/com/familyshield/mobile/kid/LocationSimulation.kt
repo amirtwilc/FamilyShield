@@ -207,6 +207,7 @@ internal fun Location.toLocationPoint(
         AndroidTelemetry.locationRecordedAtIso(this),
         batteryLevel,
         speed = speed.toDouble().takeIf { hasSpeed() && it.isFinite() && it >= 0.0 },
+        accuracy = accuracy.toDouble().takeIf { hasAccuracy() && it.isFinite() && it >= 0.0 },
     )
 }
 

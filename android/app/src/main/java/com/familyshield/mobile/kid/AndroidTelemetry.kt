@@ -6,22 +6,30 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Looper
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.coroutines.resume
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+
+internal const val LOCATION_STALE_AFTER_MS = 2 * 60 * 1000L
+internal const val CURRENT_LOCATION_TIMEOUT_MS = 15 * 1000L
 
 data class TelemetrySnapshot(
     val location: Location?,
@@ -71,7 +79,30 @@ object AndroidTelemetry {
 
     suspend fun currentLocation(context: Context): Location? {
         val app = context.applicationContext
-        if (!hasLocationPermission(app)) return null
+        if (!hasLocationPermission(app) || !isLocationServicesEnabled(app)) return null
+
+        val nowMs = System.currentTimeMillis()
+        freshestUsableLocation(platformLastKnownLocations(app), nowMs, LOCATION_STALE_AFTER_MS)?.let { return it }
+
+        return supervisorScope {
+            val result = CompletableDeferred<Location?>()
+            val remaining = AtomicInteger(2)
+            fun completeAttempt(location: Location?) {
+                val usable = location?.takeIf { isUsableLocation(it, System.currentTimeMillis(), LOCATION_STALE_AFTER_MS) }
+                if (usable != null) result.complete(usable)
+                else if (remaining.decrementAndGet() == 0) result.complete(null)
+            }
+            val jobs = listOf(
+                launch { completeAttempt(fusedCurrentOrLastLocation(app)) },
+                launch { completeAttempt(platformCurrentLocation(app)) },
+            )
+            val location = withTimeoutOrNull(CURRENT_LOCATION_TIMEOUT_MS) { result.await() }
+            jobs.forEach { it.cancel() }
+            location
+        }
+    }
+
+    private suspend fun fusedCurrentOrLastLocation(app: Context): Location? {
         val fused = LocationServices.getFusedLocationProviderClient(app)
         return suspendCancellableCoroutine { cont ->
             val cancellation = CancellationTokenSource()
@@ -98,6 +129,48 @@ object AndroidTelemetry {
         }
     }
 
+    private suspend fun platformCurrentLocation(app: Context): Location? = suspendCancellableCoroutine { cont ->
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val completed = AtomicBoolean(false)
+        lateinit var listener: LocationListener
+        fun finish(location: Location?) {
+            if (!completed.compareAndSet(false, true)) return
+            runCatching { manager.removeUpdates(listener) }
+            if (cont.isActive) cont.resume(location)
+        }
+        listener = LocationListener { location ->
+            if (isUsableLocation(location, System.currentTimeMillis(), LOCATION_STALE_AFTER_MS)) finish(location)
+        }
+        cont.invokeOnCancellation {
+            if (completed.compareAndSet(false, true)) runCatching { manager.removeUpdates(listener) }
+        }
+        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .filter { provider -> runCatching { manager.isProviderEnabled(provider) }.getOrDefault(false) }
+        if (providers.isEmpty()) {
+            finish(null)
+            return@suspendCancellableCoroutine
+        }
+        try {
+            providers.forEach { provider ->
+                manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+            }
+        } catch (_: SecurityException) {
+            finish(null)
+        } catch (_: IllegalArgumentException) {
+            finish(null)
+        }
+    }
+
+    private fun platformLastKnownLocations(app: Context): List<Location> {
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        if (!hasLocationPermission(app)) return emptyList()
+        return runCatching {
+            manager.getProviders(true).mapNotNull { provider ->
+                runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+            }
+        }.getOrDefault(emptyList())
+    }
+
     fun movementLocationUpdates(
         context: Context,
         intervalMs: Long,
@@ -105,25 +178,26 @@ object AndroidTelemetry {
         onLocation: (Location) -> Unit,
     ): LocationUpdatesHandle? {
         val app = context.applicationContext
-        if (!hasLocationPermission(app)) return null
-        val fused = LocationServices.getFusedLocationProviderClient(app)
-        val callback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.locations.forEach(onLocation)
-            }
-        }
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-            .setMinUpdateIntervalMillis(intervalMs)
-            .setMinUpdateDistanceMeters(minDistanceM)
-            .build()
+        if (!hasLocationPermission(app) || !isLocationServicesEnabled(app)) return null
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val listener = LocationListener(onLocation)
+        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .filter { provider -> runCatching { manager.isProviderEnabled(provider) }.getOrDefault(false) }
+        if (providers.isEmpty()) return null
         return try {
-            fused.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            // Use the platform providers for the long-running stream. Some MIUI
+            // builds accept a fused request but never deliver its callback.
+            providers.forEach { provider ->
+                manager.requestLocationUpdates(provider, intervalMs, minDistanceM, listener, Looper.getMainLooper())
+            }
             object : LocationUpdatesHandle {
                 override fun stop() {
-                    fused.removeLocationUpdates(callback)
+                    runCatching { manager.removeUpdates(listener) }
                 }
             }
         } catch (_: SecurityException) {
+            null
+        } catch (_: IllegalArgumentException) {
             null
         }
     }
@@ -142,9 +216,30 @@ object AndroidTelemetry {
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    fun isLocationServicesEnabled(context: Context): Boolean {
+        val manager = context.applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            manager.isLocationEnabled
+        } else {
+            runCatching {
+                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }.getOrDefault(false)
+        }
+    }
+
     private fun iso(epochMs: Long): String {
         val df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         df.timeZone = TimeZone.getTimeZone("UTC")
         return df.format(Date(epochMs))
     }
 }
+
+internal fun freshestUsableLocation(
+    locations: List<Location>,
+    nowMs: Long,
+    staleAfterMs: Long,
+): Location? = locations
+    .asSequence()
+    .filter { AndroidTelemetry.isUsableLocation(it, nowMs, staleAfterMs) }
+    .maxByOrNull { it.time }

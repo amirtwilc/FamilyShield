@@ -167,6 +167,8 @@
     <string name="location_update">עדכון מיקום</string>
     <string name="history_route_start_coordinates">התחלה: %1$s</string>
     <string name="history_route_end_coordinates">סיום: %1$s</string>
+    <string name="history_route_coordinates">התחלה: %1$s, סיום: %2$s</string>
+    <string name="history_route_distance">מרחק: %1$s ק״מ</string>
     <string name="view_on_map">הצג במפה</string>
     <string name="route_count">× %1$d</string>
 
@@ -372,8 +374,11 @@
     <string name="kid_chat_title_with">שיחה עם %1$s</string>
     <string name="cd_kid_map">מפה המציגה את המיקום הנוכחי של המכשיר</string>
     <string name="kid_current_location">%1$s, %2$s</string>
-    <string name="kid_location_waiting">ממתינים לאיכון GPS של הטלפון. ודאו שהרשאת המיקום פעילה.</string>
+    <string name="kid_location_waiting">ממתינים למיקום עדכני. השאירו את שירותי המיקום פעילים והתקרבו לחלון או צאו החוצה.</string>
     <string name="kid_location_pending">ממתינים ל-GPS</string>
+    <string name="kid_location_services_disabled">הרשאת המיקום פעילה, אך שירותי המיקום של הטלפון כבויים.</string>
+    <string name="kid_location_services_pending">שירותי המיקום כבויים</string>
+    <string name="kid_location_services_action">הפעלת שירותי מיקום</string>
     <string name="kid_battery_pending">קוראים את סוללת הטלפון...</string>
     <string name="kid_auto_updates">העלאה אוטומטית כל 5 דקות</string>
     <string name="kid_permissions_title">הרשאות</string>

@@ -717,7 +717,7 @@ private fun SectionPage(
                     onAppUsage = onAppUsage, snackbar = snackbar)
             Tab.Chat -> ChatTab(vm, onSettings = onSettings, active = active)
             Tab.Map -> MapTab(vm, snackbar, active = active)
-            Tab.History -> HistoryTab(vm, onSettings = onSettings)
+            Tab.History -> HistoryTab(vm, onSettings = onSettings, active = active)
             Tab.Zones -> ZonesTab(vm, onSettings = onSettings)
         }
     }
@@ -1459,46 +1459,66 @@ private fun DashboardTab(
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            PulsingDot(scopeStatusColor)
-                            Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
-                        }
-                        if (focused != null && focusedDevice != null && !focusedDevice.isUnpaired()) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Row(
+                                    Modifier.padding(end = 48.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    PulsingDot(scopeStatusColor)
+                                    Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        focused?.displayName ?: stringResource(R.string.family_network),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    focusedMovementMode?.let { mode ->
+                                        MovementModeIcon(
+                                            mode,
+                                            Modifier.padding(end = 9.dp).size(22.dp),
+                                        )
+                                    }
+                                }
+                                Text(scopeStatusText, style = MaterialTheme.typography.bodyMedium, color = scopeStatusColor)
+                            }
+                            if (focused != null && focusedDevice != null && !focusedDevice.isUnpaired()) {
                                 IconButton(
                                     onClick = { permissionsFor = focused },
-                                    modifier = Modifier.size(40.dp),
+                                    modifier = Modifier.align(Alignment.TopEnd).size(40.dp),
                                 ) {
                                     PermissionStatusIcon(
                                         ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
                                         contentDescription = stringResource(R.string.parent_permissions_action),
                                     )
                                 }
-                                focusedMovementMode?.let { mode ->
-                                    MovementModeIcon(mode, Modifier.size(22.dp))
-                                }
                             }
                         }
-                    }
-                    Text(focused?.displayName ?: stringResource(R.string.family_network),
-                        style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-                    Text(scopeStatusText, style = MaterialTheme.typography.bodyMedium, color = scopeStatusColor)
-                    focusedDevice?.let { device ->
-                        val child = focused
-                        if (device.isUnpaired()) {
-                            Text(stringResource(R.string.child_unpaired_notice, child?.displayName ?: stringResource(R.string.label_your_child)),
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        focusedDevice?.let { device ->
+                            val child = focused
+                            if (device.isUnpaired()) {
+                                Text(stringResource(R.string.child_unpaired_notice, child?.displayName ?: stringResource(R.string.label_your_child)),
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                            LastActivityText(device, focusedLocation)
+                            if (device.shouldShowBackgroundAccessHelp()) {
+                                OfflineBackgroundHelpText()
+                            }
+                            PermissionAttentionText(device)
                         }
-                        LastActivityText(device, focusedLocation)
-                        if (device.shouldShowBackgroundAccessHelp()) {
-                            OfflineBackgroundHelpText()
-                        }
-                        PermissionAttentionText(device)
                     }
                     if (focused != null && focusedLocation != null) {
                         DirectionsActionButton(
@@ -2313,7 +2333,7 @@ private enum class HistoryFrequentMode { Routes, Locations }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
+private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit, active: Boolean) {
     val today = remember { LocalDate.now() }
     var selected by remember { mutableStateOf(today) }
     var frequentMode by rememberSaveable { mutableStateOf(HistoryFrequentMode.Routes) }
@@ -2327,6 +2347,9 @@ private fun HistoryTab(vm: ParentViewModel, onSettings: () -> Unit) {
     val filterDays = if (selectedRoute != null) routeDays else locationDays
     val filterActive = selectedRoute != null || selectedLocation != null
 
+    LaunchedEffect(active) {
+        if (active) vm.refreshHistory(selected.toString())
+    }
     LaunchedEffect(vm.selectedId) {
         selectedRoute = null
         selectedLocation = null
@@ -2846,6 +2869,7 @@ private fun RouteTimelineEntry(route: HistoryRouteActivity, zones: List<Zone>) {
         startAt = route.startAt,
         endAt = route.endAt,
         points = route.points,
+        distanceKm = route.distanceKm,
         movementMode = route.movementMode,
         zones = zones,
     )
@@ -2859,6 +2883,7 @@ private fun MovementTimelineEntry(movement: HistoryMovementActivity, zones: List
         startAt = movement.startAt,
         endAt = movement.endAt,
         points = movement.points,
+        distanceKm = movement.distanceKm,
         movementMode = movement.movementMode,
         zones = zones,
     )
@@ -2871,6 +2896,7 @@ private fun PathTimelineEntry(
     startAt: String,
     endAt: String,
     points: List<RoutePoint>,
+    distanceKm: Double,
     movementMode: MovementMode,
     zones: List<Zone>,
 ) {
@@ -2891,9 +2917,18 @@ private fun PathTimelineEntry(
                 MovementModeIcon(movementMode, Modifier.size(22.dp))
                 Text(title, style = MaterialTheme.typography.titleMedium)
             }
-            Text(stringResource(R.string.history_route_start_coordinates, "%.4f, %.4f".format(from.lat, from.lng)),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.history_route_end_coordinates, "%.4f, %.4f".format(to.lat, to.lng)),
+            Text(
+                stringResource(
+                    R.string.history_route_coordinates,
+                    "%.4f, %.4f".format(from.lat, from.lng),
+                    "%.4f, %.4f".format(to.lat, to.lng),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(stringResource(R.string.history_route_distance, "%.2f".format(distanceKm)),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = { showMap = true }, shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), modifier = Modifier.fillMaxWidth()) {

@@ -275,6 +275,64 @@ class HistoryTimelineTest {
         assertEquals(MovementMode.Driving, activities.single { it.startAt.contains("10:00") }.movementMode)
     }
 
+    @Test
+    fun `mixed driving then walking path is classified as driving`() {
+        assertEquals(
+            MovementMode.Driving,
+            movementModeForPath(
+                speeds = listOf(12.0, 11.0, 1.3, 1.2, 1.4, 1.5, 1.1),
+                distanceM = 3_000.0,
+                startAt = "2026-07-26T09:00:00Z",
+                endAt = "2026-07-26T09:30:00Z",
+            ),
+        )
+    }
+
+    @Test
+    fun `one isolated fast sample does not turn a walking path into driving`() {
+        assertEquals(
+            MovementMode.Walking,
+            movementModeForPath(
+                speeds = listOf(1.2, 1.4, 12.0, 1.3, 1.5),
+                distanceM = 1_500.0,
+                startAt = "2026-07-26T09:00:00Z",
+                endAt = "2026-07-26T09:20:00Z",
+            ),
+        )
+    }
+
+    @Test
+    fun `coordinate timing overrides stale walking classification and keeps traveled distance`() {
+        val start = Geo(32.0, 34.0)
+        val end = Geo(32.023, 34.0)
+        val route = RouteTrip(
+            from = start,
+            to = end,
+            departAt = "2026-07-26T08:00:00Z",
+            arriveAt = "2026-07-26T08:30:00Z",
+            durationMin = 30.0,
+            distanceKm = 2.55,
+            movementMode = MovementMode.Walking,
+            points = listOf(
+                RoutePoint(start.lat, start.lng, "2026-07-26T08:00:00Z"),
+                RoutePoint(32.018, 34.01, "2026-07-26T08:04:00Z"),
+                RoutePoint(32.020, 34.006, "2026-07-26T08:12:00Z"),
+                RoutePoint(32.022, 34.002, "2026-07-26T08:22:00Z"),
+                RoutePoint(end.lat, end.lng, "2026-07-26T08:30:00Z"),
+            ),
+        )
+
+        val activity = buildHistoryActivities(
+            points = emptyList(),
+            trips = listOf(route),
+            zones = emptyList(),
+            selectedDate = "2026-07-26",
+        ).single() as HistoryRouteActivity
+
+        assertEquals(MovementMode.Driving, activity.movementMode)
+        assertTrue(activity.distanceKm > route.distanceKm)
+    }
+
     private fun point(lat: Double, lng: Double, recordedAt: String) =
         HistoryPoint(lat = lat, lng = lng, recordedAt = recordedAt)
 

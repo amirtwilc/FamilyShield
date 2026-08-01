@@ -411,6 +411,27 @@ class ParentViewModelTest {
         }
 
     @Test
+    fun `refreshing history reloads selected day days and detected routes`() =
+        runTest(mainRule.dispatcher) {
+            val api = FakeApiClient()
+            val vm = viewModel(api)
+            vm.authenticate("history-refresh@x.com", "pw123456", register = true)
+            advanceUntilIdle()
+            vm.addChild("Mia")
+            advanceUntilIdle()
+            api.locationHistoryRequests.clear()
+            api.historyDaysRequestCount = 0
+            api.routesRequestCount = 0
+
+            vm.refreshHistory("2026-08-01")
+            advanceUntilIdle()
+
+            assertEquals(listOf(vm.selectedId!! to "2026-08-01"), api.locationHistoryRequests)
+            assertEquals(1, api.historyDaysRequestCount)
+            assertEquals(1, api.routesRequestCount)
+        }
+
+    @Test
     fun `family overview excludes places from previous days`() = runTest(mainRule.dispatcher) {
         val api = FakeApiClient()
         val today = LocalDate.now()

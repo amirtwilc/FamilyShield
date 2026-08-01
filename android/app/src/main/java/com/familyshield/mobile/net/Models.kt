@@ -146,7 +146,13 @@ data class RouteTrip(
 )
 
 @Serializable
-data class RoutePoint(val lat: Double, val lng: Double, val at: String, val speed: Double? = null)
+data class RoutePoint(
+    val lat: Double,
+    val lng: Double,
+    val at: String,
+    val speed: Double? = null,
+    val accuracy: Double? = null,
+)
 
 @Serializable
 data class Stop(
@@ -416,6 +422,7 @@ data class LocationPoint(
     @SerialName("recorded_at") val recordedAt: String,
     @SerialName("battery_level") val batteryLevel: Int? = null,
     val speed: Double? = null,
+    val accuracy: Double? = null,
 )
 
 @Serializable

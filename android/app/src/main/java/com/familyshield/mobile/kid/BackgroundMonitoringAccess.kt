@@ -167,6 +167,10 @@ fun openAppPermissionSettings(context: Context) {
     )
 }
 
+fun openDeviceLocationSettings(context: Context) {
+    openSettings(context, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+}
+
 fun openAppNotificationSettings(context: Context) {
     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

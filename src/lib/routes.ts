@@ -3,9 +3,19 @@
 // (departure → arrival), and the routes that recur frequently (e.g. home→school).
 // Pure functions — unit-tested in test/lib/routes.test.ts.
 
-import { movementModeForTrip, type MovementMode } from './movement';
+import {
+  movementModeForTrip,
+  type InferredMovementSegment,
+  type MovementMode,
+} from './movement';
 
-export type GpsPoint = { lat: number; lng: number; at: string; speed?: number | null }; // at = ISO timestamp
+export type GpsPoint = {
+  lat: number;
+  lng: number;
+  at: string;
+  speed?: number | null;
+  accuracy?: number | null;
+}; // at = ISO timestamp
 export type LatLng = { lat: number; lng: number };
 export type Stop = { lat: number; lng: number; arriveAt: string; departAt: string; dwellMin: number };
 export type Trip = {
@@ -56,6 +66,9 @@ export const FREQUENT_LOCATION_LIMIT = 5;
  *  radius. If stable clusters before and after it are within this distance,
  *  route detection treats the noisy middle cluster as part of the same stop. */
 export const ROUTE_OUTLIER_BRIDGE_RADIUS_M = 300;
+export const ROUTE_MAX_POINT_ACCURACY_M = 100;
+export const ROUTE_MAX_PLAUSIBLE_SPEED_MPS = 70;
+export const ROUTE_MAX_INFERRED_SPEED_GAP_SECONDS = 10 * 60;
 
 export function haversineM(a: LatLng, b: LatLng): number {
   const R = 6_371_000;
@@ -159,6 +172,8 @@ export function buildTrips(stops: Stop[], points: GpsPoint[] = [], minTripM = 25
     const d = haversineM(a, b);
     if (d < minTripM) continue; // same place / negligible movement
     const tripPoints = routePoints(sortedPoints, a, b);
+    const pathMetrics = routePathMetrics(tripPoints);
+    const traveledDistanceM = Math.max(d, pathMetrics.distanceM);
     const durationMin = Math.max(0, minutesBetween(a.departAt, b.arriveAt));
     trips.push({
       from: { lat: a.lat, lng: a.lng },
@@ -166,16 +181,41 @@ export function buildTrips(stops: Stop[], points: GpsPoint[] = [], minTripM = 25
       departAt: a.departAt,
       arriveAt: b.arriveAt,
       durationMin,
-      distanceKm: d / 1000,
+      distanceKm: traveledDistanceM / 1000,
       points: tripPoints,
       movementMode: movementModeForTrip({
         speeds: tripPoints.map((point) => point.speed),
-        distanceM: d,
+        inferredSegments: pathMetrics.inferredSegments,
+        distanceM: traveledDistanceM,
         durationSeconds: durationMin * 60,
       }),
     });
   }
   return trips;
+}
+
+export function routePathMetrics(points: GpsPoint[]): {
+  distanceM: number;
+  inferredSegments: InferredMovementSegment[];
+} {
+  let distanceM = 0;
+  const inferredSegments: InferredMovementSegment[] = [];
+  points.forEach((point, index) => {
+    if (index === 0) return;
+    const previous = points[index - 1];
+    if ((previous.accuracy != null && previous.accuracy > ROUTE_MAX_POINT_ACCURACY_M) ||
+        (point.accuracy != null && point.accuracy > ROUTE_MAX_POINT_ACCURACY_M)) return;
+    const durationSeconds = (Date.parse(point.at) - Date.parse(previous.at)) / 1_000;
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+    const segmentDistanceM = haversineM(previous, point);
+    const speedMps = segmentDistanceM / durationSeconds;
+    if (!Number.isFinite(speedMps) || speedMps > ROUTE_MAX_PLAUSIBLE_SPEED_MPS) return;
+    distanceM += segmentDistanceM;
+    if (durationSeconds <= ROUTE_MAX_INFERRED_SPEED_GAP_SECONDS) {
+      inferredSegments.push({ speedMps, distanceM: segmentDistanceM });
+    }
+  });
+  return { distanceM, inferredSegments };
 }
 
 function routePoints(points: GpsPoint[], from: Stop, to: Stop): GpsPoint[] {

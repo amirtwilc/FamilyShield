@@ -179,16 +179,26 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
         zonesByParent[parentEmail(token)]?.removeAll { it.id == zoneId }
     }
 
-    override suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint> =
-        locations[childId]?.let { listOf(HistoryPoint(it.lat, it.lng, it.recordedAt)) } ?: emptyList()
+    val locationHistoryRequests = mutableListOf<Pair<String, String>>()
+    override suspend fun locationHistory(token: String, childId: String, date: String): List<HistoryPoint> {
+        locationHistoryRequests += childId to date
+        return locations[childId]?.let { listOf(HistoryPoint(it.lat, it.lng, it.recordedAt)) } ?: emptyList()
+    }
 
     var historyDaysResult: List<String> = emptyList()
-    override suspend fun locationHistoryDays(token: String, childId: String, days: Int): List<String> =
-        historyDaysResult
+    var historyDaysRequestCount = 0
+    override suspend fun locationHistoryDays(token: String, childId: String, days: Int): List<String> {
+        historyDaysRequestCount += 1
+        return historyDaysResult
+    }
 
     /** Test-controllable routes payload. */
     var routesResult = RoutesResponse()
-    override suspend fun routes(token: String, childId: String): RoutesResponse = routesResult
+    var routesRequestCount = 0
+    override suspend fun routes(token: String, childId: String): RoutesResponse {
+        routesRequestCount += 1
+        return routesResult
+    }
 
     var appUsageResult = AppUsageSummary()
     val appUsageRequests = mutableListOf<Pair<String, String?>>()

@@ -64,6 +64,32 @@ describe('route detection', () => {
     expect(trips.every((trip) => trip.movementMode === 'driving')).toBe(true);
   });
 
+  it('infers a driving leg from coordinate timing and reports traveled path distance', () => {
+    const start = { lat: 32.0, lng: 34.0 };
+    const driveEnd = { lat: 32.018, lng: 34.01 };
+    const end = { lat: 32.023, lng: 34.0 };
+    const departAt = '2026-06-20T08:00:00Z';
+    const arriveAt = '2026-06-20T08:30:00Z';
+    const stops: Stop[] = [
+      stop(start, '2026-06-20T07:00:00Z', departAt),
+      stop(end, arriveAt, '2026-06-20T09:00:00Z'),
+    ];
+    const points: GpsPoint[] = [
+      { ...start, at: departAt },
+      { ...driveEnd, at: '2026-06-20T08:04:00Z' },
+      { lat: 32.020, lng: 34.006, at: '2026-06-20T08:12:00Z' },
+      { lat: 32.022, lng: 34.002, at: '2026-06-20T08:22:00Z' },
+      { ...end, at: arriveAt },
+    ];
+
+    const routes = buildTrips(stops, points);
+    const route = routes[0];
+
+    expect(routes).toHaveLength(1);
+    expect(route.movementMode).toBe('driving');
+    expect(route.distanceKm).toBeGreaterThan(2.8);
+  });
+
   it('surfaces the recurring home<->school route', () => {
     const { frequent } = analyzeRoutes(twoDayHistory());
     expect(frequent.length).toBeGreaterThan(0);

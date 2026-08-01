@@ -880,6 +880,12 @@ class ParentViewModel(
         }
     }
 
+    fun refreshHistory(date: String = historyDate) {
+        loadHistory(date)
+        loadHistoryDays()
+        loadRoutes()
+    }
+
     fun refreshDetail() {
         val id = selectedId ?: return
         if (token == null) return

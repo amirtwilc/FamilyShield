@@ -25,9 +25,9 @@ export async function GET(req: Request, { params }: Ctx) {
   const requestedCutoff = new Date(Date.now() - days * 24 * 60 * 60_000);
   const cutoff = new Date(Math.max(retentionCutoff.getTime(), requestedCutoff.getTime()));
   const r = await db.execute(sql`
-    SELECT recent.lat, recent.lng, recent.recorded_at, recent.speed
+    SELECT recent.lat, recent.lng, recent.recorded_at, recent.speed, recent.accuracy
     FROM (
-      SELECT ST_Y(l.geom) AS lat, ST_X(l.geom) AS lng, l.recorded_at, l.speed
+      SELECT ST_Y(l.geom) AS lat, ST_X(l.geom) AS lng, l.recorded_at, l.speed, l.accuracy
       FROM locations l JOIN devices d ON d.id = l.device_id
       WHERE d.child_id = ${id} AND l.recorded_at >= ${cutoff.toISOString()}
       ORDER BY l.recorded_at DESC
@@ -36,7 +36,8 @@ export async function GET(req: Request, { params }: Ctx) {
     ORDER BY recent.recorded_at ASC`);
 
   const points: GpsPoint[] = (r.rows as any[]).map((x) => ({
-    lat: x.lat, lng: x.lng, at: new Date(x.recorded_at).toISOString(), speed: x.speed,
+    lat: x.lat, lng: x.lng, at: new Date(x.recorded_at).toISOString(),
+    speed: x.speed, accuracy: x.accuracy,
   }));
   const { stops, trips, frequent, frequentLocations } = analyzeRoutes(points);
   return ok({ frequent, frequentLocations, trips, stops });

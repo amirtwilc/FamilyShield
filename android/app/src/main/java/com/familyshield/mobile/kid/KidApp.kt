@@ -552,6 +552,7 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
         ) {
             val currentLat = vm.lat
             val currentLng = vm.lng
+            val locationServicesEnabled = AndroidTelemetry.isLocationServicesEnabled(context)
             if (vm.simulationConfig != null) {
                 Surface(
                     shape = MaterialTheme.shapes.large,
@@ -648,11 +649,19 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                         ) {
                             Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(36.dp))
                             Text(
-                                stringResource(R.string.kid_location_waiting),
+                                stringResource(
+                                    if (locationServicesEnabled) R.string.kid_location_waiting
+                                    else R.string.kid_location_services_disabled,
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
+                            if (!locationServicesEnabled) {
+                                OutlinedButton(onClick = { openDeviceLocationSettings(context) }) {
+                                    Text(stringResource(R.string.kid_location_services_action))
+                                }
+                            }
                         }
                     }
                 }
@@ -667,7 +676,10 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
                         if (currentLat != null && currentLng != null) {
                             stringResource(R.string.kid_current_location, "%.4f".format(currentLat), "%.4f".format(currentLng))
                         } else {
-                            stringResource(R.string.kid_location_pending)
+                            stringResource(
+                                if (locationServicesEnabled) R.string.kid_location_pending
+                                else R.string.kid_location_services_pending,
+                            )
                         },
                     )
                     TelemetryRow(Icons.Filled.Bolt, stringResource(R.string.status), stringResource(R.string.kid_auto_updates))

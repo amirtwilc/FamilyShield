@@ -35,7 +35,6 @@ internal const val TELEMETRY_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
 internal const val GPS_ACQUISITION_RETRY_INTERVAL_MS = 20 * 1000L
 internal const val MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS = 60 * 1000L
 internal const val MOVEMENT_LOCATION_MIN_DISTANCE_M = 75f
-internal const val LOCATION_STALE_AFTER_MS = 2 * 60 * 1000L
 internal const val APP_USAGE_UPLOAD_INTERVAL_MS = 30 * 60 * 1000L
 internal const val FCM_TOKEN_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000L
 private const val SOS_IDLE_CHECK_INTERVAL_MS = 60 * 1000L

@@ -165,6 +165,8 @@
     <string name="location_update">Location update</string>
     <string name="history_route_start_coordinates">Start: %1$s</string>
     <string name="history_route_end_coordinates">End: %1$s</string>
+    <string name="history_route_coordinates">Start: %1$s, End: %2$s</string>
+    <string name="history_route_distance">Distance: %1$s km</string>
     <string name="view_on_map">View on Map</string>
     <string name="route_count">× %1$d</string>
 
@@ -370,8 +372,11 @@
     <string name="kid_chat_title_with">Chat with %1$s</string>
     <string name="cd_kid_map">Map showing this device\'s current location</string>
     <string name="kid_current_location">%1$s, %2$s</string>
-    <string name="kid_location_waiting">Waiting for this phone\'s GPS fix. Make sure location permission is allowed.</string>
+    <string name="kid_location_waiting">Waiting for a fresh location. Keep system Location on and move near a window or outdoors.</string>
     <string name="kid_location_pending">Waiting for GPS</string>
+    <string name="kid_location_services_disabled">Location permission is allowed, but this phone’s system Location service is off.</string>
+    <string name="kid_location_services_pending">System Location is off</string>
+    <string name="kid_location_services_action">Turn on Location</string>
     <string name="kid_battery_pending">Reading this phone\'s battery...</string>
     <string name="kid_auto_updates">Automatic upload every 5 minutes</string>
     <string name="kid_permissions_title">Permissions</string>

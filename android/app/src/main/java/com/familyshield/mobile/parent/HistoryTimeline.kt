@@ -55,6 +55,7 @@ data class HistoryMovementActivity(
     override val startAt: String,
     override val endAt: String,
     val points: List<RoutePoint>,
+    val distanceKm: Double,
     val movementMode: MovementMode,
 ) : HistoryActivity
 
@@ -253,7 +254,11 @@ private fun Stop.toStay(points: List<HistoryPoint>, zones: List<Zone>): HistoryS
 private fun List<HistoryPointGroup>.toMovementActivity(): HistoryMovementActivity? {
     val movementPoints = flatMap { it.points }.sortedBy { it.recordedAt }
     if (movementPoints.size < 2) return null
-    val distanceM = pathDistanceMeters(movementPoints)
+    val routePoints = movementPoints.map {
+        RoutePoint(it.lat, it.lng, it.recordedAt, it.speed, it.accuracy)
+    }
+    val pathMetrics = movementPathMetrics(routePoints)
+    val distanceM = pathMetrics.distanceM
     if (distanceM < HISTORY_MOVEMENT_MIN_DISTANCE_M) return null
     val first = movementPoints.first()
     val last = movementPoints.last()
@@ -262,9 +267,11 @@ private fun List<HistoryPointGroup>.toMovementActivity(): HistoryMovementActivit
         to = Geo(last.lat, last.lng),
         startAt = first.recordedAt,
         endAt = last.recordedAt,
-        points = movementPoints.map { RoutePoint(it.lat, it.lng, it.recordedAt, it.speed) },
+        points = routePoints,
+        distanceKm = distanceM / 1_000,
         movementMode = movementModeForPath(
             speeds = movementPoints.map { it.speed },
+            inferredSegments = pathMetrics.inferredSegments,
             distanceM = distanceM,
             startAt = first.recordedAt,
             endAt = last.recordedAt,
@@ -342,29 +349,33 @@ private fun RouteTrip.toActivity(): HistoryRouteActivity {
             RoutePoint(to.lat, to.lng, arriveAt),
         )
     }
+    val pathMetrics = movementPathMetrics(routePoints)
+    val traveledDistanceKm = maxOf(distanceKm, pathMetrics.distanceM / 1_000)
+    val locallyClassifiedMode = movementModeForPath(
+        speeds = routePoints.map { it.speed },
+        inferredSegments = pathMetrics.inferredSegments,
+        distanceM = traveledDistanceKm * 1_000,
+        startAt = departAt,
+        endAt = arriveAt,
+    )
+    val resolvedMode = if (movementMode == MovementMode.Driving || locallyClassifiedMode == MovementMode.Driving) {
+        MovementMode.Driving
+    } else {
+        MovementMode.Walking
+    }
     return HistoryRouteActivity(
         from,
         to,
         departAt,
         arriveAt,
-        distanceKm,
+        traveledDistanceKm,
         routePoints,
-        movementMode ?: movementModeForPath(
-            speeds = routePoints.map { it.speed },
-            distanceM = distanceKm * 1_000,
-            startAt = departAt,
-            endAt = arriveAt,
-        ),
+        resolvedMode,
     )
 }
 
 private fun LocalDate.coerceAtLeast(minimum: LocalDate): LocalDate =
     if (isBefore(minimum)) minimum else this
-
-private fun pathDistanceMeters(points: List<HistoryPoint>): Double {
-    if (points.size < 2) return 0.0
-    return points.zipWithNext().sumOf { (a, b) -> distanceMeters(a.lat, a.lng, b.lat, b.lng) }
-}
 
 private fun minutesBetween(startAt: String, endAt: String): Double =
     (java.time.OffsetDateTime.parse(endAt).toInstant().toEpochMilli() -
