@@ -2,6 +2,7 @@ import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { childParentLinks, children, devices, parents } from '@/db/schema';
 import { getSender, type PushOptions } from '@/lib/alerts/fcm';
+import { pruneInvalidParentPushToken, sendToParentInstallations } from '@/lib/parent-push';
 
 const CHAT_MESSAGE_TYPE = 'chat_message';
 const MAX_NOTIFICATION_BODY = 120;
@@ -42,6 +43,7 @@ async function sendSafely(token: string, title: string, body: string, data: Reco
     }
     return sent;
   } catch (error) {
+    await pruneInvalidParentPushToken(token, error);
     console.error('[push] Chat notification send failed', {
       type: data.type,
       recipient: data.recipient,
@@ -95,20 +97,18 @@ export async function notifyParentMessageFromChild(
   messageId: string,
   body: string,
 ): Promise<boolean> {
-  const [row] = await db.select({
-    childName: children.displayName,
-    parentToken: parents.fcmToken,
-  }).from(children)
-    .innerJoin(parents, eq(parents.id, parentId))
+  const [row] = await db.select({ childName: children.displayName })
+    .from(children)
     .where(eq(children.id, childId));
 
-  if (!row?.parentToken) return false;
-  return sendSafely(row.parentToken, `New message from ${row.childName}`, body, {
-    type: CHAT_MESSAGE_TYPE,
-    childId,
-    parentId,
-    messageId,
-    recipient: 'parent',
-    childName: row.childName,
-  });
+  if (!row) return false;
+  return sendToParentInstallations(parentId, (token) =>
+    sendSafely(token, `New message from ${row.childName}`, body, {
+      type: CHAT_MESSAGE_TYPE,
+      childId,
+      parentId,
+      messageId,
+      recipient: 'parent',
+      childName: row.childName,
+    }));
 }

@@ -73,11 +73,18 @@ export function databaseLimiter(max: number, windowMs: number): AsyncRateLimiter
 }
 
 export function clientKey(req: Request, suffix: string): string {
-  const forwarded = req.headers.get('x-vercel-forwarded-for')
-    ?? req.headers.get('x-forwarded-for')
-    ?? req.headers.get('x-real-ip')
-    ?? 'unknown';
-  const ip = forwarded.split(',')[0]!.trim();
+  const vercelForwarded = process.env.VERCEL
+    ? req.headers.get('x-vercel-forwarded-for')
+    : null;
+  const trustedProxy = process.env.TRUST_PROXY?.toLowerCase() === 'true';
+  const proxyForwarded = trustedProxy
+    ? req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip')
+    : null;
+  const forwarded = vercelForwarded ?? proxyForwarded;
+  // A trusted proxy appends the actual peer address. Taking the right-most
+  // address prevents a caller-supplied leading X-Forwarded-For value from
+  // creating unlimited rate-limit identities.
+  const ip = forwarded?.split(',').at(-1)?.trim() || 'unknown';
   return `${suffix}:${ip}`;
 }
 

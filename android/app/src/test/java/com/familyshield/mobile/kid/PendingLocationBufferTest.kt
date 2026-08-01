@@ -50,6 +50,22 @@ class PendingLocationBufferTest {
         assertEquals(3, buffer.size())
     }
 
+    @Test
+    fun `pending storage drops oldest samples and can be cleared on source switch`() {
+        val buffer = PendingLocationBuffer(maxBatchSize = 3, maxPendingSize = 3)
+        buffer.add(point("2026-07-28T08:00:00Z"))
+        buffer.add(point("2026-07-28T08:01:00Z"))
+        buffer.add(point("2026-07-28T08:02:00Z"))
+        buffer.add(point("2026-07-28T08:03:00Z"))
+
+        assertEquals(
+            listOf("2026-07-28T08:01:00Z", "2026-07-28T08:02:00Z", "2026-07-28T08:03:00Z"),
+            buffer.batch(null).map { it.recordedAt },
+        )
+        buffer.clear()
+        assertEquals(0, buffer.size())
+    }
+
     private fun point(at: String) = LocationPoint(
         lat = 50.0,
         lng = 6.0,

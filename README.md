@@ -128,6 +128,7 @@ Parent-facing routes:
 | GET | `/api/messages/summary` | Parent conversation summary |
 | DELETE | `/api/devices/{id}` | Revoke a paired device |
 | POST | `/api/parent/push-token` | Register a parent FCM token |
+| DELETE | `/api/parent/push-token` | Unregister this parent phone's FCM token |
 
 Internal cron routes:
 
@@ -143,9 +144,13 @@ All cron routes require `Authorization: Bearer $CRON_SECRET`.
 with a monthly partitioned PostGIS table. Production setup should use:
 
 ```bash
-npm run db:prod:setup
+npm run db:migrate
 npm run db:check
 ```
+
+See [`docs/DATABASE-MIGRATION.md`](docs/DATABASE-MIGRATION.md) for baselining an
+older deployment and moving the complete schema and data to another PostGIS
+server.
 
 Before migrating parent authentication, run `npm run auth:preflight`. Apply
 `drizzle/0019_firebase_parent_auth.sql`, then run `npm run auth:provision` and
@@ -153,6 +158,15 @@ review its dry-run output before `npm run auth:provision:apply`.
 
 For an existing deployment, set `MESSAGE_ENCRYPTION_KEY` first and then run
 `npm run db:encrypt-messages` once to encrypt legacy plaintext chat rows.
+
+The production child app exposes its location simulator only when at least one
+linked parent is on the manually assigned `admin` tier. Assign or revoke that
+tier by normalized parent email:
+
+```bash
+npm run tier:set -- --email tester@example.com --tier admin
+npm run tier:set -- --email tester@example.com --tier free
+```
 
 When app-usage metadata is added to an existing database, apply
 `drizzle/0011_app_usage_metadata.sql`.

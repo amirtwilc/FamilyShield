@@ -21,8 +21,8 @@ describe('location reads', () => {
     await upload(new Request('http://t/', {
       method: 'POST', headers: { authorization: `Bearer ${token}` },
       body: JSON.stringify({ points: [
-        { lat: 32.07, lng: 34.78, recorded_at: at(0) },
-        { lat: 32.08, lng: 34.79, recorded_at: at(5) },
+        { lat: 32.07, lng: 34.78, recorded_at: at(0), speed: 1.4 },
+        { lat: 32.08, lng: 34.79, recorded_at: at(5), speed: 12 },
       ] }),
     }));
     const ptok = await signAccess(p.id);
@@ -31,9 +31,12 @@ describe('location reads', () => {
     const cur = await current(new Request('http://t/', { headers: { authorization: `Bearer ${ptok}` } }), ctx);
     const curBody = await cur.json();
     expect(curBody.lng).toBeCloseTo(34.79, 5);
+    expect(curBody.movementMode).toBe('driving');
 
     const his = await history(new Request(`http://t/?date=${day}`, { headers: { authorization: `Bearer ${ptok}` } }), ctx);
-    expect((await his.json()).points).toHaveLength(2);
+    const historyBody = await his.json();
+    expect(historyBody.points).toHaveLength(2);
+    expect(historyBody.points.map((point: { speed: number }) => point.speed)).toEqual([1.4, 12]);
   });
 
   it('returns available history days capped to the requested recent range', async () => {

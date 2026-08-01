@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fingerprint
@@ -112,6 +113,7 @@ import com.familyshield.mobile.net.Device
 import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
+import com.familyshield.mobile.net.MovementMode
 import com.familyshield.mobile.net.PermissionStatus
 import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.SosState
@@ -1291,6 +1293,7 @@ private fun DashboardTab(
     }
     val onlineCount = vm.children.count { it.primaryDevice()?.isConnected() == true }
     val focusedOnline = focusedDevice?.isConnected() == true
+    val focusedMovementMode = dashboardMovementMode(focusedOnline, focusedLocation)
     val focusedUnpaired = focusedDevice?.isUnpaired() == true
     val canPairFocusedChild = focused != null && (focusedDevice == null || focusedUnpaired || !focusedOnline)
     val scopeActive = if (focused == null) onlineCount > 0 else focusedOnline
@@ -1304,6 +1307,10 @@ private fun DashboardTab(
         focusedUnpaired -> stringResource(R.string.child_unpaired)
         focusedOnline && focusedZoneName != null ->
             stringResource(R.string.child_online_inside_zone, focusedZoneName)
+        focusedOnline && focusedMovementMode == MovementMode.Walking ->
+            stringResource(R.string.child_online_walking)
+        focusedOnline && focusedMovementMode == MovementMode.Driving ->
+            stringResource(R.string.child_online_driving)
         focusedOnline -> stringResource(R.string.chat_online)
         else -> stringResource(R.string.child_offline)
     }
@@ -1462,14 +1469,19 @@ private fun DashboardTab(
                             Text(monitoringText, style = MaterialTheme.typography.labelLarge, color = scopeStatusColor)
                         }
                         if (focused != null && focusedDevice != null && !focusedDevice.isUnpaired()) {
-                            IconButton(
-                                onClick = { permissionsFor = focused },
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                PermissionStatusIcon(
-                                    ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
-                                    contentDescription = stringResource(R.string.parent_permissions_action),
-                                )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                IconButton(
+                                    onClick = { permissionsFor = focused },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    PermissionStatusIcon(
+                                        ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
+                                        contentDescription = stringResource(R.string.parent_permissions_action),
+                                    )
+                                }
+                                focusedMovementMode?.let { mode ->
+                                    MovementModeIcon(mode, Modifier.size(22.dp))
+                                }
                             }
                         }
                     }
@@ -2834,6 +2846,7 @@ private fun RouteTimelineEntry(route: HistoryRouteActivity, zones: List<Zone>) {
         startAt = route.startAt,
         endAt = route.endAt,
         points = route.points,
+        movementMode = route.movementMode,
         zones = zones,
     )
 }
@@ -2846,6 +2859,7 @@ private fun MovementTimelineEntry(movement: HistoryMovementActivity, zones: List
         startAt = movement.startAt,
         endAt = movement.endAt,
         points = movement.points,
+        movementMode = movement.movementMode,
         zones = zones,
     )
 }
@@ -2857,6 +2871,7 @@ private fun PathTimelineEntry(
     startAt: String,
     endAt: String,
     points: List<RoutePoint>,
+    movementMode: MovementMode,
     zones: List<Zone>,
 ) {
     var showMap by remember { mutableStateOf(false) }
@@ -2869,7 +2884,13 @@ private fun PathTimelineEntry(
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(timeRange, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MovementModeIcon(movementMode, Modifier.size(22.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
             Text(stringResource(R.string.history_route_start_coordinates, "%.4f, %.4f".format(from.lat, from.lng)),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(R.string.history_route_end_coordinates, "%.4f, %.4f".format(to.lat, to.lng)),
@@ -2880,6 +2901,16 @@ private fun PathTimelineEntry(
             }
         }
     }
+}
+
+@Composable
+private fun MovementModeIcon(mode: MovementMode, modifier: Modifier = Modifier) {
+    val (icon, description) = when (mode) {
+        MovementMode.Walking -> Icons.AutoMirrored.Filled.DirectionsWalk to stringResource(R.string.movement_walking)
+        MovementMode.Driving -> Icons.Filled.DirectionsCar to stringResource(R.string.movement_driving)
+        MovementMode.Stationary -> return
+    }
+    Icon(icon, description, tint = MaterialTheme.colorScheme.secondary, modifier = modifier)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

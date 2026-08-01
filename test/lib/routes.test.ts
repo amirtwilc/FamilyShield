@@ -56,6 +56,14 @@ describe('route detection', () => {
     expect(trips.some((t) => t.points.length > 2)).toBe(true);
   });
 
+  it('classifies a trip from its moving GPS speeds', () => {
+    const points = twoDayHistory().map((point) => ({ ...point, speed: 11 }));
+    const trips = buildTrips(detectStops(points), points);
+
+    expect(trips.length).toBeGreaterThan(0);
+    expect(trips.every((trip) => trip.movementMode === 'driving')).toBe(true);
+  });
+
   it('surfaces the recurring home<->school route', () => {
     const { frequent } = analyzeRoutes(twoDayHistory());
     expect(frequent.length).toBeGreaterThan(0);
@@ -195,6 +203,7 @@ function trip(from: typeof HOME, to: typeof HOME, departAt: string): Trip {
     arriveAt,
     durationMin: 20,
     distanceKm: 1,
+    movementMode: 'walking',
     points: [
       { ...from, at: departAt },
       { lat: (from.lat + to.lat) / 2, lng: (from.lng + to.lng) / 2, at: new Date(depart + 10 * 60_000).toISOString() },

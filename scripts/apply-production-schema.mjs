@@ -15,6 +15,9 @@ if (!url) throw new Error('DATABASE_URL not set');
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 
+const dir = resolve(process.cwd(), 'drizzle');
+const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+
 await client.query('CREATE EXTENSION IF NOT EXISTS postgis;');
 await client.query(`
   CREATE TABLE IF NOT EXISTS familyshield_migrations (
@@ -24,14 +27,23 @@ await client.query(`
 
 const existing = await client.query("SELECT to_regclass('public.parents') AS parents");
 const applied = await client.query('SELECT filename FROM familyshield_migrations');
-if (existing.rows[0].parents && applied.rowCount === 0 && process.env.ALLOW_BASELINE_EXISTING !== '1') {
-  await client.end();
-  throw new Error('Existing schema has no familyshield_migrations ledger. Set ALLOW_BASELINE_EXISTING=1 only after verifying migrations manually.');
-}
-
 const done = new Set(applied.rows.map((r) => r.filename));
-const dir = resolve(process.cwd(), 'drizzle');
-const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+if (existing.rows[0].parents && applied.rowCount === 0) {
+  const baselineThrough = process.env.BASELINE_EXISTING_THROUGH;
+  const baselineIndex = baselineThrough ? files.indexOf(baselineThrough) : -1;
+  if (baselineIndex < 0) {
+    await client.end();
+    throw new Error(
+      'Existing schema has no migration ledger. Review npm run db:check, then set '
+      + 'BASELINE_EXISTING_THROUGH to the last migration already present and rerun npm run db:migrate.',
+    );
+  }
+  for (const file of files.slice(0, baselineIndex + 1)) {
+    await client.query('INSERT INTO familyshield_migrations (filename) VALUES ($1)', [file]);
+    done.add(file);
+  }
+  console.log('baselined existing schema through', baselineThrough);
+}
 
 for (const file of files) {
   if (done.has(file)) continue;

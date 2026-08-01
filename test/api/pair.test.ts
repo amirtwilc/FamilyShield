@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedDevice, seedParent, seedChild } from '../helpers/factories';
 import { db } from '@/db/client';
-import { alerts, childParentLinks, children, pairingCodes } from '@/db/schema';
+import { alerts, childParentLinks, children, pairingCodes, parents } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { POST as pair } from '@/app/api/pair/route';
 import { GET as listChildren } from '@/app/api/children/route';
 import { GET as monitoring } from '@/app/api/device/monitoring/route';
@@ -56,6 +57,27 @@ describe('pairing', () => {
     await makeCode(c.id, '222222', -1);
     const r = await pair(post({ code: '222222', platform: 'android', parentDisplayName: 'Mom' }));
     expect(r.status).toBe(400);
+  });
+
+  it('exposes every linked parent tier to the authenticated child device', async () => {
+    const freeParent = await seedParent('free-monitor@test.io');
+    const adminParent = await seedParent('admin-monitor@test.io');
+    await db.update(parents).set({ tierCode: 'admin' }).where(eq(parents.id, adminParent.id));
+    const child = await seedChild(freeParent.id, 'Mia');
+    await db.insert(childParentLinks).values({
+      childId: child.id,
+      parentId: adminParent.id,
+      displayName: 'Mia',
+    });
+    const { token: deviceToken } = await seedDevice(child.id);
+
+    const response = await monitoring(get(deviceToken));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.monitors.map((monitor: any) => [monitor.email, monitor.tierCode]).sort()).toEqual([
+      ['admin-monitor@test.io', 'admin'],
+      ['free-monitor@test.io', 'free'],
+    ]);
   });
 
   it('enforces uniqueness for all active pairing codes', async () => {

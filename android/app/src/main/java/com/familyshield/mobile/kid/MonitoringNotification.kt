@@ -35,12 +35,16 @@ fun ensureMonitoringNotificationChannel(context: Context) {
 fun monitoringNotification(context: Context): Notification {
     val app = context.applicationContext
     ensureMonitoringNotificationChannel(app)
-    val body = app.getString(
-        monitoringNotificationBodyRes(
-            appUsageGranted = AppUsageTelemetry.hasUsageAccess(app),
-            dndBypassAllowed = hasUrgentDndBypass(app),
-        ),
-    )
+    val body = if (LocationSimulationStore(app).activeConfig() != null) {
+        app.getString(R.string.kid_simulation_notification_body)
+    } else {
+        app.getString(
+            monitoringNotificationBodyRes(
+                appUsageGranted = AppUsageTelemetry.hasUsageAccess(app),
+                dndBypassAllowed = hasUrgentDndBypass(app),
+            ),
+        )
+    }
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Notification.Builder(app, CHANNEL_ID)
     } else {
@@ -67,10 +71,15 @@ fun sosMonitoringNotification(context: Context): Notification {
         @Suppress("DEPRECATION")
         Notification.Builder(app)
     }
+    val body = if (LocationSimulationStore(app).activeConfig() != null) {
+        app.getString(R.string.kid_sos_notification_body_simulation)
+    } else {
+        app.getString(R.string.kid_sos_notification_body)
+    }
     return builder
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentTitle(app.getString(R.string.kid_sos_notification_title))
-        .setContentText(app.getString(R.string.kid_sos_notification_body))
+        .setContentText(body)
         .setContentIntent(monitoringContentIntent(app))
         .setOngoing(true)
         .setShowWhen(true)

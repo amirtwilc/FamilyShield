@@ -8,6 +8,7 @@ export async function monitoringInfo(childId: string) {
     email: parents.email,
     displayName: childParentLinks.displayName,
     parentDisplayName: childParentLinks.parentDisplayName,
+    tierCode: parents.tierCode,
   }).from(childParentLinks)
     .innerJoin(parents, eq(childParentLinks.parentId, parents.id))
     .where(eq(childParentLinks.childId, childId));

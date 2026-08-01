@@ -4,6 +4,7 @@ import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
 import com.familyshield.mobile.net.HistoryPoint
+import com.familyshield.mobile.net.MovementMode
 import com.familyshield.mobile.net.RoutePoint
 import com.familyshield.mobile.net.RouteTrip
 import com.familyshield.mobile.net.Stop
@@ -45,6 +46,7 @@ data class HistoryRouteActivity(
     override val endAt: String,
     val distanceKm: Double,
     val points: List<RoutePoint>,
+    val movementMode: MovementMode,
 ) : HistoryActivity
 
 data class HistoryMovementActivity(
@@ -53,6 +55,7 @@ data class HistoryMovementActivity(
     override val startAt: String,
     override val endAt: String,
     val points: List<RoutePoint>,
+    val movementMode: MovementMode,
 ) : HistoryActivity
 
 private data class HistoryPointGroup(
@@ -259,7 +262,13 @@ private fun List<HistoryPointGroup>.toMovementActivity(): HistoryMovementActivit
         to = Geo(last.lat, last.lng),
         startAt = first.recordedAt,
         endAt = last.recordedAt,
-        points = movementPoints.map { RoutePoint(it.lat, it.lng, it.recordedAt) },
+        points = movementPoints.map { RoutePoint(it.lat, it.lng, it.recordedAt, it.speed) },
+        movementMode = movementModeForPath(
+            speeds = movementPoints.map { it.speed },
+            distanceM = distanceM,
+            startAt = first.recordedAt,
+            endAt = last.recordedAt,
+        ),
     )
 }
 
@@ -333,7 +342,20 @@ private fun RouteTrip.toActivity(): HistoryRouteActivity {
             RoutePoint(to.lat, to.lng, arriveAt),
         )
     }
-    return HistoryRouteActivity(from, to, departAt, arriveAt, distanceKm, routePoints)
+    return HistoryRouteActivity(
+        from,
+        to,
+        departAt,
+        arriveAt,
+        distanceKm,
+        routePoints,
+        movementMode ?: movementModeForPath(
+            speeds = routePoints.map { it.speed },
+            distanceM = distanceKm * 1_000,
+            startAt = departAt,
+            endAt = arriveAt,
+        ),
+    )
 }
 
 private fun LocalDate.coerceAtLeast(minimum: LocalDate): LocalDate =

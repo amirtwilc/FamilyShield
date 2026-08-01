@@ -5,7 +5,7 @@ import { POST as sosLocation } from '@/app/api/device/sos/location/route';
 import { GET as parentCurrentSos } from '@/app/api/children/[id]/sos/current/route';
 import { POST as urgentAlert } from '@/app/api/children/[id]/urgent-alert/route';
 import { db } from '@/db/client';
-import { alerts, childParentLinks, devices, messages, parents, sosDailyUsage, sosEvents } from '@/db/schema';
+import { alerts, childParentLinks, devices, messages, sosDailyUsage, sosEvents } from '@/db/schema';
 import { setSender, resetSender, type PushOptions } from '@/lib/alerts/fcm';
 import { signAccess } from '@/lib/auth/jwt';
 import { resetDb } from '../helpers/db';
@@ -153,7 +153,6 @@ describe('kid SOS and urgent alerts', () => {
     const p = await seedParent('urgent-alert@test.io');
     const c = await seedChild(p.id, 'Noa');
     const { device } = await seedDevice(c.id);
-    await db.update(parents).set({ fcmToken: 'parent-fcm' }).where(eq(parents.id, p.id));
     await db.update(devices).set({ fcmToken: 'kid-fcm' }).where(eq(devices.id, device.id));
     const token = await signAccess(p.id);
 

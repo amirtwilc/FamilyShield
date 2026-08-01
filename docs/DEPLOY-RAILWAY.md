@@ -24,6 +24,7 @@ Add a **Volume** mounted at `/var/lib/postgresql/data` so data persists.
 On the FamilyShield (web) service → **Variables**:
 ```
 DATABASE_URL=postgresql://familyshield:<password>@<db-service>.railway.internal:5432/familyshield
+TRUST_PROXY=true
 JWT_SECRET=<32-byte random>
 JWT_REFRESH_SECRET=<32-byte random>
 CRON_SECRET=<32-byte random>

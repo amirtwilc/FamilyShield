@@ -29,6 +29,7 @@ interface ApiClient {
     suspend fun legacyMigrate(email: String, password: String): LegacyMigrationResponse
     suspend fun revokeParentSessions(token: String): RevokeSessionsResponse
     suspend fun registerParentPushToken(token: String, fcmToken: String)
+    suspend fun unregisterParentPushToken(token: String, fcmToken: String)
     suspend fun listChildren(token: String): List<Child>
     suspend fun createChild(token: String, name: String, avatar: String? = null, phoneNumber: String? = null): Child
     suspend fun updateChild(token: String, childId: String, name: String, avatar: String? = null, phoneNumber: String? = null): Child
@@ -153,6 +154,10 @@ class HttpApiClient(
 
     override suspend fun registerParentPushToken(token: String, fcmToken: String) {
         requestRaw("POST", "/api/parent/push-token", json.encodeToString(PushTokenBody(fcmToken)), token)
+    }
+
+    override suspend fun unregisterParentPushToken(token: String, fcmToken: String) {
+        requestRaw("DELETE", "/api/parent/push-token", json.encodeToString(PushTokenBody(fcmToken)), token)
     }
 
     override suspend fun listChildren(token: String): List<Child> =

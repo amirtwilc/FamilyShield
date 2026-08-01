@@ -1,11 +1,10 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { childParentLinks, children, devices } from '@/db/schema';
 import { requireParent } from '@/lib/auth/parent';
 import { parseBody } from '@/lib/validate';
 import { ok, err } from '@/lib/http';
 import { createChildSchema } from '@/lib/schemas/children';
-import { enforceCanAddChild } from '@/lib/retention';
 import { nextAvailableAvatar } from '@/lib/avatars';
 import { isDeviceOnline } from '@/lib/device-status';
 
@@ -14,23 +13,36 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   const a = await requireParent(req); if ('response' in a) return a.response;
   const p = await parseBody(req, createChildSchema); if ('response' in p) return p.response;
-  const allowed = await enforceCanAddChild(a.parentId);
-  if (!allowed.ok) {
-    return err('tier_limit_exceeded', `Your ${allowed.tierCode} tier allows up to ${allowed.maxChildren} monitored children`, 403);
-  }
-  const existing = await db.select({ avatar: children.avatar }).from(childParentLinks)
-    .innerJoin(children, eq(childParentLinks.childId, children.id))
-    .where(eq(childParentLinks.parentId, a.parentId));
-  const avatar = p.data.avatar ?? nextAvailableAvatar(existing.map((c) => c.avatar), p.data.displayName);
-  const row = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
+    // Serialize quota checks for this parent so concurrent requests cannot
+    // both observe the same remaining slot.
+    await tx.execute(sql`SELECT id FROM parents WHERE id = ${a.parentId} FOR UPDATE`);
+    const quota = await tx.execute(sql`
+      SELECT p.tier_code, st.max_children, count(cpl.id)::int AS child_count
+      FROM parents p
+      JOIN subscription_tiers st ON st.code = p.tier_code
+      LEFT JOIN child_parent_links cpl ON cpl.parent_id = p.id
+      WHERE p.id = ${a.parentId}
+      GROUP BY p.tier_code, st.max_children`);
+    const limit = quota.rows[0] as { tier_code: string; max_children: number; child_count: number };
+    if (Number(limit.child_count) >= Number(limit.max_children)) {
+      return { allowed: false as const, tierCode: limit.tier_code, maxChildren: Number(limit.max_children) };
+    }
+    const existing = await tx.select({ avatar: children.avatar }).from(childParentLinks)
+      .innerJoin(children, eq(childParentLinks.childId, children.id))
+      .where(eq(childParentLinks.parentId, a.parentId));
+    const avatar = p.data.avatar ?? nextAvailableAvatar(existing.map((c) => c.avatar), p.data.displayName);
     const [created] = await tx.insert(children)
       .values({ displayName: p.data.displayName, avatar, phoneNumber: p.data.phoneNumber ?? null }).returning();
     await tx.insert(childParentLinks).values({
       childId: created.id, parentId: a.parentId, displayName: p.data.displayName,
     });
-    return created;
+    return { allowed: true as const, row: created };
   });
-  return ok({ ...row, displayName: p.data.displayName }, 201);
+  if (!result.allowed) {
+    return err('tier_limit_exceeded', `Your ${result.tierCode} tier allows up to ${result.maxChildren} monitored children`, 403);
+  }
+  return ok({ ...result.row, displayName: p.data.displayName }, 201);
 }
 
 export async function GET(req: Request) {

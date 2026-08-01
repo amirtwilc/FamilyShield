@@ -499,8 +499,9 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 authGateway.reauthenticateWithPassword(password)
+                unregisterCurrentPushToken()
                 api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
-                logout()
+                logoutLocally(ParentAuthState.SignedOut)
             } catch (e: Exception) { setAuthFailure(e) }
             finally { busy = false }
         }
@@ -511,8 +512,9 @@ class ParentViewModel(
         viewModelScope.launch(dispatcher) {
             try {
                 authGateway.reauthenticateWithGoogle(idToken)
+                unregisterCurrentPushToken()
                 api.revokeParentSessions(authGateway.idToken(forceRefresh = true))
-                logout()
+                logoutLocally(ParentAuthState.SignedOut)
             } catch (e: Exception) { setAuthFailure(e) }
             finally { busy = false }
         }
@@ -535,17 +537,30 @@ class ParentViewModel(
     }
 
     fun logout() {
+        val currentToken = token
+        logoutLocally(ParentAuthState.SignedOut)
+        if (currentToken != null) viewModelScope.launch(dispatcher) {
+            val fcmToken = parentFcmTokenOrNull() ?: return@launch
+            runCatching { api.unregisterParentPushToken(currentToken, fcmToken) }
+        }
+    }
+
+    private fun expireSession() {
+        logoutLocally(ParentAuthState.Expired)
+    }
+
+    private fun logoutLocally(state: ParentAuthState) {
+        store.activeParentId = null
         authGateway.logout()
-        authState = ParentAuthState.SignedOut
+        authState = state
         token = null
         clearParentSessionData()
     }
 
-    private fun expireSession() {
-        authGateway.logout()
-        authState = ParentAuthState.Expired
-        token = null
-        clearParentSessionData()
+    private suspend fun unregisterCurrentPushToken() {
+        val fcmToken = parentFcmTokenOrNull() ?: return
+        val idToken = runCatching { authGateway.idToken() }.getOrNull() ?: return
+        runCatching { api.unregisterParentPushToken(idToken, fcmToken) }
     }
 
     private suspend fun completeSignedIn(state: ParentAuthState, refreshData: Boolean = true) {
@@ -560,7 +575,8 @@ class ParentViewModel(
         val idToken = authGateway.idToken()
         token = idToken
         val generation = sessionGeneration
-        api.bootstrapParent(idToken)
+        val bootstrap = api.bootstrapParent(idToken)
+        store.activeParentId = bootstrap.parentId
         ensureCurrentSession(generation)
         registerPushToken()
         if (refreshData) refreshChildren()

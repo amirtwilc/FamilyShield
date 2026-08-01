@@ -5,6 +5,7 @@ import { alerts, childParentLinks, children, devices, messages, parents, sosDail
 import { decryptMessageRow, encryptMessageBody } from '@/lib/messages/crypto';
 import { fireLowBatteryIfNeeded, fireSafeZoneTransitions } from '@/lib/alerts/engine';
 import { getSender, type PushOptions } from '@/lib/alerts/fcm';
+import { pruneInvalidParentPushToken, sendToParentInstallations } from '@/lib/parent-push';
 
 export const URGENT_PUSH_CHANNEL_ID = 'familyshield_urgent';
 
@@ -81,11 +82,10 @@ async function activeSosEventWithLocation(childId: string): Promise<SosEventRow 
   return (r.rows[0] as SosEventRow | undefined) ?? null;
 }
 
-async function parentRowsForChild(childId: string): Promise<Array<{ parentId: string; email: string; token: string | null }>> {
+async function parentRowsForChild(childId: string): Promise<Array<{ parentId: string; email: string }>> {
   return db.select({
     parentId: parents.id,
     email: parents.email,
-    token: parents.fcmToken,
   }).from(childParentLinks)
     .innerJoin(parents, eq(parents.id, childParentLinks.parentId))
     .where(eq(childParentLinks.childId, childId));
@@ -122,6 +122,7 @@ async function sendSafely(
     if (!sent) console.warn('[push] Urgent/SOS notification was not sent', { type: data.type, childId: data.childId, eventId: data.eventId });
     return sent;
   } catch (error) {
+    await pruneInvalidParentPushToken(token, error);
     console.error('[push] Urgent/SOS notification send failed', {
       type: data.type,
       childId: data.childId,
@@ -174,15 +175,16 @@ async function notifySosStarted(device: Device, eventId: string): Promise<void> 
       type: 'kid_sos_started',
       payload: { eventId },
     }).returning();
-    if (parent.token && await sendSafely(parent.token, `SOS from ${name}`, `${name} needs help`, {
-      type: 'kid_sos_started',
-      recipient: 'parent',
-      childId: device.childId,
-      parentId: parent.parentId,
-      eventId,
-      childName: name,
-      priority: 'urgent',
-    }, URGENT_PUSH_OPTIONS)) {
+    if (await sendToParentInstallations(parent.parentId, (token) =>
+      sendSafely(token, `SOS from ${name}`, `${name} needs help`, {
+        type: 'kid_sos_started',
+        recipient: 'parent',
+        childId: device.childId,
+        parentId: parent.parentId,
+        eventId,
+        childName: name,
+        priority: 'urgent',
+      }, URGENT_PUSH_OPTIONS))) {
       await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
     }
   }
@@ -198,14 +200,15 @@ async function notifySosEnded(device: Device, eventId: string): Promise<void> {
       type: 'kid_sos_ended',
       payload: { eventId },
     }).returning();
-    if (parent.token && await sendSafely(parent.token, `${name} ended SOS`, `${name} marked the SOS as ended`, {
-      type: 'kid_sos_ended',
-      recipient: 'parent',
-      childId: device.childId,
-      parentId: parent.parentId,
-      eventId,
-      childName: name,
-    }, URGENT_PUSH_OPTIONS)) {
+    if (await sendToParentInstallations(parent.parentId, (token) =>
+      sendSafely(token, `${name} ended SOS`, `${name} marked the SOS as ended`, {
+        type: 'kid_sos_ended',
+        recipient: 'parent',
+        childId: device.childId,
+        parentId: parent.parentId,
+        eventId,
+        childName: name,
+      }, URGENT_PUSH_OPTIONS))) {
       await db.update(alerts).set({ deliveredAt: new Date() }).where(eq(alerts.id, alert.id));
     }
   }

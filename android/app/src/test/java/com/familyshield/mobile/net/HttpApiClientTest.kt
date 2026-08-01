@@ -8,6 +8,29 @@ import org.junit.Test
 
 class HttpApiClientTest {
     @Test
+    fun `telemetry sends GPS speed with a location sample`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"ok":true,"locationInserted":1,"appUsageInserted":0}"""),
+        )
+        server.start()
+        try {
+            val client = HttpApiClient(baseUrl = server.url("/").toString().trimEnd('/'))
+            val point = LocationPoint(32.1, 34.8, "2026-07-26T09:00:00Z", 82, speed = 6.5)
+
+            client.sendTelemetry("device-token", DeviceTelemetryBody(location = point))
+
+            val body = server.takeRequest().body.readUtf8()
+            assertEquals(true, body.contains("\"speed\":6.5"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `invalid App Check response force refreshes attestation and retries once`() = runTest {
         val server = MockWebServer()
         server.enqueue(

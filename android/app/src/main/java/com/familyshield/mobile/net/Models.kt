@@ -53,7 +53,15 @@ data class CurrentLocation(
     val lat: Double,
     val lng: Double,
     val recordedAt: String,
+    val movementMode: MovementMode? = null,
 )
+
+@Serializable
+enum class MovementMode {
+    @SerialName("stationary") Stationary,
+    @SerialName("walking") Walking,
+    @SerialName("driving") Driving,
+}
 
 @Serializable
 data class Alert(
@@ -134,10 +142,11 @@ data class RouteTrip(
     val durationMin: Double,
     val distanceKm: Double,
     val points: List<RoutePoint> = emptyList(),
+    val movementMode: MovementMode? = null,
 )
 
 @Serializable
-data class RoutePoint(val lat: Double, val lng: Double, val at: String)
+data class RoutePoint(val lat: Double, val lng: Double, val at: String, val speed: Double? = null)
 
 @Serializable
 data class Stop(
@@ -363,6 +372,7 @@ data class Monitor(
     val email: String,
     val displayName: String,
     val parentDisplayName: String? = null,
+    val tierCode: String = "free",
 ) {
     val childFacingName: String get() = parentDisplayName?.takeIf { it.isNotBlank() } ?: email
 }
@@ -405,6 +415,7 @@ data class LocationPoint(
     val lng: Double,
     @SerialName("recorded_at") val recordedAt: String,
     @SerialName("battery_level") val batteryLevel: Int? = null,
+    val speed: Double? = null,
 )
 
 @Serializable

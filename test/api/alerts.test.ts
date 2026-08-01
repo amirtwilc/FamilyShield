@@ -40,4 +40,23 @@ describe('alerts + revoke', () => {
       { params: Promise.resolve({ id: c.id }) });
     expect(r.status).toBe(404);
   });
+
+  it.each(['abc', '0', '-1'])('rejects invalid alert limit %s', async (limit) => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const token = await signAccess(p.id);
+    const r = await listAlerts(new Request(`http://t/?limit=${limit}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }), { params: Promise.resolve({ id: c.id }) });
+    expect(r.status).toBe(400);
+  });
+
+  it('rejects malformed alert cursors', async () => {
+    const p = await seedParent(); const c = await seedChild(p.id);
+    const token = await signAccess(p.id);
+    const cursor = Buffer.from(JSON.stringify({ recordedAt: 'not-a-date', id: 'not-a-uuid' })).toString('base64url');
+    const r = await listAlerts(new Request(`http://t/?cursor=${cursor}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }), { params: Promise.resolve({ id: c.id }) });
+    expect(r.status).toBe(400);
+  });
 });

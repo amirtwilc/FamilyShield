@@ -11,7 +11,8 @@ import com.familyshield.mobile.net.*
 class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
 
     private val parents = mutableMapOf<String, String>()        // email -> password
-    val parentPushTokens = mutableMapOf<String, String>()       // parent email -> FCM token
+    private val parentTiers = mutableMapOf<String, String>()     // email -> subscription tier
+    val parentPushTokens = mutableMapOf<String, MutableSet<String>>() // parent email -> installation tokens
     private val childName = linkedMapOf<String, String>()        // childId -> name
     private val childAvatar = mutableMapOf<String, String>()     // childId -> avatar key
     private val childPhone = mutableMapOf<String, String?>()      // childId -> optional phone number
@@ -39,7 +40,13 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     suspend fun register(email: String, password: String): Tokens {
         if (parents.containsKey(email)) throw ApiException(409, "Email already registered")
         parents[email] = password
+        parentTiers[email] = "free"
         return Tokens("acc:$email", "ref:$email")
+    }
+
+    fun setParentTier(email: String, tierCode: String) {
+        require(parents.containsKey(email)) { "Parent not found" }
+        parentTiers[email] = tierCode
     }
 
     suspend fun login(email: String, password: String): Tokens {
@@ -66,7 +73,11 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun revokeParentSessions(token: String) = RevokeSessionsResponse(true)
 
     override suspend fun registerParentPushToken(token: String, fcmToken: String) {
-        parentPushTokens[parentEmail(token)] = fcmToken
+        parentPushTokens.getOrPut(parentEmail(token)) { linkedSetOf() }.add(fcmToken)
+    }
+
+    override suspend fun unregisterParentPushToken(token: String, fcmToken: String) {
+        parentPushTokens[parentEmail(token)]?.remove(fcmToken)
     }
 
     /** When set, the next listChildren call rejects with 401 (simulates an expired access token). */
@@ -502,7 +513,13 @@ class FakeApiClient(private val lowBatteryThreshold: Int = 15) : ApiClient {
     override suspend fun monitoring(token: String): MonitoringInfo {
         val childId = deviceTokenToChild[token] ?: throw ApiException(401, "Invalid device token")
         val monitors = childParents[childId].orEmpty().map { (email, displayName) ->
-            Monitor("parent:$email", email, displayName, childParentNames[childId]?.get(email))
+            Monitor(
+                "parent:$email",
+                email,
+                displayName,
+                childParentNames[childId]?.get(email),
+                parentTiers[email] ?: "free",
+            )
         }
         return MonitoringInfo(childId, monitors)
     }

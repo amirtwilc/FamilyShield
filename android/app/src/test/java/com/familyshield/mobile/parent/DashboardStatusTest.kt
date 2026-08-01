@@ -1,6 +1,7 @@
 package com.familyshield.mobile.parent
 
 import com.familyshield.mobile.net.CurrentLocation
+import com.familyshield.mobile.net.MovementMode
 import com.familyshield.mobile.net.Zone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -30,5 +31,15 @@ class DashboardStatusTest {
         )
 
         assertNull(currentActiveZoneName(location, zones))
+    }
+
+    @Test
+    fun `shows movement only while the child is online and moving`() {
+        val walking = location.copy(movementMode = MovementMode.Walking)
+        val stationary = location.copy(movementMode = MovementMode.Stationary)
+
+        assertEquals(MovementMode.Walking, dashboardMovementMode(isOnline = true, walking))
+        assertNull(dashboardMovementMode(isOnline = false, walking))
+        assertNull(dashboardMovementMode(isOnline = true, stationary))
     }
 }

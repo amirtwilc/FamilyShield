@@ -19,11 +19,15 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 import java.time.ZoneId
 
 private const val ACTION_STOP = "com.familyshield.mobile.kid.STOP_MONITORING"
+private const val ACTION_SIMULATION_CHANGED = "com.familyshield.mobile.kid.SIMULATION_CHANGED"
 internal const val TELEMETRY_UPLOAD_INTERVAL_MS = 5 * 60 * 1000L
 internal const val MOVEMENT_LOCATION_SAMPLE_INTERVAL_MS = 60 * 1000L
 internal const val MOVEMENT_LOCATION_MIN_DISTANCE_M = 75f
@@ -65,7 +69,11 @@ class KidMonitoringService : Service() {
     private var monitorJob: Job? = null
     private var sosJob: Job? = null
     private var movementLocationUpdates: AndroidTelemetry.LocationUpdatesHandle? = null
-    private val pendingLocations = PendingLocationBuffer()
+    private val pendingLocations = PendingLocationBuffer(maxPendingSize = SIMULATION_MAX_PENDING_POINTS)
+    private val sourceMutex = Mutex()
+    private val simulationStore by lazy { LocationSimulationStore(applicationContext) }
+    private var lastSimulationAuthCheckAtMs: Long? = null
+    private var simulationAuthorized = false
 
     override fun onCreate() {
         super.onCreate()
@@ -77,9 +85,17 @@ class KidMonitoringService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_SIMULATION_CHANGED) {
+            monitorJob?.cancel()
+            pendingLocations.clear()
+            lastSimulationAuthCheckAtMs = null
+            simulationAuthorized = false
+            syncMovementLocationCollection()
+            showMonitoringNotification(this)
+        }
         if (monitorJob?.isActive != true) monitorJob = scope.launch { monitorLoop() }
         if (sosJob?.isActive != true) sosJob = scope.launch { sosLoop() }
-        startMovementLocationCollection()
+        syncMovementLocationCollection()
         return START_STICKY
     }
 
@@ -101,14 +117,43 @@ class KidMonitoringService : Service() {
                 stopSelf()
                 return
             }
-            val result = runCatching { uploadTick(token, uploadPolicy) }
+            val simulation = simulationStore.activeConfig()
+            val result = if (simulation != null) {
+                stopMovementLocationCollection()
+                val nowMs = System.currentTimeMillis()
+                val simulatedPoint = LocationSimulationEngine.sample(
+                    simulation,
+                    nowMs,
+                    AndroidTelemetry.readBattery(this),
+                )
+                simulatedPoint?.let { pendingLocations.add(it) }
+                when (refreshSimulationAuthorization(token, nowMs)) {
+                    SimulationAuthorization.Authorized -> runCatching {
+                        uploadTick(token, uploadPolicy, simulatedPoint)
+                    }
+                    SimulationAuthorization.Revoked -> {
+                        stopSimulationAndResumeGps()
+                        runCatching { uploadTick(token, uploadPolicy) }
+                    }
+                    SimulationAuthorization.Unavailable -> Result.success(Unit)
+                    SimulationAuthorization.DeviceUnauthorized -> {
+                        store.deviceToken = null
+                        stopSelf()
+                        return
+                    }
+                }
+            } else {
+                startMovementLocationCollection()
+                runCatching { uploadTick(token, uploadPolicy) }
+            }
             val error = result.exceptionOrNull()
+            if (simulation != null && error != null) invalidateSimulationAuthorization()
             if (error is ApiException && error.status == 401) {
                 store.deviceToken = null
                 stopSelf()
                 return
             }
-            delay(TELEMETRY_UPLOAD_INTERVAL_MS)
+            delay(if (simulationStore.activeConfig() != null) SIMULATION_INTERVAL_MS else TELEMETRY_UPLOAD_INTERVAL_MS)
         }
     }
 
@@ -145,11 +190,27 @@ class KidMonitoringService : Service() {
                 continue
             }
 
-            val telemetry = AndroidTelemetry.snapshot(this)
-            val loc = telemetry.location
-            if (loc != null) {
-                val locationPoint = loc.toLocationPoint(telemetry.batteryLevel)
-                if (locationPoint == null) {
+            val battery = AndroidTelemetry.readBattery(this)
+            val simulation = simulationStore.activeConfig()
+            val locationPoint = if (simulation != null) {
+                when (refreshSimulationAuthorization(token, System.currentTimeMillis())) {
+                    SimulationAuthorization.Authorized -> LocationSimulationEngine.sample(simulation, batteryLevel = battery)
+                    SimulationAuthorization.Revoked -> {
+                        stopSimulationAndResumeGps()
+                        currentKidLocationPoint(this, simulationStore, battery)
+                    }
+                    SimulationAuthorization.Unavailable -> null
+                    SimulationAuthorization.DeviceUnauthorized -> {
+                        store.deviceToken = null
+                        stopSelf()
+                        return
+                    }
+                }
+            } else {
+                currentKidLocationPoint(this, simulationStore, battery)
+            }
+            if (locationPoint != null) {
+                if (simulation != null && simulationStore.activeConfig() != null && !simulationAuthorized) {
                     delay(SOS_IDLE_CHECK_INTERVAL_MS)
                     continue
                 }
@@ -162,6 +223,7 @@ class KidMonitoringService : Service() {
                     )
                 }
                 val error = result.exceptionOrNull()
+                if (simulation != null && error != null) invalidateSimulationAuthorization()
                 if (error is ApiException && error.status == 401) {
                     store.deviceToken = null
                     stopSelf()
@@ -176,10 +238,13 @@ class KidMonitoringService : Service() {
         }
     }
 
-    private suspend fun uploadTick(token: String, uploadPolicy: TelemetryUploadPolicy) {
+    private suspend fun uploadTick(
+        token: String,
+        uploadPolicy: TelemetryUploadPolicy,
+        locationOverride: LocationPoint? = null,
+    ) {
         val nowMs = System.currentTimeMillis()
         val optionalFields = uploadPolicy.optionalFields(nowMs)
-        val telemetry = AndroidTelemetry.snapshot(this)
         val appUsage = if (optionalFields.appUsage) {
             val appUsageAccessGranted = AppUsageTelemetry.hasUsageAccess(this)
             AppUsageTelemetryBody(
@@ -190,11 +255,12 @@ class KidMonitoringService : Service() {
             null
         }
         val fcmToken = if (optionalFields.fcmToken) kidFcmTokenOrNull() else null
-        val battery = telemetry.batteryLevel
-        val currentLocation = telemetry.location?.toLocationPoint(battery)
+        val battery = AndroidTelemetry.readBattery(this)
+        val charging = AndroidTelemetry.readCharging(this)
+        val currentLocation = locationOverride ?: currentKidLocationPoint(this, simulationStore, battery)
         val locations = pendingLocations.batch(currentLocation)
         val latestLocation = locations.lastOrNull()
-        val status = StatusBody(battery, telemetry.isCharging, fcmToken, permissionStatusPayload(this))
+        val status = StatusBody(battery, charging, fcmToken, permissionStatusPayload(this))
         api.sendTelemetry(
             token,
             DeviceTelemetryBody(
@@ -209,6 +275,7 @@ class KidMonitoringService : Service() {
     }
 
     private fun startMovementLocationCollection() {
+        if (simulationStore.activeConfig() != null) return
         if (movementLocationUpdates != null) return
         movementLocationUpdates = AndroidTelemetry.movementLocationUpdates(
             this,
@@ -219,15 +286,58 @@ class KidMonitoringService : Service() {
         }
     }
 
-    private fun android.location.Location.toLocationPoint(batteryLevel: Int?): LocationPoint? {
-        val nowMs = System.currentTimeMillis()
-        if (!AndroidTelemetry.isUsableLocation(this, nowMs, LOCATION_STALE_AFTER_MS)) return null
-        return LocationPoint(latitude, longitude, AndroidTelemetry.locationRecordedAtIso(this), batteryLevel)
+    private fun stopMovementLocationCollection() {
+        movementLocationUpdates?.stop()
+        movementLocationUpdates = null
+    }
+
+    private fun syncMovementLocationCollection() {
+        if (simulationStore.activeConfig() == null) startMovementLocationCollection()
+        else stopMovementLocationCollection()
+    }
+
+    private suspend fun refreshSimulationAuthorization(token: String, nowMs: Long): SimulationAuthorization =
+        sourceMutex.withLock {
+            if (simulationStore.activeConfig() == null) return@withLock SimulationAuthorization.Revoked
+            val lastCheck = lastSimulationAuthCheckAtMs
+            if (simulationAuthorized && lastCheck != null && nowMs - lastCheck < SIMULATION_AUTH_REFRESH_MS) {
+                return@withLock SimulationAuthorization.Authorized
+            }
+            try {
+                val eligible = api.monitoring(token).monitors.allowsLocationSimulation()
+                lastSimulationAuthCheckAtMs = nowMs
+                simulationAuthorized = eligible
+                if (eligible) SimulationAuthorization.Authorized else SimulationAuthorization.Revoked
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (error is ApiException && error.status == 401) {
+                    simulationAuthorized = false
+                    return@withLock SimulationAuthorization.DeviceUnauthorized
+                }
+                simulationAuthorized = false
+                SimulationAuthorization.Unavailable
+            }
+        }
+
+    private suspend fun stopSimulationAndResumeGps() = sourceMutex.withLock {
+        simulationStore.stop()
+        pendingLocations.clear()
+        simulationAuthorized = false
+        lastSimulationAuthCheckAtMs = null
+        startMovementLocationCollection()
+        showMonitoringNotification(this)
+    }
+
+    private suspend fun invalidateSimulationAuthorization() = sourceMutex.withLock {
+        simulationAuthorized = false
+        lastSimulationAuthCheckAtMs = null
     }
 
     private fun localDay(): String = LocalDate.now(ZoneId.systemDefault()).toString()
 
     private fun timezoneId(): String = ZoneId.systemDefault().id
+
+    private enum class SimulationAuthorization { Authorized, Revoked, Unavailable, DeviceUnauthorized }
 }
 
 fun startKidMonitoring(context: Context): Boolean {
@@ -245,4 +355,11 @@ fun startKidMonitoring(context: Context): Boolean {
 fun stopKidMonitoring(context: Context) {
     val app = context.applicationContext
     app.startService(Intent(app, KidMonitoringService::class.java).setAction(ACTION_STOP))
+}
+
+fun notifyKidSimulationChanged(context: Context) {
+    val app = context.applicationContext
+    val intent = Intent(app, KidMonitoringService::class.java).setAction(ACTION_SIMULATION_CHANGED)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(intent)
+    else app.startService(intent)
 }

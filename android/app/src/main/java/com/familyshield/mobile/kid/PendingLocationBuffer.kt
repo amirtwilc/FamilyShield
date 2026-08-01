@@ -9,12 +9,14 @@ import com.familyshield.mobile.net.LocationPoint
  */
 internal class PendingLocationBuffer(
     private val maxBatchSize: Int = 200,
+    private val maxPendingSize: Int = maxBatchSize,
 ) {
     private val points = mutableListOf<LocationPoint>()
 
     @Synchronized
     fun add(location: LocationPoint) {
         if (points.none { it.recordedAt == location.recordedAt }) points += location
+        while (points.size > maxPendingSize) points.removeAt(0)
     }
 
     @Synchronized
@@ -33,6 +35,9 @@ internal class PendingLocationBuffer(
         val uploadedTimes = uploaded.mapTo(hashSetOf()) { it.recordedAt }
         points.removeAll { it.recordedAt in uploadedTimes }
     }
+
+    @Synchronized
+    fun clear() = points.clear()
 
     @Synchronized
     fun size(): Int = points.size

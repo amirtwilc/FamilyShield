@@ -4,13 +4,13 @@ import {
   devices,
   children,
   childParentLinks,
-  parents,
   alerts,
   safeZoneStates,
   appUsageLimits,
   appUsageLimitEvents,
 } from '../../db/schema';
 import { getSender, type PushOptions } from './fcm';
+import { sendToLinkedParentInstallations, sendToParentInstallations } from '@/lib/parent-push';
 
 type Device = typeof devices.$inferSelect;
 
@@ -22,25 +22,14 @@ const LOCALIZED_ALERT_PUSH_OPTIONS: PushOptions = {
   },
 };
 
-async function parentFcmsFor(childId: string): Promise<string[]> {
-  // parent.fcmToken added in Task 11; until then this returns null safely.
-  const rows = await db.select({ token: parents.fcmToken })
-    .from(childParentLinks).innerJoin(parents, eq(childParentLinks.parentId, parents.id))
-    .where(eq(childParentLinks.childId, childId));
-  return rows.map((r) => r.token).filter((t): t is string => Boolean(t));
-}
-
 async function sendToParents(childId: string, title: string, body: string, data: Record<string, string>, options?: PushOptions) {
-  let sent = false;
-  for (const fcm of await parentFcmsFor(childId)) {
-    sent = await getSender().send(fcm, title, body, data, options) || sent;
-  }
-  return sent;
+  return sendToLinkedParentInstallations(childId, (parentId, token) =>
+    getSender().send(token, title, body, { ...data, parentId, recipient: 'parent' }, options));
 }
 
 async function sendToParent(parentId: string, title: string, body: string, data: Record<string, string>, options?: PushOptions) {
-  const [parent] = await db.select({ token: parents.fcmToken }).from(parents).where(eq(parents.id, parentId));
-  return parent?.token ? getSender().send(parent.token, title, body, data, options) : false;
+  return sendToParentInstallations(parentId, (token) =>
+    getSender().send(token, title, body, { ...data, parentId, recipient: 'parent' }, options));
 }
 
 async function childDisplayNameForParent(parentId: string, childId: string): Promise<string> {

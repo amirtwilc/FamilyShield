@@ -4,6 +4,7 @@ import * as schema from '@/db/schema';
 describe('schema', () => {
   it('exports all tables', () => {
     expect(schema.parents).toBeDefined();
+    expect(schema.parentPushTokens).toBeDefined();
     expect(schema.subscriptionTiers).toBeDefined();
     expect(schema.children).toBeDefined();
     expect(schema.childParentLinks).toBeDefined();

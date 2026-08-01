@@ -3,7 +3,9 @@
 // (departure → arrival), and the routes that recur frequently (e.g. home→school).
 // Pure functions — unit-tested in test/lib/routes.test.ts.
 
-export type GpsPoint = { lat: number; lng: number; at: string }; // at = ISO timestamp
+import { movementModeForTrip, type MovementMode } from './movement';
+
+export type GpsPoint = { lat: number; lng: number; at: string; speed?: number | null }; // at = ISO timestamp
 export type LatLng = { lat: number; lng: number };
 export type Stop = { lat: number; lng: number; arriveAt: string; departAt: string; dwellMin: number };
 export type Trip = {
@@ -14,6 +16,7 @@ export type Trip = {
   durationMin: number;
   distanceKm: number;
   points: GpsPoint[];
+  movementMode: Exclude<MovementMode, 'stationary'>;
 };
 export type FrequentRoute = {
   from: LatLng;
@@ -155,14 +158,21 @@ export function buildTrips(stops: Stop[], points: GpsPoint[] = [], minTripM = 25
     const b = stops[i];
     const d = haversineM(a, b);
     if (d < minTripM) continue; // same place / negligible movement
+    const tripPoints = routePoints(sortedPoints, a, b);
+    const durationMin = Math.max(0, minutesBetween(a.departAt, b.arriveAt));
     trips.push({
       from: { lat: a.lat, lng: a.lng },
       to: { lat: b.lat, lng: b.lng },
       departAt: a.departAt,
       arriveAt: b.arriveAt,
-      durationMin: Math.max(0, minutesBetween(a.departAt, b.arriveAt)),
+      durationMin,
       distanceKm: d / 1000,
-      points: routePoints(sortedPoints, a, b),
+      points: tripPoints,
+      movementMode: movementModeForTrip({
+        speeds: tripPoints.map((point) => point.speed),
+        distanceM: d,
+        durationSeconds: durationMin * 60,
+      }),
     });
   }
   return trips;

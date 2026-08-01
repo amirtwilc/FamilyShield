@@ -50,6 +50,27 @@ class KidViewModelTest {
     }
 
     @Test
+    fun `simulation eligibility follows any linked admin parent`() = runTest(mainRule.dispatcher) {
+        val api = FakeApiClient()
+        val (_, childId, code) = seedCode(api)
+        val vm = viewModel(api)
+        vm.pair(code, "android", "Mom")
+        advanceUntilIdle()
+        assertEquals(false, vm.canSimulateLocation)
+
+        val adminToken = api.register("admin@x.com", "pw123456").accessToken
+        api.setParentTier("admin@x.com", "admin")
+        val placeholder = api.createChild(adminToken, "Mimi")
+        vm.addParent(api.pairingCode(adminToken, placeholder.id).code, "android", "Dad")
+        advanceUntilIdle()
+
+        assertEquals(childId, api.monitoring(vm.deviceToken!!).childId)
+        assertEquals(true, vm.canSimulateLocation)
+        assertEquals("free", api.monitoring(vm.deviceToken!!).monitors.first { it.email == "parent@x.com" }.tierCode)
+        assertEquals("admin", api.monitoring(vm.deviceToken!!).monitors.first { it.email == "admin@x.com" }.tierCode)
+    }
+
+    @Test
     fun `pairing with an invalid code surfaces an error`() = runTest(mainRule.dispatcher) {
         val vm = viewModel(FakeApiClient())
 

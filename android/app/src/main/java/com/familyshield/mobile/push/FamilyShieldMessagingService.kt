@@ -17,6 +17,7 @@ import kotlinx.coroutines.tasks.await
 class FamilyShieldMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        if (!shouldDisplayParentPush(data, PrefsTokenStore(applicationContext).activeParentId)) return
         if (isUrgentPushData(data)) {
             showUrgentPushNotification(
                 this,
@@ -68,6 +69,12 @@ class FamilyShieldMessagingService : FirebaseMessagingService() {
             }
         }
     }
+}
+
+internal fun shouldDisplayParentPush(data: Map<String, String>, activeParentId: String?): Boolean {
+    val targetsParent = data["recipient"] == "parent" ||
+        data["parentId"] != null && data["recipient"] != "child"
+    return !targetsParent || activeParentId != null && data["parentId"] == activeParentId
 }
 
 internal fun chatPushTitle(data: Map<String, String>, notificationTitle: String?): String? =

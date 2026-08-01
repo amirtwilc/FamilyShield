@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { resetDb } from '../helpers/db';
 import { seedDevice, seedParent } from '../helpers/factories';
 import { db } from '@/db/client';
-import { childParentLinks, children, devices, parents } from '@/db/schema';
+import { childParentLinks, children, devices, parents, subscriptionTiers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { signAccess } from '@/lib/auth/jwt';
 import { POST as createChild, GET as listChildren } from '@/app/api/children/route';
@@ -70,6 +70,22 @@ describe('children api', () => {
     expect(denied.status).toBe(403);
     const body = await denied.json();
     expect(body.error.code).toBe('tier_limit_exceeded');
+  });
+
+  it('serializes concurrent child creation against the tier limit', async () => {
+    const p = await seedParent('concurrent-limit@test.io'); const tok = await signAccess(p.id);
+    await db.insert(subscriptionTiers).values({
+      code: 'single-child-test', name: 'Single child test', locationRetentionDays: 2, maxChildren: 1,
+    });
+    await db.update(parents).set({ tierCode: 'single-child-test' }).where(eq(parents.id, p.id));
+
+    const responses = await Promise.all([
+      createChild(auth(tok, { displayName: 'First' })),
+      createChild(auth(tok, { displayName: 'Second' })),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 403]);
+    const links = await db.select().from(childParentLinks).where(eq(childParentLinks.parentId, p.id));
+    expect(links).toHaveLength(1);
   });
 
   it('treats a null avatar like an omitted avatar', async () => {

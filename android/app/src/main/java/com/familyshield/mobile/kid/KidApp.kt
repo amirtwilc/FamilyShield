@@ -97,6 +97,8 @@ import com.familyshield.mobile.push.openNotificationPolicyAccessSettings
 import com.familyshield.mobile.push.openUrgentNotificationSettings
 import com.familyshield.mobile.push.ChatPushDestination
 import com.familyshield.mobile.ui.OsmMap
+import com.familyshield.mobile.ui.MapPoint
+import com.familyshield.mobile.ui.OsmSimulationMap
 import com.familyshield.mobile.ui.pairingCodeEditOrNull
 import com.familyshield.mobile.ui.pairingCodeFromClipboard
 import com.familyshield.mobile.ui.formatMessageDate
@@ -151,6 +153,7 @@ fun KidApp(
             startKidMonitoring(context)
         } else if (hadDeviceToken) {
             hadDeviceToken = false
+            LocationSimulationStore(context).stop()
             stopKidMonitoring(context)
             onKidUnpaired()
         }
@@ -168,7 +171,7 @@ fun KidApp(
         }
     }
     if (settingsOpen) {
-        KidSettingsScreen(onBack = { settingsOpen = false })
+        KidSettingsScreen(vm, onBack = { settingsOpen = false })
     } else if (vm.deviceToken == null) {
         ConnectScreen(vm, onBack, onSettings = { settingsOpen = true })
     } else {
@@ -540,6 +543,26 @@ private fun DeviceDashboard(vm: KidViewModel, onSettings: () -> Unit, onChat: (M
         ) {
             val currentLat = vm.lat
             val currentLng = vm.lng
+            if (vm.simulationConfig != null) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            stringResource(R.string.kid_simulation_active),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
             KidSosActiveCard(vm)
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -854,11 +877,16 @@ private fun SosProgressRing(progress: Float, color: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun KidSettingsScreen(onBack: () -> Unit) {
+private fun KidSettingsScreen(vm: KidViewModel, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var monitoringStatus by remember { mutableStateOf(backgroundMonitoringStatus(context)) }
+
+    LaunchedEffect(Unit) {
+        vm.refreshMonitoring()
+        vm.refreshSimulationState(context)
+    }
 
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
@@ -889,7 +917,189 @@ private fun KidSettingsScreen(onBack: () -> Unit) {
                     monitoringStatus = backgroundMonitoringStatus(context)
                 },
             )
+            if (vm.canSimulateLocation || vm.simulationConfig != null) {
+                LocationSimulationCard(vm)
+            }
             KidLanguageCard()
+        }
+    }
+}
+
+@Composable
+private fun LocationSimulationCard(vm: KidViewModel) {
+    val context = LocalContext.current
+    val active = vm.simulationConfig
+    var mode by rememberSaveable { mutableStateOf(LocationSimulationMode.Fixed) }
+    var fixedLat by rememberSaveable(vm.lat) { mutableStateOf(vm.lat?.toString().orEmpty()) }
+    var fixedLng by rememberSaveable(vm.lng) { mutableStateOf(vm.lng?.toString().orEmpty()) }
+    var routePoints by remember { mutableStateOf<List<SimulationWaypoint>>(emptyList()) }
+    var speedMode by rememberSaveable { mutableStateOf("walking") }
+    var customSpeed by rememberSaveable { mutableStateOf("1.4") }
+    var dwellMinutes by rememberSaveable { mutableStateOf(5f) }
+    var loop by rememberSaveable { mutableStateOf(false) }
+    val fallback = MapPoint(vm.lat ?: 0.0, vm.lng ?: 0.0)
+
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(stringResource(R.string.kid_simulation_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.kid_simulation_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (active != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            stringResource(R.string.kid_simulation_active),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            stringResource(
+                                if (active.mode == LocationSimulationMode.Fixed) R.string.kid_simulation_active_fixed
+                                else R.string.kid_simulation_active_route,
+                            ),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (active.isPaused) {
+                        Button(onClick = { vm.resumeSimulation(context) }, enabled = !vm.simulationBusy) {
+                            Text(stringResource(R.string.kid_simulation_resume))
+                        }
+                    } else {
+                        OutlinedButton(onClick = { vm.pauseSimulation(context) }) {
+                            Text(stringResource(R.string.kid_simulation_pause))
+                        }
+                    }
+                    Button(
+                        onClick = { vm.stopSimulation(context) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text(stringResource(R.string.kid_simulation_stop))
+                    }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = mode == LocationSimulationMode.Fixed,
+                        onClick = { mode = LocationSimulationMode.Fixed },
+                        label = { Text(stringResource(R.string.kid_simulation_fixed)) },
+                    )
+                    FilterChip(
+                        selected = mode == LocationSimulationMode.Route,
+                        onClick = { mode = LocationSimulationMode.Route },
+                        label = { Text(stringResource(R.string.kid_simulation_route)) },
+                    )
+                }
+
+                if (mode == LocationSimulationMode.Fixed) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = fixedLat,
+                            onValueChange = { fixedLat = it },
+                            label = { Text(stringResource(R.string.kid_simulation_latitude)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = fixedLng,
+                            onValueChange = { fixedLng = it },
+                            label = { Text(stringResource(R.string.kid_simulation_longitude)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    val lat = fixedLat.toDoubleOrNull()
+                    val lng = fixedLng.toDoubleOrNull()
+                    val fixedPoint = if (lat != null && lng != null) SimulationWaypoint(lat, lng) else null
+                    OsmSimulationMap(
+                        points = fixedPoint?.takeIf { it.isValid() }?.let { listOf(MapPoint(it.lat, it.lng)) }.orEmpty(),
+                        fallbackCenter = fallback,
+                        onTap = { tappedLat, tappedLng ->
+                            fixedLat = "%.6f".format(Locale.US, tappedLat)
+                            fixedLng = "%.6f".format(Locale.US, tappedLng)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(240.dp).clip(MaterialTheme.shapes.medium),
+                        description = stringResource(R.string.cd_kid_simulation_map),
+                    )
+                    Button(
+                        onClick = { vm.startFixedSimulation(context, fixedPoint!!) },
+                        enabled = fixedPoint?.isValid() == true && !vm.simulationBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.kid_simulation_start))
+                    }
+                } else {
+                    Text(
+                        stringResource(R.string.kid_simulation_route_help),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OsmSimulationMap(
+                        points = routePoints.map { MapPoint(it.lat, it.lng) },
+                        fallbackCenter = fallback,
+                        onTap = { lat, lng -> routePoints = routePoints + SimulationWaypoint(lat, lng) },
+                        modifier = Modifier.fillMaxWidth().height(260.dp).clip(MaterialTheme.shapes.medium),
+                        description = stringResource(R.string.cd_kid_simulation_map),
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.kid_simulation_waypoint_count, routePoints.size), modifier = Modifier.weight(1f))
+                        TextButton(onClick = { routePoints = routePoints.dropLast(1) }, enabled = routePoints.isNotEmpty()) {
+                            Text(stringResource(R.string.kid_simulation_remove_last))
+                        }
+                        TextButton(onClick = { routePoints = emptyList() }, enabled = routePoints.isNotEmpty()) {
+                            Text(stringResource(R.string.kid_simulation_clear))
+                        }
+                    }
+                    Text(stringResource(R.string.kid_simulation_speed), fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = speedMode == "walking", onClick = { speedMode = "walking" },
+                            label = { Text(stringResource(R.string.kid_simulation_walking)) })
+                        FilterChip(selected = speedMode == "driving", onClick = { speedMode = "driving" },
+                            label = { Text(stringResource(R.string.kid_simulation_driving)) })
+                        FilterChip(selected = speedMode == "custom", onClick = { speedMode = "custom" },
+                            label = { Text(stringResource(R.string.kid_simulation_custom)) })
+                    }
+                    if (speedMode == "custom") {
+                        OutlinedTextField(
+                            value = customSpeed,
+                            onValueChange = { customSpeed = it },
+                            label = { Text(stringResource(R.string.kid_simulation_custom_speed)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Text(stringResource(R.string.kid_simulation_dwell, dwellMinutes.toInt()))
+                    Slider(value = dwellMinutes, onValueChange = { dwellMinutes = it }, valueRange = 0f..60f, steps = 11)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = loop, onCheckedChange = { loop = it })
+                        Text(stringResource(R.string.kid_simulation_loop))
+                    }
+                    val speed = when (speedMode) {
+                        "walking" -> 1.4
+                        "driving" -> 12.0
+                        else -> customSpeed.toDoubleOrNull()
+                    }
+                    Button(
+                        onClick = { vm.startRouteSimulation(context, routePoints, speed!!, dwellMinutes.toInt(), loop) },
+                        enabled = routePoints.size >= 2 && speed != null && speed in 0.6..50.0 && !vm.simulationBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.kid_simulation_start))
+                    }
+                }
+            }
         }
     }
 }

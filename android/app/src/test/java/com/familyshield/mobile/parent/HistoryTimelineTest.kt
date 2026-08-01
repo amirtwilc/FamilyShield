@@ -1,6 +1,7 @@
 package com.familyshield.mobile.parent
 
 import com.familyshield.mobile.net.HistoryPoint
+import com.familyshield.mobile.net.MovementMode
 import com.familyshield.mobile.net.FrequentRoute
 import com.familyshield.mobile.net.FrequentLocation
 import com.familyshield.mobile.net.Geo
@@ -254,6 +255,24 @@ class HistoryTimelineTest {
         assertEquals(1, activities.count { it is HistoryMovementActivity })
         assertTrue((activities.first { it is HistoryMovementActivity } as HistoryMovementActivity).points.size >= 3)
         assertEquals(emptyList<HistoryActivity>(), filteredActivities)
+    }
+
+    @Test
+    fun `daily timeline keeps backend driving mode and classifies legacy walking routes`() {
+        val from = Geo(32.0, 34.0)
+        val to = Geo(32.02, 34.02)
+        val legacy = trip(from, to, "2026-07-26T09:00:00Z")
+        val driving = trip(from, to, "2026-07-26T10:00:00Z").copy(movementMode = MovementMode.Driving)
+
+        val activities = buildHistoryActivities(
+            points = emptyList(),
+            trips = listOf(legacy, driving),
+            zones = emptyList(),
+            selectedDate = "2026-07-26",
+        ).filterIsInstance<HistoryRouteActivity>()
+
+        assertEquals(MovementMode.Walking, activities.single { it.startAt.contains("09:00") }.movementMode)
+        assertEquals(MovementMode.Driving, activities.single { it.startAt.contains("10:00") }.movementMode)
     }
 
     private fun point(lat: Double, lng: Double, recordedAt: String) =

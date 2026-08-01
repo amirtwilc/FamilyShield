@@ -5,6 +5,8 @@ import { requireParent } from '@/lib/auth/parent';
 import { assertChildOwned } from '@/lib/ownership';
 import { ok, err } from '@/lib/http';
 import { decodeCursor, encodeCursor } from '@/lib/pagination';
+import { parseQuery } from '@/lib/validate';
+import { alertQuery } from '@/lib/schemas/parent';
 
 export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ id: string }> };
@@ -13,9 +15,13 @@ export async function GET(req: Request, { params }: Ctx) {
   const a = await requireParent(req); if ('response' in a) return a.response;
   const { id } = await params;
   if (!(await assertChildOwned(a.parentId, id))) return err('not_found', 'Child not found', 404);
-  const url = new URL(req.url);
-  const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
-  const cur = url.searchParams.get('cursor') ? decodeCursor(url.searchParams.get('cursor')!) : null;
+  const q = parseQuery(new URL(req.url), alertQuery); if ('response' in q) return q.response;
+  const limit = q.data.limit ?? 50;
+  const cur = q.data.cursor ? decodeCursor(q.data.cursor) : null;
+  if (q.data.cursor && !cur) return err('validation_error', 'Invalid cursor', 400);
+  if (cur && (!Number.isFinite(Date.parse(cur.recordedAt)) || !UUID_RE.test(cur.id))) {
+    return err('validation_error', 'Invalid cursor', 400);
+  }
 
   const rows = await db.select().from(alerts).where(and(
     eq(alerts.childId, id),
@@ -32,3 +38,5 @@ export async function GET(req: Request, { params }: Ctx) {
     ? encodeCursor({ recordedAt: last.createdAt.toISOString(), id: last.id }) : null;
   return ok({ alerts: page, nextCursor: next });
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

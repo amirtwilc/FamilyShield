@@ -46,7 +46,6 @@ export const parents = pgTable('parents', {
   googleSub: text('google_sub'),
   firebaseUid: text('firebase_uid'),
   authMigratedAt: timestamp('auth_migrated_at', { withTimezone: true }),
-  fcmToken: text('fcm_token'),
   tierCode: text('tier_code').notNull().default('free')
     .references(() => subscriptionTiers.code, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -54,6 +53,17 @@ export const parents = pgTable('parents', {
   normalizedEmail: uniqueIndex('parents_email_normalized_unique_idx').on(sql`lower(btrim(${t.email}))`),
   firebaseUidUnique: uniqueIndex('parents_firebase_uid_unique_idx').on(t.firebaseUid)
     .where(sql`${t.firebaseUid} IS NOT NULL`),
+}));
+
+export const parentPushTokens = pgTable('parent_push_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  parentId: uuid('parent_id').notNull().references(() => parents.id, { onDelete: 'cascade' }),
+  token: text('token').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  tokenUnique: uniqueIndex('parent_push_tokens_token_unique_idx').on(t.token),
+  byParent: index('parent_push_tokens_parent_idx').on(t.parentId),
 }));
 
 export const children = pgTable('children', {

@@ -200,6 +200,50 @@ fun OsmFamilyMap(markers: List<MapMarker>, modifier: Modifier = Modifier, descri
     )
 }
 
+/** Editable simulation route map. Each tap appends a waypoint; markers are
+ * numbered in route order and connected by a straight polyline. */
+@Composable
+fun OsmSimulationMap(
+    points: List<MapPoint>,
+    fallbackCenter: MapPoint,
+    onTap: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String = "Location simulation route editor",
+) {
+    val context = LocalContext.current
+    val mapView = remember { newMap(context, 14.0) }
+    val tapOverlay = remember { TapOverlay { point -> onTap(point.latitude, point.longitude) } }
+    lifecycleBind(mapView)
+    AndroidView(
+        modifier = modifier.semantics { contentDescription = description },
+        factory = { mapView },
+        update = { mv ->
+            mv.overlays.clear()
+            if (points.size > 1) {
+                mv.overlays.add(Polyline(mv).apply {
+                    setPoints(points.map { GeoPoint(it.lat, it.lng) })
+                    outlinePaint.color = AndroidColor.argb(220, 0x0A, 0x6C, 0xDB)
+                    outlinePaint.strokeWidth = 8f
+                })
+            }
+            points.forEachIndexed { index, point ->
+                mv.overlays.add(Marker(mv).apply {
+                    position = GeoPoint(point.lat, point.lng)
+                    title = (index + 1).toString()
+                    setTextIcon((index + 1).toString())
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    infoWindow = null
+                })
+            }
+            mv.overlays.add(tapOverlay)
+            val center = points.lastOrNull() ?: fallbackCenter
+            mv.controller.setCenter(GeoPoint(center.lat, center.lng))
+            mv.invalidate()
+        },
+        onRelease = { it.onDetach() },
+    )
+}
+
 /** OSM map for a single route path. It draws start/end markers and centers on
  *  the end point so the arrival location is immediately visible. */
 @Composable

@@ -14,6 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
  * sessions; this abstraction remains testable without SharedPreferences. */
 interface TokenStore {
     var deviceToken: String?
+    var activeParentId: String?
     var biometricLock: Boolean
     var alertsEnabled: Boolean
 }
@@ -51,6 +52,12 @@ class PrefsTokenStore(context: Context) : TokenStore {
     override var deviceToken: String?
         get() = getSensitive("device_token")
         set(v) = putSensitive("device_token", v)
+
+    override var activeParentId: String?
+        get() = prefs.getString("active_parent_id", null)
+        set(v) = prefs.edit().apply {
+            if (v == null) remove("active_parent_id") else putString("active_parent_id", v)
+        }.apply()
 
     override var biometricLock: Boolean
         get() = prefs.getBoolean("biometric_lock", false)

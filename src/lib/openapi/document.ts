@@ -63,7 +63,7 @@ export function buildOpenApiDocument() {
   registry.registerPath({ method: 'post', path: '/api/device/app-usage', security: [{ deviceToken: [] }],
     request: { body: json(reportUsageSchema) }, responses: { 200: { description: 'App usage ingested' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/device/monitoring', security: [{ deviceToken: [] }],
-    responses: { 200: { description: 'Current monitoring relationships' }, 401: { description: 'Unauthorized' } } });
+    responses: { 200: { description: 'Current monitoring relationships, including each parent subscription tier' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'delete', path: '/api/device/monitors/{parentId}', security: [{ deviceToken: [] }],
     responses: { 200: { description: 'Monitor removed' }, 404: { description: 'Monitor not found' } } });
   registry.registerPath({ method: 'patch', path: '/api/device/monitors/{parentId}', security: [{ deviceToken: [] }],
@@ -154,6 +154,8 @@ export function buildOpenApiDocument() {
     responses: { 200: { description: 'Device revoked' }, 404: { description: 'Device not found' } } });
   registry.registerPath({ method: 'post', path: '/api/parent/push-token', security: [{ parentJwt: [] }],
     request: { body: json(pushTokenSchema) }, responses: { 200: { description: 'OK' } } });
+  registry.registerPath({ method: 'delete', path: '/api/parent/push-token', security: [{ parentJwt: [] }],
+    request: { body: json(pushTokenSchema) }, responses: { 200: { description: 'Push installation unregistered' } } });
   registry.registerPath({ method: 'get', path: '/api/cron/offline-sweep',
     responses: { 200: { description: 'Offline sweep complete' }, 401: { description: 'Unauthorized' } } });
   registry.registerPath({ method: 'get', path: '/api/cron/location-retention',

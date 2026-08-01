@@ -24,10 +24,23 @@ if (rows[0].t) {
   console.log('db-init: schema already present — nothing to do');
 } else {
   await client.query('CREATE EXTENSION IF NOT EXISTS postgis;');
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS familyshield_migrations (
+      filename text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )`);
   const dir = resolve(process.cwd(), 'drizzle');
   for (const f of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
-    await client.query(readFileSync(resolve(dir, f), 'utf8'));
-    console.log('db-init: applied', f);
+    await client.query('BEGIN');
+    try {
+      await client.query(readFileSync(resolve(dir, f), 'utf8'));
+      await client.query('INSERT INTO familyshield_migrations (filename) VALUES ($1)', [f]);
+      await client.query('COMMIT');
+      console.log('db-init: applied', f);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
   }
   console.log('db-init: schema initialized');
 }
