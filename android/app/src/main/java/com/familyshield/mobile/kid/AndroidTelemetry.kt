@@ -1,6 +1,7 @@
 package com.familyshield.mobile.kid
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -161,6 +162,7 @@ object AndroidTelemetry {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun platformLastKnownLocations(app: Context): List<Location> {
         val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         if (!hasLocationPermission(app)) return emptyList()

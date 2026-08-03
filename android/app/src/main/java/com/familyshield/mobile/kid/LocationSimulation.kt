@@ -12,6 +12,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.atan2
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -27,6 +28,9 @@ internal fun List<Monitor>.allowsLocationSimulation(): Boolean = any { it.tierCo
 enum class LocationSimulationMode { Fixed, Route }
 
 @Serializable
+enum class LocationSimulationSpeedMode { Walking, Driving, Custom }
+
+@Serializable
 data class SimulationWaypoint(val lat: Double, val lng: Double) {
     fun isValid(): Boolean = lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0
 }
@@ -38,7 +42,17 @@ data class LocationSimulationConfig(
     val speedMps: Double = 1.4,
     val startedAtMs: Long,
     val schemaVersion: Int = 1,
+    val speedMode: LocationSimulationSpeedMode? = null,
 )
+
+internal val LocationSimulationConfig.resolvedSpeedMode: LocationSimulationSpeedMode
+    get() = speedMode ?: locationSimulationSpeedModeFor(speedMps)
+
+internal fun locationSimulationSpeedModeFor(speedMps: Double): LocationSimulationSpeedMode = when {
+    abs(speedMps - 1.4) < 0.000_001 -> LocationSimulationSpeedMode.Walking
+    abs(speedMps - 12.0) < 0.000_001 -> LocationSimulationSpeedMode.Driving
+    else -> LocationSimulationSpeedMode.Custom
+}
 
 class LocationSimulationStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -62,6 +76,7 @@ class LocationSimulationStore(context: Context) {
             speedMps = 1.4,
             startedAtMs = nowMs,
             schemaVersion = CURRENT_SCHEMA_VERSION,
+            speedMode = LocationSimulationSpeedMode.Walking,
         ))
     }
 
@@ -96,7 +111,11 @@ class LocationSimulationStore(context: Context) {
         ))
     }
 
-    fun setSpeed(speedMps: Double, nowMs: Long = System.currentTimeMillis()): LocationSimulationConfig? {
+    fun setSpeed(
+        speedMps: Double,
+        speedMode: LocationSimulationSpeedMode = locationSimulationSpeedModeFor(speedMps),
+        nowMs: Long = System.currentTimeMillis(),
+    ): LocationSimulationConfig? {
         require(speedMps in 0.6..50.0) { "Speed must be between 0.6 and 50 m/s" }
         val current = activeConfig() ?: return null
         val origin = current.currentWaypoint(nowMs) ?: return null
@@ -105,7 +124,12 @@ class LocationSimulationStore(context: Context) {
         } else {
             listOf(origin)
         }
-        return save(current.copy(waypoints = points, speedMps = speedMps, startedAtMs = nowMs))
+        return save(current.copy(
+            waypoints = points,
+            speedMps = speedMps,
+            speedMode = speedMode,
+            startedAtMs = nowMs,
+        ))
     }
 
     fun stop() {

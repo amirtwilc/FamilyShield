@@ -70,4 +70,18 @@ class LocationSimulationEngineTest {
         assertFalse(listOf(free).allowsLocationSimulation())
         assertTrue(listOf(free, admin).allowsLocationSimulation())
     }
+
+    @Test
+    fun `legacy persisted routes infer their highlighted speed mode`() {
+        val driving = LocationSimulationConfig(
+            mode = LocationSimulationMode.Route,
+            waypoints = listOf(SimulationWaypoint(0.0, 0.0), SimulationWaypoint(0.0, 0.01)),
+            speedMps = 12.0,
+            startedAtMs = 0L,
+        )
+        val custom = driving.copy(speedMps = 5.5)
+
+        assertEquals(LocationSimulationSpeedMode.Driving, driving.resolvedSpeedMode)
+        assertEquals(LocationSimulationSpeedMode.Custom, custom.resolvedSpeedMode)
+    }
 }

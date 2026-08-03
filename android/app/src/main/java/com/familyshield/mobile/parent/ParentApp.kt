@@ -1465,11 +1465,10 @@ private fun DashboardTab(
                     ) {
                         Box(Modifier.fillMaxWidth()) {
                             Column(
-                                Modifier.fillMaxWidth(),
+                                Modifier.fillMaxWidth().padding(end = 48.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Row(
-                                    Modifier.padding(end = 48.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
@@ -1484,26 +1483,31 @@ private fun DashboardTab(
                                         focused?.displayName ?: stringResource(R.string.family_network),
                                         style = MaterialTheme.typography.headlineSmall,
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
-                                    focusedMovementMode?.let { mode ->
-                                        MovementModeIcon(
-                                            mode,
-                                            Modifier.padding(end = 9.dp).size(22.dp),
-                                        )
-                                    }
                                 }
                                 Text(scopeStatusText, style = MaterialTheme.typography.bodyMedium, color = scopeStatusColor)
                             }
                             if (focused != null && focusedDevice != null && !focusedDevice.isUnpaired()) {
-                                IconButton(
-                                    onClick = { permissionsFor = focused },
-                                    modifier = Modifier.align(Alignment.TopEnd).size(40.dp),
+                                Column(
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
-                                    PermissionStatusIcon(
-                                        ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
-                                        contentDescription = stringResource(R.string.parent_permissions_action),
-                                    )
+                                    Box(
+                                        modifier = Modifier.width(40.dp).height(32.dp)
+                                            .clip(CircleShape)
+                                            .clickable { permissionsFor = focused },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        PermissionStatusIcon(
+                                            ready = focusedDevice.permissionStatus?.requiredPermissionsSatisfied() == true,
+                                            contentDescription = stringResource(R.string.parent_permissions_action),
+                                        )
+                                    }
+                                    focusedMovementMode?.let { mode ->
+                                        MovementModeIcon(mode, Modifier.size(22.dp))
+                                    }
                                 }
                             }
                         }

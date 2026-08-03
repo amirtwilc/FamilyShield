@@ -1,6 +1,8 @@
 package com.familyshield.mobile.permissions
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,9 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
@@ -35,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -207,12 +212,23 @@ fun PermissionStatusIcon(
     val color = if (ready) Green else MaterialTheme.colorScheme.error
     Box(modifier.size(28.dp), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.VerifiedUser, contentDescription, tint = color, modifier = Modifier.size(27.dp))
-        Icon(
-            if (ready) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-            null,
-            tint = color,
-            modifier = Modifier.align(Alignment.BottomEnd).size(12.dp),
-        )
+        if (ready) {
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).size(12.dp)
+                    .background(Green, CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(8.dp))
+            }
+        } else {
+            Icon(
+                Icons.Filled.Warning,
+                null,
+                tint = color,
+                modifier = Modifier.align(Alignment.BottomEnd).size(12.dp),
+            )
+        }
     }
 }
 

@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
@@ -32,7 +31,7 @@ android {
         applicationId = "com.familyshield.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
+        versionCode = 19
         versionName = "1.0"
         // Backend base URL.
         //  - Dev default: http://10.0.2.2:3000 (the emulator's alias for the dev PC).
@@ -50,13 +49,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            optimization {
+                enable = true
+            }
             ndk {
                 debugSymbolLevel = "SYMBOL_TABLE"
             }
             val releaseApiBase = configuredApiBase() ?: "https://missing-release-api-base.invalid"
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiBase\"")
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -64,8 +64,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
-
     buildFeatures {
         compose = true
         buildConfig = true

@@ -950,8 +950,18 @@ private fun KidSettingsScreen(vm: KidViewModel, onBack: () -> Unit) {
 private fun LocationSimulationCard(vm: KidViewModel) {
     val context = LocalContext.current
     val active = vm.simulationConfig
-    var speedMode by rememberSaveable { mutableStateOf("walking") }
     var customSpeed by rememberSaveable { mutableStateOf("1.4") }
+    val selectedSpeedMode = active?.resolvedSpeedMode
+    var lastSelectedSpeedMode by remember { mutableStateOf<LocationSimulationSpeedMode?>(null) }
+
+    LaunchedEffect(selectedSpeedMode) {
+        if (selectedSpeedMode == LocationSimulationSpeedMode.Custom &&
+            lastSelectedSpeedMode != LocationSimulationSpeedMode.Custom
+        ) {
+            active?.let { customSpeed = it.speedMps.toString() }
+        }
+        lastSelectedSpeedMode = selectedSpeedMode
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -1049,31 +1059,26 @@ private fun LocationSimulationCard(vm: KidViewModel) {
                 if (active.mode == LocationSimulationMode.Route) {
                     Text(stringResource(R.string.kid_simulation_speed), fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = speedMode == "walking", onClick = {
-                            speedMode = "walking"
-                            vm.setSimulationSpeed(context, 1.4)
+                        FilterChip(selected = selectedSpeedMode == LocationSimulationSpeedMode.Walking, onClick = {
+                            vm.setSimulationSpeed(context, 1.4, LocationSimulationSpeedMode.Walking)
                         },
                             label = { Text(stringResource(R.string.kid_simulation_walking)) })
-                        FilterChip(selected = speedMode == "driving", onClick = {
-                            speedMode = "driving"
-                            vm.setSimulationSpeed(context, 12.0)
+                        FilterChip(selected = selectedSpeedMode == LocationSimulationSpeedMode.Driving, onClick = {
+                            vm.setSimulationSpeed(context, 12.0, LocationSimulationSpeedMode.Driving)
                         },
                             label = { Text(stringResource(R.string.kid_simulation_driving)) })
-                        FilterChip(selected = speedMode == "custom", onClick = {
-                            speedMode = "custom"
-                            customSpeed.toDoubleOrNull()?.takeIf { it in 0.6..50.0 }?.let {
-                                vm.setSimulationSpeed(context, it)
-                            }
+                        FilterChip(selected = selectedSpeedMode == LocationSimulationSpeedMode.Custom, onClick = {
+                            vm.setSimulationSpeed(context, active.speedMps, LocationSimulationSpeedMode.Custom)
                         },
                             label = { Text(stringResource(R.string.kid_simulation_custom)) })
                     }
-                    if (speedMode == "custom") {
+                    if (selectedSpeedMode == LocationSimulationSpeedMode.Custom) {
                         OutlinedTextField(
                             value = customSpeed,
                             onValueChange = { value ->
                                 customSpeed = value
                                 value.toDoubleOrNull()?.takeIf { it in 0.6..50.0 }?.let {
-                                    vm.setSimulationSpeed(context, it)
+                                    vm.setSimulationSpeed(context, it, LocationSimulationSpeedMode.Custom)
                                 }
                             },
                             label = { Text(stringResource(R.string.kid_simulation_custom_speed)) },

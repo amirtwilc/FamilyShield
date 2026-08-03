@@ -176,8 +176,12 @@ class KidViewModel(
         updateSimulation(context) { it.setRouteDestination(destination) }
     }
 
-    fun setSimulationSpeed(context: Context, speedMps: Double) {
-        updateSimulation(context) { it.setSpeed(speedMps) }
+    fun setSimulationSpeed(
+        context: Context,
+        speedMps: Double,
+        speedMode: LocationSimulationSpeedMode = locationSimulationSpeedModeFor(speedMps),
+    ) {
+        updateSimulation(context) { it.setSpeed(speedMps, speedMode) }
     }
 
     private fun updateSimulation(

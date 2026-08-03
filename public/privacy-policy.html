@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#155eef">
+  <meta name="robots" content="index, follow">
+  <meta name="description" content="Privacy Policy for the FamilyShield parental-safety Android app.">
+  <title>Privacy Policy | FamilyShield</title>
+  <style>
+    :root {
+      --blue: #155eef;
+      --blue-dark: #0b3b91;
+      --blue-soft: #eef4ff;
+      --ink: #14213d;
+      --muted: #52627a;
+      --line: #dbe4f0;
+      --surface: #ffffff;
+      --background: #f6f9fd;
+      --green: #087a55;
+      --shadow: 0 18px 55px rgba(20, 33, 61, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    a { color: var(--blue-dark); text-underline-offset: 3px; }
+    a:hover { color: var(--blue); }
+    a:focus-visible { outline: 3px solid #89adff; outline-offset: 3px; border-radius: 3px; }
+    header {
+      color: #fff;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.18), transparent 30%),
+        linear-gradient(135deg, #0b3b91, #155eef 62%, #3c7cff);
+    }
+    .header-inner, main, footer { width: min(100% - 32px, 1040px); margin-inline: auto; }
+    .header-inner { padding: 56px 0 64px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; letter-spacing: -0.01em; }
+    .shield {
+      display: grid;
+      width: 34px;
+      height: 38px;
+      place-items: center;
+      background: #fff;
+      color: var(--blue);
+      border-radius: 12px 12px 15px 15px;
+      font-size: 20px;
+      line-height: 1;
+    }
+    h1 { margin: 34px 0 8px; font-size: clamp(2.25rem, 7vw, 4rem); line-height: 1.08; letter-spacing: -0.045em; }
+    .effective { margin: 0; color: #dce8ff; font-size: 0.95rem; }
+    .intro { max-width: 760px; margin: 20px 0 0; color: #f4f7ff; font-size: 1.1rem; }
+    main { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 32px; align-items: start; padding: 40px 0 64px; }
+    nav, article {
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    nav { position: sticky; top: 20px; padding: 22px; }
+    nav strong { display: block; margin-bottom: 10px; font-size: 0.86rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    nav a { display: block; padding: 6px 0; color: var(--muted); font-size: 0.92rem; text-decoration: none; }
+    nav a:hover { color: var(--blue); }
+    article { padding: clamp(24px, 5vw, 52px); }
+    section + section { margin-top: 48px; padding-top: 8px; }
+    h2 { margin: 0 0 15px; color: var(--blue-dark); font-size: 1.55rem; line-height: 1.25; letter-spacing: -0.02em; }
+    h3 { margin: 28px 0 8px; font-size: 1.05rem; line-height: 1.4; }
+    p { margin: 0 0 14px; }
+    ul { margin: 8px 0 16px; padding-left: 23px; }
+    li + li { margin-top: 7px; }
+    .summary {
+      margin-bottom: 46px;
+      padding: 22px 24px;
+      border: 1px solid #bcd0ff;
+      border-left: 5px solid var(--blue);
+      border-radius: 12px;
+      background: var(--blue-soft);
+    }
+    .summary strong { color: var(--blue-dark); }
+    .table-wrap { width: 100%; max-width: 100%; margin: 18px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+    th, td { padding: 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
+    th { background: #f1f5fb; color: var(--blue-dark); font-size: 0.82rem; letter-spacing: 0.035em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .callout { margin: 20px 0; padding: 18px 20px; border-radius: 12px; background: #f7f9fc; border: 1px solid var(--line); }
+    .no-sale { color: var(--green); font-weight: 700; }
+    address { font-style: normal; }
+    footer { padding: 0 0 42px; color: var(--muted); text-align: center; font-size: 0.88rem; }
+    .back-to-top { display: inline-block; margin-top: 16px; }
+
+    @media (max-width: 800px) {
+      .header-inner { padding: 38px 0 46px; }
+      main { grid-template-columns: 1fr; padding-top: 24px; }
+      nav { position: static; }
+      nav a { display: inline-block; margin-right: 14px; }
+    }
+    @media print {
+      body { background: #fff; font-size: 11pt; }
+      header { color: #000; background: none; }
+      .header-inner { padding: 18px 0; }
+      .shield, nav, .back-to-top { display: none; }
+      .effective, .intro { color: #333; }
+      main { display: block; width: 100%; padding: 0; }
+      article { padding: 0; border: 0; box-shadow: none; }
+      section + section { margin-top: 25px; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body id="top">
+  <header>
+    <div class="header-inner">
+      <div class="brand"><span class="shield" aria-hidden="true">&#10003;</span> FamilyShield</div>
+      <h1>Privacy Policy</h1>
+      <p class="effective">Effective date: August 2, 2026 &middot; Last updated: August 2, 2026</p>
+      <p class="intro">FamilyShield is a parental-safety service that helps a parent or legal guardian monitor and communicate with a paired child device. This policy explains what information the FamilyShield Android app and service collect, why we use it, and the choices available to families.</p>
+    </div>
+  </header>
+
+  <main>
+    <nav aria-label="Privacy policy sections">
+      <strong>On this page</strong>
+      <a href="#scope">1. Scope</a>
+      <a href="#collection">2. Information collected</a>
+      <a href="#use">3. How information is used</a>
+      <a href="#sharing">4. Sharing and disclosure</a>
+      <a href="#children">5. Children and guardians</a>
+      <a href="#retention">6. Retention and deletion</a>
+      <a href="#security">7. Security</a>
+      <a href="#choices">8. Your choices and rights</a>
+      <a href="#international">9. International processing</a>
+      <a href="#changes">10. Changes</a>
+      <a href="#contact">11. Contact</a>
+    </nav>
+
+    <article>
+      <div class="summary">
+        <strong>Privacy at a glance.</strong> FamilyShield collects data needed to provide its parental-safety features, including background location and app-usage information from a paired kid device when the relevant permissions are enabled. That information is made available to authorized, linked guardians. <span class="no-sale">We do not sell personal information, show advertising, or use personal information for targeted advertising.</span>
+      </div>
+
+      <section id="scope">
+        <h2>1. Scope and who we are</h2>
+        <p>This Privacy Policy applies to the FamilyShield Android application, including its Parent and Kid modes, and the FamilyShield backend service (together, the “Service”). In this policy, “FamilyShield,” “we,” “us,” and “our” refer to the developer and operator of the FamilyShield Service.</p>
+        <p>The Parent mode is intended for adults who are a child’s parent or legal guardian. Kid mode is intended to operate only after a parent or legal guardian creates a child profile, pairs the device, and provides any consent required by applicable law.</p>
+      </section>
+
+      <section id="collection">
+        <h2>2. Information we collect</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Category</th><th>Examples</th><th>When and why it is collected</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Account and identity</strong></td>
+                <td>Parent email address, authentication identifier, sign-in provider, and account creation time.</td>
+                <td>When a parent registers or signs in, to authenticate the parent, secure the account, and provide the Service. If Google sign-in is chosen, we receive the identity information needed to complete that sign-in.</td>
+              </tr>
+              <tr>
+                <td><strong>Family profile information</strong></td>
+                <td>Child display name, avatar selection, optional phone number, linked guardian display name, guardian relationship, and pairing information.</td>
+                <td>When a guardian creates, edits, links, or pairs a profile, to organize the family dashboard and connect authorized devices.</td>
+              </tr>
+              <tr>
+                <td><strong>Precise location</strong></td>
+                <td>Latitude, longitude, accuracy, speed, timestamps, location history, routes, frequent places, and safe-zone entry or exit events.</td>
+                <td>From a paired kid device when location permission is enabled. <strong>FamilyShield collects location in the background, including when the app is closed or not in use,</strong> to provide live family location, location history and routes, safe-zone alerts, and SOS safety features.</td>
+              </tr>
+              <tr>
+                <td><strong>App activity</strong></td>
+                <td>Installed launchable app package name and label, app category, daily foreground-use duration, and whether usage access is granted. FamilyShield does not collect the content viewed or typed inside other apps.</td>
+                <td>From a paired kid device only when Android Usage Access is enabled, to show screen-time summaries and generate guardian-configured usage-limit alerts.</td>
+              </tr>
+              <tr>
+                <td><strong>Device and service status</strong></td>
+                <td>Device model and platform, device pairing identifier, last-seen time, battery level, charging state, permission status, push-notification token, online/offline state, and SOS status.</td>
+                <td>From devices using the Service, to maintain pairing, show safety status, deliver alerts and messages, diagnose service operation, and protect the Service.</td>
+              </tr>
+              <tr>
+                <td><strong>Communications</strong></td>
+                <td>Parent-child chat messages, urgent messages, timestamps, sender, delivery or read status, and a shortened message preview used in a push notification.</td>
+                <td>When a parent or child uses FamilyShield chat or an urgent-alert feature, to deliver and display those communications.</td>
+              </tr>
+              <tr>
+                <td><strong>Safety preferences and events</strong></td>
+                <td>Safe-zone name, center and radius, alert preferences, low-battery and offline alerts, app-usage limits, SOS events, and acknowledgements.</td>
+                <td>When a guardian configures safety features or a monitored event occurs, to provide alerts and safety history.</td>
+              </tr>
+              <tr>
+                <td><strong>Technical and security information</strong></td>
+                <td>IP address and basic request information processed by hosting infrastructure, authentication and App Check tokens, rate-limit records, and error information.</td>
+                <td>Automatically when the app communicates with the Service, to operate, secure, troubleshoot, and prevent abuse of the Service.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Android permission settings control access to location, notifications, and app-usage statistics. Some core monitoring features will not work if their permissions are disabled.</p>
+      </section>
+
+      <section id="use">
+        <h2>3. How we use information</h2>
+        <p>We use the information described above to:</p>
+        <ul>
+          <li>create and secure parent accounts and authenticate sign-ins;</li>
+          <li>pair kid devices with child profiles and authorized guardians;</li>
+          <li>show current and historical location, routes, safe zones, device status, and app-usage summaries;</li>
+          <li>deliver parent-child messages, SOS notices, and safety notifications;</li>
+          <li>detect low battery, offline status, safe-zone transitions, and configured app-usage limits;</li>
+          <li>maintain, troubleshoot, protect, and improve the reliability and security of the Service;</li>
+          <li>enforce limits, prevent fraud or abuse, and comply with legal obligations.</li>
+        </ul>
+        <div class="callout"><strong>No advertising or sale.</strong> FamilyShield does not display third-party advertising. We do not sell or rent personal information, and we do not use precise location, app activity, or other personal information for advertising or profiling for advertising.</div>
+      </section>
+
+      <section id="sharing">
+        <h2>4. How we share or disclose information</h2>
+        <p>We disclose information only as needed for the Service and in the following circumstances:</p>
+        <ul>
+          <li><strong>Authorized linked guardians.</strong> A child’s location, device status, app-usage summaries, safety alerts, profile details, and communications are available to parent or guardian accounts linked to that child. Kid mode may show linked guardian information and messages.</li>
+          <li><strong>Service providers.</strong> We use infrastructure providers to host the Service and database, and Google Firebase services for authentication, app integrity checks, and push-notification delivery. These providers process information on our behalf under their own contractual and security terms.</li>
+          <li><strong>Map and directions providers.</strong> The in-app map uses OpenStreetMap tiles. Loading map tiles can disclose the requesting device’s IP address and basic request information to the tile provider. If a user chooses to open directions in a separate maps application, that application’s privacy policy applies.</li>
+          <li><strong>Legal and safety reasons.</strong> We may disclose information when reasonably necessary to comply with law or valid legal process, protect a person’s safety, investigate abuse, or protect the rights and security of users, FamilyShield, or the public.</li>
+          <li><strong>Business transfer.</strong> If ownership or operation of FamilyShield changes through a merger, acquisition, financing, reorganization, or sale of assets, information may be transferred subject to this policy and applicable law.</li>
+        </ul>
+        <p>We do not allow unaffiliated third parties to use FamilyShield data for their own advertising.</p>
+      </section>
+
+      <section id="children">
+        <h2>5. Children and parental or guardian consent</h2>
+        <p>FamilyShield is a parental-control and family-safety tool. Children are not permitted to create independent FamilyShield parent accounts. A parent or legal guardian is responsible for setting up Kid mode, pairing the device, informing the child in an age-appropriate way about monitoring, and obtaining any consent required by local law.</p>
+        <p>We collect information from a paired kid device only to provide the guardian-authorized safety features described in this policy. We do not knowingly collect personal information from a child outside that guardian-directed context, use children’s information for advertising, or sell children’s information.</p>
+        <p>If you believe a child’s information was provided without appropriate parental or guardian authorization, contact us using the details below. We will review the request and delete the information when required.</p>
+      </section>
+
+      <section id="retention">
+        <h2>6. Data retention and deletion</h2>
+        <p>We retain information only for as long as needed to provide the Service, meet the purposes described in this policy, maintain security, resolve disputes, and comply with law.</p>
+        <ul>
+          <li><strong>Location history:</strong> retained according to the applicable service tier. The free tier currently retains location history for 7 days; another tier may use a different period shown in the Service.</li>
+          <li><strong>Chat messages:</strong> normally retained for up to 365 days, unless a different configured retention period applies or earlier deletion is required.</li>
+          <li><strong>Profile, device, safety, and app-usage records:</strong> retained while needed to provide the linked family account and related features, or until the relevant child profile or account data is deleted, subject to limited legal, security, and backup retention.</li>
+          <li><strong>Pairing codes:</strong> expire after a short period and cannot be reused after successful pairing.</li>
+        </ul>
+        <h3>Deleting data</h3>
+        <p>A guardian can remove a child profile from the FamilyShield app. When the last linked guardian removes the child, associated kid-device data is deleted from the active database through the deletion of that profile, subject to limited backup, security, and legal retention. A guardian can also unpair a device or remove a linked guardian.</p>
+        <p>To request deletion of a parent account or associated personal information, email <a href="mailto:privacy@familyshield.app?subject=FamilyShield%20account%20deletion%20request">privacy@familyshield.app</a> from the account email address with the subject “FamilyShield account deletion request.” We may need to verify the requester’s identity and authority before completing the request. We will respond within the period required by applicable law.</p>
+      </section>
+
+      <section id="security">
+        <h2>7. Data security</h2>
+        <p>We use reasonable technical and organizational safeguards designed to protect personal information. These include authenticated access, scoped parent and device credentials, transport encryption for production network traffic, access controls, abuse prevention, and encryption of chat-message bodies at rest using AES-256-GCM.</p>
+        <p>Chat encryption is not end-to-end encryption: the FamilyShield backend must decrypt messages to return them to authorized users and may send a shortened message preview through the push-notification service. No system can guarantee absolute security, and users should protect their devices and account credentials.</p>
+      </section>
+
+      <section id="choices">
+        <h2>8. Your choices and privacy rights</h2>
+        <p>Depending on where you live, you may have rights to access, correct, delete, restrict, or object to certain processing of your personal information, or to receive a portable copy. You may exercise these rights by contacting us. We may verify your identity and, for child data, your authority as the parent or legal guardian.</p>
+        <p>You can also:</p>
+        <ul>
+          <li>turn location, notification, or Usage Access permissions off in Android settings;</li>
+          <li>stop monitoring or unpair the kid device;</li>
+          <li>edit or remove child profile information and safe zones in Parent mode;</li>
+          <li>sign out and revoke active sessions.</li>
+        </ul>
+        <p>Disabling a permission or unpairing a device stops the related future collection, but does not automatically delete information already stored. Use the deletion options above for stored information.</p>
+      </section>
+
+      <section id="international">
+        <h2>9. International data processing</h2>
+        <p>FamilyShield and its service providers may process information in countries other than the country where a user lives. Where required, we use appropriate safeguards for international transfers and handle information in accordance with applicable data-protection law.</p>
+      </section>
+
+      <section id="changes">
+        <h2>10. Changes to this policy</h2>
+        <p>We may update this policy when the Service, our data practices, or applicable requirements change. We will post the revised policy on this page and update the “Last updated” date. If a change is material, we will provide additional notice when required by law.</p>
+      </section>
+
+      <section id="contact">
+        <h2>11. Contact us</h2>
+        <address>
+          <p><strong>FamilyShield Privacy</strong><br>
+          Email: <a href="mailto:privacy@familyshield.app">privacy@familyshield.app</a></p>
+        </address>
+        <p>Contact us with questions about this policy, privacy requests, or concerns about a child’s information.</p>
+        <a class="back-to-top" href="#top">Back to top &uarr;</a>
+      </section>
+    </article>
+  </main>
+
+  <footer>&copy; 2026 FamilyShield. This page does not use cookies, analytics, or tracking scripts.</footer>
+</body>
+</html>

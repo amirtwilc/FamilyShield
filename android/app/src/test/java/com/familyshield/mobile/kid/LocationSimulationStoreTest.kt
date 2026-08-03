@@ -27,7 +27,11 @@ class LocationSimulationStoreTest {
         store.selectMode(LocationSimulationMode.Route, nowMs = 2_000L)
         val route = store.setRouteDestination(destination, nowMs = 2_000L)!!
         val beforeSpeedChange = LocationSimulationEngine.sample(route, nowMs = 12_000L)!!
-        store.setSpeed(speedMps = 12.0, nowMs = 12_000L)
+        store.setSpeed(
+            speedMps = 12.0,
+            speedMode = LocationSimulationSpeedMode.Driving,
+            nowMs = 12_000L,
+        )
 
         val restored = LocationSimulationStore(context).activeConfig()
         assertNotNull(restored)
@@ -36,6 +40,7 @@ class LocationSimulationStoreTest {
         assertEquals(beforeSpeedChange.lng, restored.waypoints.first().lng, 0.0000001)
         assertEquals(destination, restored.waypoints.last())
         assertEquals(12.0, restored.speedMps, 0.0)
+        assertEquals(LocationSimulationSpeedMode.Driving, restored.resolvedSpeedMode)
     }
 
     @Test
@@ -63,5 +68,20 @@ class LocationSimulationStoreTest {
         assertEquals(beforeChange.lat, changed.waypoints.first().lat, 0.0000001)
         assertEquals(beforeChange.lng, changed.waypoints.first().lng, 0.0000001)
         assertEquals(nextDestination, changed.waypoints.last())
+    }
+
+    @Test
+    fun `custom speed selection survives restart even when it equals walking speed`() {
+        store.start(SimulationWaypoint(32.0, 34.0), nowMs = 1_000L)
+        store.setSpeed(
+            speedMps = 1.4,
+            speedMode = LocationSimulationSpeedMode.Custom,
+            nowMs = 2_000L,
+        )
+
+        val restored = LocationSimulationStore(context).activeConfig()!!
+
+        assertEquals(1.4, restored.speedMps, 0.0)
+        assertEquals(LocationSimulationSpeedMode.Custom, restored.resolvedSpeedMode)
     }
 }

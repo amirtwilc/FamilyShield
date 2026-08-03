@@ -1,0 +1,10 @@
+# Kotlin serialization generates serializers at compile time. Keep only members
+# whose serialized wire names are explicitly declared.
+-keepclassmembers class * { @kotlinx.serialization.SerialName <fields>; }
+
+# Firebase discovers ComponentRegistrar implementations by manifest class name
+# and instantiates them through reflection. AGP 9.3/R8 otherwise removes their
+# no-argument constructors, which prevents Firebase components from registering.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
